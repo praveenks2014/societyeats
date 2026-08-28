@@ -1,0 +1,308 @@
+'use client';
+
+import { forwardRef } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+
+// ---------- Button ----------
+
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  size?: 'sm' | 'md' | 'lg';
+  loading?: boolean;
+};
+
+const variantCls: Record<string, string> = {
+  primary:
+    'bg-turmeric text-ink font-semibold hover:bg-turmeric-dark active:scale-[0.98] shadow-card',
+  secondary:
+    'border border-leaf text-leaf font-semibold hover:bg-leaf-tint active:scale-[0.98]',
+  ghost: 'text-ink-soft hover:bg-rice-deep',
+  danger: 'bg-chili text-white font-semibold hover:bg-chili-dark active:scale-[0.98]',
+};
+const sizeCls: Record<string, string> = {
+  sm: 'px-3 py-1.5 text-sm rounded-lg',
+  md: 'px-4 py-2.5 text-sm rounded-xl',
+  lg: 'px-6 py-3 text-base rounded-xl',
+};
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant = 'primary', size = 'md', loading, className = '', children, disabled, ...rest },
+  ref,
+) {
+  return (
+    <button
+      ref={ref}
+      disabled={disabled || loading}
+      className={`inline-flex items-center justify-center gap-2 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50 ${variantCls[variant]} ${sizeCls[size]} ${className}`}
+      {...rest}
+    >
+      {loading && <Spinner className="h-4 w-4" />}
+      {children}
+    </button>
+  );
+});
+
+export function Spinner({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+      <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ---------- VegDot (FSSAI-style mark) ----------
+
+export function VegDot({ isVeg, className = '' }: { isVeg: boolean; className?: string }) {
+  const color = isVeg ? '#1E4D2B' : '#C63D2F';
+  return (
+    <span
+      className={`inline-flex h-4 w-4 shrink-0 items-center justify-center border-2 ${className}`}
+      style={{ borderColor: color }}
+      title={isVeg ? 'Vegetarian' : 'Non-vegetarian'}
+      aria-label={isVeg ? 'Vegetarian' : 'Non-vegetarian'}
+    >
+      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+    </span>
+  );
+}
+
+// ---------- Badge ----------
+
+export function Badge({
+  tone = 'neutral',
+  children,
+  className = '',
+}: {
+  tone?: 'green' | 'amber' | 'red' | 'neutral';
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const tones = {
+    green: 'bg-leaf-tint text-leaf',
+    amber: 'bg-turmeric-tint text-turmeric-deep',
+    red: 'bg-chili-tint text-chili-dark',
+    neutral: 'bg-rice-deep text-ink-soft',
+  };
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-pill px-2.5 py-0.5 text-xs font-semibold ${tones[tone]} ${className}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+// ---------- Chip ----------
+
+export function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active?: boolean;
+  onClick?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`shrink-0 whitespace-nowrap rounded-pill border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+        active
+          ? 'border-leaf bg-leaf text-white'
+          : 'border-rice-line bg-white text-ink-soft hover:border-leaf/40'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ---------- Card ----------
+
+export function Card({
+  className = '',
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`rounded-card border border-rice-line bg-white shadow-card ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+// ---------- Form fields ----------
+
+export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
+  function Input({ className = '', ...rest }, ref) {
+    return (
+      <input
+        ref={ref}
+        className={`w-full rounded-xl border border-rice-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-faint focus:border-leaf ${className}`}
+        {...rest}
+      />
+    );
+  },
+);
+
+export const Textarea = forwardRef<
+  HTMLTextAreaElement,
+  React.TextareaHTMLAttributes<HTMLTextAreaElement>
+>(function Textarea({ className = '', ...rest }, ref) {
+  return (
+    <textarea
+      ref={ref}
+      className={`w-full rounded-xl border border-rice-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-faint focus:border-leaf ${className}`}
+      {...rest}
+    />
+  );
+});
+
+export function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-medium text-ink">{label}</span>
+      {children}
+      {hint && <span className="mt-1 block text-xs text-ink-faint">{hint}</span>}
+    </label>
+  );
+}
+
+export const Select = forwardRef<
+  HTMLSelectElement,
+  React.SelectHTMLAttributes<HTMLSelectElement>
+>(function Select({ className = '', children, ...rest }, ref) {
+  return (
+    <select
+      ref={ref}
+      className={`w-full rounded-xl border border-rice-line bg-white px-3.5 py-2.5 text-sm text-ink focus:border-leaf ${className}`}
+      {...rest}
+    >
+      {children}
+    </select>
+  );
+});
+
+// ---------- Skeleton / EmptyState ----------
+
+export function Skeleton({ className = '' }: { className?: string }) {
+  return <div className={`skeleton ${className}`} aria-hidden />;
+}
+
+export function EmptyState({
+  emoji,
+  title,
+  body,
+  action,
+}: {
+  emoji: string;
+  title: string;
+  body?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-3 py-16 text-center">
+      <div className="text-5xl" aria-hidden>
+        {emoji}
+      </div>
+      <h3 className="text-lg font-semibold">{title}</h3>
+      {body && <p className="max-w-sm text-sm text-ink-soft">{body}</p>}
+      {action}
+    </div>
+  );
+}
+
+// ---------- Stars ----------
+
+export function Stars({ rating, count }: { rating: number; count?: number }) {
+  if (!rating) return <span className="text-xs text-ink-faint">New kitchen</span>;
+  return (
+    <span className="inline-flex items-center gap-1 text-sm">
+      <span className="inline-flex items-center gap-0.5 rounded-md bg-leaf px-1.5 py-0.5 text-xs font-bold text-white">
+        ★ {rating.toFixed(1)}
+      </span>
+      {count !== undefined && <span className="text-xs text-ink-faint">({count})</span>}
+    </span>
+  );
+}
+
+// ---------- SectionTitle ----------
+
+export function SectionTitle({
+  eyebrow,
+  title,
+  className = '',
+}: {
+  eyebrow?: string;
+  title: string;
+  className?: string;
+}) {
+  return (
+    <div className={`mb-4 ${className}`}>
+      {eyebrow && <div className="eyebrow mb-1">{eyebrow}</div>}
+      <h2 className="text-xl font-bold sm:text-2xl">{title}</h2>
+    </div>
+  );
+}
+
+// ---------- Modal / Bottom sheet ----------
+
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  sheet = false,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title?: string;
+  children: React.ReactNode;
+  /** bottom-sheet on mobile */
+  sheet?: boolean;
+}) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-[80]">
+          <motion.button
+            aria-label="Close"
+            className="absolute inset-0 w-full bg-ink/45"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            onClick={onClose}
+          />
+          <motion.div
+            role="dialog"
+            aria-modal
+            initial={sheet ? { y: '100%' } : { opacity: 0, scale: 0.95, y: 12 }}
+            animate={sheet ? { y: 0 } : { opacity: 1, scale: 1, y: 0 }}
+            exit={sheet ? { y: '100%' } : { opacity: 0, scale: 0.97, y: 8 }}
+            transition={{ type: 'spring', damping: 30, stiffness: 380 }}
+            className={
+              sheet
+                ? 'absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-3xl bg-rice p-5 pb-8 shadow-lift sm:left-1/2 sm:right-auto sm:bottom-auto sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl'
+                : 'absolute left-1/2 top-1/2 max-h-[85vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl bg-rice p-5 shadow-lift'
+            }
+          >
+            {title && <h3 className="mb-4 text-lg font-bold">{title}</h3>}
+            {children}
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
