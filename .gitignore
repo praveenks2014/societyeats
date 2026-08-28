@@ -1,0 +1,21 @@
+# deps / build
+node_modules/
+.next/
+out/
+
+# env & secrets
+.env
+.env.local
+.env*.local
+
+# local dev database (PGlite fallback)
+.data/
+
+# user uploads (seeded demo images are remote URLs)
+public/uploads/*
+!public/uploads/.gitkeep
+
+# misc
+*.log
+.DS_Store
+tsconfig.tsbuildinfo
