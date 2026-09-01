@@ -51,6 +51,23 @@ export const DEFAULTS = {
   referralCreditCapPerUser: 5, // lifetime cap on how many credits one referrer can earn
   featuredSellerId: '', // platform_config only — empty until an admin picks a "kitchen of the week"
   sellerOrderBadgeTiers: [10, 50, 100], // completed-order milestones a seller's profile badges at
+  // Pilot Hardening v2 — Phase 7 (Pilot metrics dashboard, DECISIONS.md #99+).
+  // Fixed target lines shown BESIDE the actuals on /admin/metrics (not a
+  // pricing/config lever an admin retunes — same treatment as gstPct — these
+  // are the brief's own stated targets, verbatim).
+  buyerRetentionTargetPct: 15, // week-4 buyer retention target (>= 15%)
+  refundComplaintRateTargetPct: 3, // refund/complaint rate target (< 3%)
+  // Kill/pivot checkpoint thresholds — admin-editable via platform_config
+  // (/admin/settings), separate from the fixed display targets above: a
+  // checkpoint threshold is a deliberately tunable go/no-go bar an admin may
+  // want to loosen or tighten as the pilot actually plays out, whereas the
+  // targets above are the brief's fixed reference lines. Week-8 bars start
+  // below the steady-state 15%/target line (an 8-week-old pilot isn't
+  // expected to already be at steady state); week-14 converges toward it.
+  killWeek8PenetrationPct: 20, // % of target households registered, checked at week 8
+  killWeek8RetentionPct: 8, // week-4 buyer retention, checked at week 8
+  killWeek14PenetrationPct: 35, // % of target households registered, checked at week 14
+  killWeek14RetentionPct: 15, // week-4 buyer retention, checked at week 14 (matches the steady-state target)
 };
 
 export function isMockMode(): boolean {

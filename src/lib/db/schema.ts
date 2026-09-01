@@ -150,6 +150,15 @@ export const societies = pgTable(
     // to a society either way — see POST /api/auth/register.
     inviteCode: varchar('invite_code', { length: 24 }).unique(),
     isLive: boolean('is_live').notNull().default(false),
+    // Pilot Hardening v2 — Phase 7 (Pilot metrics dashboard, DECISIONS.md
+    // #99+). Households targeted for this society's pilot (e.g. "300 of the
+    // ~200-500 unit gated society"), used to compute the weekly penetration %
+    // on /admin/metrics. Per-society (unlike every other admin-tunable number
+    // in this app, which is a single global platform_config value) since a
+    // household target is inherently a property of one specific society, not
+    // a platform-wide setting — editable inline on the metrics page itself
+    // via PATCH /api/admin/metrics rather than /admin/settings.
+    targetHouseholds: integer('target_households').notNull().default(300),
   },
   (table) => [index('societies_lat_lng_idx').on(table.lat, table.lng)],
 );

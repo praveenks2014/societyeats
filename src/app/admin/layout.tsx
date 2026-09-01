@@ -17,6 +17,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         title="GHARSE MISSION CONTROL"
         tabs={[
           { href: '/admin', label: 'Overview' },
+          { href: '/admin/metrics', label: 'Pilot metrics' },
           { href: '/admin/sellers', label: 'Sellers' },
           { href: '/admin/fssai', label: 'FSSAI queue' },
           { href: '/admin/complaints', label: 'Complaints' },

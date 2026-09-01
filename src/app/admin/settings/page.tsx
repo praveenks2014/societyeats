@@ -18,6 +18,10 @@ type Settings = {
   referralCreditPaise: number;
   referralCreditCapPerUser: number;
   featuredSellerId: string;
+  killWeek8PenetrationPct: number;
+  killWeek8RetentionPct: number;
+  killWeek14PenetrationPct: number;
+  killWeek14RetentionPct: number;
 };
 
 const FIELDS: { key: keyof Settings; label: string; hint: string }[] = [
@@ -41,6 +45,17 @@ const FIELDS: { key: keyof Settings; label: string; hint: string }[] = [
     label: 'Referral credit cap (per user)',
     hint: 'Lifetime cap on how many credits one referrer can earn. Default 5.',
   },
+];
+
+// Pilot Hardening v2 — Phase 7 (Pilot metrics dashboard, DECISIONS.md #99+).
+// Drive the week-8/week-14 kill/pivot checkpoint banners on /admin/metrics —
+// separate from that page's own per-society "target households" field, which
+// is edited inline there instead (a society property, not a platform setting).
+const KILL_PIVOT_FIELDS: { key: keyof Settings; label: string; hint: string }[] = [
+  { key: 'killWeek8PenetrationPct', label: 'Week 8 checkpoint — min penetration (%)', hint: '% of a society’s target households registered. Default 20.' },
+  { key: 'killWeek8RetentionPct', label: 'Week 8 checkpoint — min week-4 retention (%)', hint: 'Default 8 — an early-pilot bar, below the 15% steady-state target.' },
+  { key: 'killWeek14PenetrationPct', label: 'Week 14 checkpoint — min penetration (%)', hint: 'Default 35.' },
+  { key: 'killWeek14RetentionPct', label: 'Week 14 checkpoint — min week-4 retention (%)', hint: 'Default 15 — matches the steady-state target.' },
 ];
 
 const PLATFORM_DELIVERY_FIELDS: { key: keyof Settings; label: string; hint: string }[] = [
@@ -90,7 +105,7 @@ export default function AdminSettings() {
       platformDeliveryEnabled,
       platformFssaiCentralLicenseNo: fssaiLicenseNo.trim(),
     };
-    for (const f of [...FIELDS, ...PLATFORM_DELIVERY_FIELDS]) body[f.key] = Number(form[f.key]);
+    for (const f of [...FIELDS, ...PLATFORM_DELIVERY_FIELDS, ...KILL_PIVOT_FIELDS]) body[f.key] = Number(form[f.key]);
     const res = await fetch('/api/admin/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -159,6 +174,24 @@ export default function AdminSettings() {
             />
           </Field>
         ))}
+
+        <Card className="p-4">
+          <div className="eyebrow mb-2">PILOT METRICS — KILL/PIVOT CHECKPOINTS</div>
+          <p className="mb-3 text-xs text-ink-faint">
+            Threshold banners on the weekly metrics page (per-society) — see /admin/metrics.
+          </p>
+          <div className="space-y-4">
+            {KILL_PIVOT_FIELDS.map((f) => (
+              <Field key={f.key} label={f.label} hint={f.hint}>
+                <Input
+                  inputMode="numeric"
+                  value={form[f.key] ?? ''}
+                  onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
+                />
+              </Field>
+            ))}
+          </div>
+        </Card>
 
         <Card className={`p-4 ${!fssaiLicenseNo.trim() ? 'border-chili bg-chili-tint/40' : ''}`}>
           <div className="eyebrow mb-2">COMPLIANCE — PLATFORM FSSAI LICENSE</div>

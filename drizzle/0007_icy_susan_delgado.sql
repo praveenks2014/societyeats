@@ -1,0 +1,1 @@
+ALTER TABLE "societies" ADD COLUMN "target_households" integer DEFAULT 300 NOT NULL;

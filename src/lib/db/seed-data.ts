@@ -1,6 +1,10 @@
 import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import type { Db } from './index';
+// Safe to import directly (unlike getPlatformSettings/getDb): config.ts has
+// no imports of its own, so this can't introduce the module-init cycle the
+// referralCode() comment below is careful to avoid.
+import { DEFAULTS } from '@/lib/config';
 import {
   complaints,
   deliveries,
@@ -69,6 +73,11 @@ export async function runSeed(db: Db): Promise<void> {
         addressText: 'Aparna Cyberzon, Nallagandla, Hyderabad 500019',
         inviteCode: 'CYBERZON',
         isLive: true,
+        // Pilot Hardening v2 — Phase 7 (Pilot metrics dashboard, DECISIONS.md
+        // #99+): ~300 of the society's 200-500 households targeted for the
+        // pilot — see the 8-week pilot-history block below, which grows
+        // registration toward this.
+        targetHouseholds: 300,
       },
       {
         name: 'My Home Avatar',
@@ -78,6 +87,11 @@ export async function runSeed(db: Db): Promise<void> {
         addressText: 'My Home Avatar, Narsingi, Hyderabad 500075',
         inviteCode: 'AVATAR-EARLY',
         isLive: false,
+        // Not yet launched — no target set beyond the schema default, and
+        // deliberately given no 8-week pilot-history data (see below): a
+        // near-empty /admin/metrics view for a not-yet-live society is itself
+        // a realistic state to demo, not a gap to fill.
+        targetHouseholds: 150,
       },
     ])
     .returning();
@@ -463,8 +477,18 @@ export async function runSeed(db: Db): Promise<void> {
     paid: boolean;
     commissionPct: number;
     otp: string;
+    // Pilot Hardening v2 — Phase 7 (Pilot metrics dashboard, DECISIONS.md
+    // #99+). Both optional and additive: every pre-existing call site omits
+    // them and gets byte-identical behaviour to before (fulfillmentType
+    // falls back to the schema's own 'self_pickup' default; gstPct defaults
+    // to 0, so gstInPaise/totalInPaise are unchanged) — only the new 8-week
+    // pilot-history orders below pass them, since accurate fulfillment mix
+    // and GST-aware totals actually matter for that reporting.
+    fulfillmentType?: 'self_pickup' | 'seller_delivery' | 'platform_delivery';
+    gstPct?: number;
   }) {
     const subtotal = opts.items.reduce((s, i) => s + i.qty * i.unitPaise, 0);
+    const gstInPaise = Math.round((subtotal * (opts.gstPct ?? 0)) / 100);
     const createdAt = daysAgo(opts.createdDaysAgo);
     const [order] = await db
       .insert(orders)
@@ -474,11 +498,13 @@ export async function runSeed(db: Db): Promise<void> {
         sellerId: opts.sellerId,
         restaurantId: opts.restaurantId,
         status: opts.status,
+        fulfillmentType: opts.fulfillmentType ?? 'self_pickup',
         subtotalInPaise: subtotal,
         deliveryFeeInPaise: opts.deliveryFee,
         platformFeeInPaise: 0,
         commissionInPaise: commission(subtotal, opts.commissionPct),
-        totalInPaise: subtotal + opts.deliveryFee,
+        gstInPaise,
+        totalInPaise: subtotal + opts.deliveryFee + gstInPaise,
         deliveryAddressJson: opts.type === 'home_delivery' ? buyerAddress : null,
         otpCode: opts.otp,
         createdAt,
@@ -775,5 +801,367 @@ export async function runSeed(db: Db): Promise<void> {
     href: '/orders',
   });
 
-  console.log('Seed complete: 2 societies, 6 kitchens, 20 dishes, 1 mall, 15 orders, 1 demo complaint, 1 referral credit.');
+  // ================================================================
+  // Pilot Hardening v2 — Phase 7 (Pilot metrics dashboard, DECISIONS.md
+  // #99+). Eight weeks of plausible historical activity for Aparna Cyberzon
+  // (the pilot's one live society) so /admin/metrics has real, varied
+  // week-over-week numbers out of the box: buyer registration growing
+  // toward the household target, growing order volume with a fulfillment
+  // mix that shifts from self-pickup-heavy to more seller-delivery over
+  // time, a seller who joins then goes quiet (churn demo), one who joins
+  // late (growth demo), a cohort of buyers who reorder ~3 weeks after their
+  // first order (week-4 retention), and two resolved complaints placed so
+  // the refund/complaint-rate metric shows a rough week improving into a
+  // healthy one. My Home Avatar (not yet public) deliberately gets none of
+  // this — a near-empty metrics view for a not-yet-launched society is
+  // itself a realistic state, not a gap.
+  //
+  // Every date below is expressed the same "days ago from seed time" way as
+  // every seedOrder() call above, and every choice (which buyer/seller/item/
+  // fulfillment type lands on which order) is picked by deterministic index
+  // cycling rather than randomness — a re-seed always reproduces the exact
+  // same numbers, matching this codebase's existing zero-flakiness ethos
+  // (see DECISIONS.md #32).
+  // ================================================================
+  const PILOT_WEEKS = 8;
+  const weekStartDaysAgo = (w: number) => 7 * (PILOT_WEEKS - w + 1); // "days ago" at week w's start
+  const dateInWeek = (w: number, dayOffset: number) => daysAgo(weekStartDaysAgo(w) - dayOffset); // dayOffset 0..6
+
+  // ---- new buyer households, staggered registration across the 8 weeks,
+  // growing cumulative penetration toward Cyberzon's 300-household target
+  // (108 new + the 2 already seeded above = 110, ~37% by week 8 — an early,
+  // still-building pilot, not a finished one). ----
+  const NEW_BUYERS_PER_WEEK = [15, 12, 14, 13, 14, 12, 15, 13];
+  const pilotBuyerInserts: (typeof users.$inferInsert)[] = [];
+  let buyerSeq = 1;
+  for (let w = 1; w <= PILOT_WEEKS; w++) {
+    for (let i = 0; i < NEW_BUYERS_PER_WEEK[w - 1]; i++) {
+      pilotBuyerInserts.push({
+        // 9802xxxxxx — distinct from the 9801000xxx range used by the three
+        // new seller kitchens below, and from the 99999999xx demo accounts.
+        phone: `9802${String(buyerSeq).padStart(6, '0')}`,
+        name: `Cyberzon Household ${buyerSeq}`,
+        passwordHash: hash,
+        role: 'buyer',
+        societyId: cyberzon.id,
+        lat: 17.465 + ((buyerSeq % 11) - 5) * 0.0006,
+        lng: 78.31 + ((buyerSeq % 7) - 3) * 0.0006,
+        createdAt: dateInWeek(w, buyerSeq % 7),
+      });
+      buyerSeq++;
+    }
+  }
+  const insertedPilotBuyers = await db.insert(users).values(pilotBuyerInserts).returning();
+  for (const u of insertedPilotBuyers) {
+    await db.update(users).set({ referralCode: referralCode(u.id) }).where(eq(users.id, u.id));
+  }
+  const buyersByWeek: number[][] = [];
+  {
+    let idx = 0;
+    for (let w = 1; w <= PILOT_WEEKS; w++) {
+      const count = NEW_BUYERS_PER_WEEK[w - 1];
+      buyersByWeek.push(insertedPilotBuyers.slice(idx, idx + count).map((u) => u.id));
+      idx += count;
+    }
+  }
+
+  // ---- three new seller kitchens, staggered join dates: Curry Studio
+  // (joins week 2, keeps posting fresh listings throughout — never churns),
+  // Sunita's Snack Box (joins week 2, posts once, then goes quiet — churns
+  // starting week 4), Farhan's Grill House (joins late, week 7 — growth demo). ----
+  const [pilotSeller7, pilotSeller8, pilotSeller9] = await db
+    .insert(users)
+    .values([
+      { phone: '9801000001', name: 'Meera Kulkarni', passwordHash: hash, role: 'seller', societyId: cyberzon.id, lat: 17.4651, lng: 78.3103, createdAt: dateInWeek(2, 2) },
+      { phone: '9801000002', name: 'Sunita Rao', passwordHash: hash, role: 'seller', societyId: cyberzon.id, lat: 17.4649, lng: 78.3098, createdAt: dateInWeek(2, 4) },
+      { phone: '9801000003', name: 'Farhan Ali', passwordHash: hash, role: 'seller', societyId: cyberzon.id, lat: 17.4652, lng: 78.3101, createdAt: dateInWeek(7, 2) },
+    ])
+    .returning();
+  for (const u of [pilotSeller7, pilotSeller8, pilotSeller9]) {
+    await db.update(users).set({ referralCode: referralCode(u.id) }).where(eq(users.id, u.id));
+  }
+
+  await db.insert(sellerProfiles).values([
+    {
+      userId: pilotSeller7.id,
+      kitchenName: 'Curry Studio',
+      bio: 'Small-batch North Indian curries, cooked to order.',
+      fssaiNumber: '23625011000107',
+      fssaiStatus: 'verified',
+      fssaiExpiry: in2027,
+      isApproved: true,
+      vegOnly: false,
+      rating: 4.5,
+      ratingCount: 18,
+      payoutVpaOrBank: 'meera@upi',
+      offersSelfPickup: true,
+      offersSellerDelivery: true,
+      sellerDeliveryFeeInPaise: 2000,
+      sellerDeliveryRadiusKm: 4,
+      pickupInstructions: 'Tower D, Flat 303, Aparna Cyberzon',
+    },
+    {
+      userId: pilotSeller8.id,
+      kitchenName: "Sunita's Snack Box",
+      bio: 'Evening snacks — cutlets, samosas, bakery bites.',
+      fssaiStatus: 'pending_application',
+      isApproved: true,
+      vegOnly: true,
+      rating: 4.1,
+      ratingCount: 6,
+      payoutVpaOrBank: 'sunita@upi',
+      offersSelfPickup: true,
+      pickupInstructions: 'Tower A, Flat 405, Aparna Cyberzon',
+    },
+    {
+      userId: pilotSeller9.id,
+      kitchenName: "Farhan's Grill House",
+      bio: 'Weekend kebabs and grills, small batches.',
+      fssaiNumber: '23625011000109',
+      fssaiStatus: 'verified',
+      fssaiExpiry: in2027,
+      isApproved: true,
+      vegOnly: false,
+      rating: 4.6,
+      ratingCount: 9,
+      payoutVpaOrBank: 'farhan@upi',
+      offersSelfPickup: true,
+      pickupInstructions: 'Tower B, Flat 707, Aparna Cyberzon',
+    },
+  ]);
+
+  // Curry Studio's listings are deliberately spread across the whole 8-week
+  // window (createdAt at days-ago 47/35/22/9 — verified so no gap between
+  // consecutive dates exceeds the 14-day churn window) so it never shows as
+  // churned once eligible (week 2 on). Sunita gets exactly one, dated
+  // days-ago 45 — recent enough for weeks 2-3, then stale (>14 days before
+  // week 4's end) from week 4 onward, which is the churn demo. Farhan gets
+  // one dated days-ago 12, comfortably inside every week's 14-day window
+  // from week 7 (when he joins) through week 8.
+  const [curry1, curry2, curry3, curry4] = await db
+    .insert(listings)
+    .values([
+      { ...L(pilotSeller7.id, 'Chicken Curry with Rice', 'Home-style chicken curry, steamed rice.', 220, false, 'North Indian', img('1601050690597-df0568f70950'), 35, 10), createdAt: dateInWeek(2, 2) },
+      { ...L(pilotSeller7.id, 'Veg Kurma with Chapati', 'Mixed-vegetable kurma, soft chapatis.', 180, true, 'North Indian', img('1585937421612-70a008356fbe'), 30, 10), createdAt: dateInWeek(4, 1) },
+      { ...L(pilotSeller7.id, 'Egg Curry Meal', 'Egg curry, rice and a boiled egg on the side.', 200, false, 'North Indian', img('1604908176997-125f25cc6f3d'), 30, 8), createdAt: dateInWeek(5, 6) },
+      { ...L(pilotSeller7.id, 'Mutton Curry Rice Bowl', 'Slow-cooked mutton curry over jeera rice.', 260, false, 'North Indian', img('1630383249896-424e482df921'), 40, 6), createdAt: dateInWeek(7, 5) },
+    ])
+    .returning();
+  const [sunita1] = await db
+    .insert(listings)
+    .values([
+      { ...L(pilotSeller8.id, 'Veg Cutlet Box (6 pc)', 'Crisp vegetable cutlets, mint chutney.', 120, true, 'Snacks', img('1601050690117-94f5f6fa8bd7'), 20, 15), createdAt: dateInWeek(2, 4) },
+    ])
+    .returning();
+  const [farhan1] = await db
+    .insert(listings)
+    .values([
+      { ...L(pilotSeller9.id, 'Chicken Seekh Kebab (6 pc)', 'Charcoal-grilled seekh kebabs.', 240, false, 'Grills', img('1525755662778-989d0524087e'), 30, 8), createdAt: dateInWeek(7, 2) },
+    ])
+    .returning();
+  const curryListings = [curry1, curry2, curry3, curry4];
+
+  // ---- weekly order generation ----
+  // Sellers scoped to Cyberzon ONLY (seller4/seller5/seller6 are My Home
+  // Avatar kitchens, ~8.9 km away — fine for cross-society browse/delivery
+  // demos elsewhere in this seed file, but wrong for THIS block: self-pickup
+  // specifically means "collect from the seller inside the society," so a
+  // Cyberzon household's weekly order history should only ever be fulfilled
+  // by kitchens actually registered in Cyberzon).
+  type PilotFulfillment = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
+  const listingsBySeller: Record<number, { id: number; title: string; priceInPaise: number }[]> = {
+    [seller1.id]: [l(0), l(1), l(2), l(3)],
+    [seller2.id]: [l(4), l(5), l(6), l(7)],
+    [seller3.id]: [l(8), l(9), l(10)],
+    [pilotSeller7.id]: curryListings,
+    [pilotSeller8.id]: [sunita1],
+    [pilotSeller9.id]: [farhan1],
+  };
+  // Which sellers offer their own delivery (mirrors each seller_profiles row
+  // above/earlier) — used to fall back to self-pickup if the fulfillment
+  // pattern below would otherwise assign a delivery type a seller doesn't offer.
+  const sellerDeliveryOk: Record<number, boolean> = {
+    [seller1.id]: true,
+    [pilotSeller7.id]: true,
+  };
+  const sellerDeliveryFee: Record<number, number> = {
+    [seller1.id]: 3000,
+    [pilotSeller7.id]: 2000,
+  };
+
+  const SELLER_ROSTER_BY_WEEK: number[][] = [
+    [seller1.id, seller2.id],
+    [seller1.id, seller2.id, pilotSeller7.id, pilotSeller8.id],
+    [seller1.id, seller2.id, seller3.id, pilotSeller7.id, pilotSeller8.id],
+    [seller1.id, seller2.id, seller3.id, pilotSeller7.id], // Sunita has gone quiet
+    [seller1.id, seller2.id, seller3.id, pilotSeller7.id],
+    [seller1.id, seller2.id, seller3.id, pilotSeller7.id],
+    [seller1.id, seller2.id, seller3.id, pilotSeller7.id, pilotSeller9.id],
+    [seller1.id, seller2.id, seller3.id, pilotSeller7.id, pilotSeller9.id],
+  ];
+  // Always exactly 3 entries — deliberately coprime with every week's
+  // SELLER_ROSTER_BY_WEEK length (2/4/5) above, so cycling both by the same
+  // order index `i` (below) doesn't lock a given seller to one permanent
+  // fulfillment type (a same/shared-factor length would: e.g. a 4-long
+  // roster against a 4-long pattern pairs each seller with exactly one
+  // pattern slot for every single order, so a seller who doesn't offer
+  // seller_delivery — falling back to self_pickup — could end up NEVER
+  // showing seller_delivery for the whole week, no matter the pattern's
+  // intended mix). Coprime lengths mean the (seller, fulfillment) pairing
+  // keeps rotating, so the fallback-to-self_pickup logic below only trims a
+  // realistic minority rather than an entire category to zero.
+  const FULFILLMENT_PATTERN_BY_WEEK: PilotFulfillment[][] = [
+    ['self_pickup', 'self_pickup', 'self_pickup'],
+    ['self_pickup', 'self_pickup', 'seller_delivery'],
+    ['self_pickup', 'self_pickup', 'seller_delivery'],
+    ['self_pickup', 'seller_delivery', 'seller_delivery'],
+    ['self_pickup', 'seller_delivery', 'seller_delivery'],
+    ['self_pickup', 'seller_delivery', 'platform_delivery'],
+    ['self_pickup', 'seller_delivery', 'platform_delivery'],
+    ['seller_delivery', 'seller_delivery', 'platform_delivery'],
+  ];
+  const ORDERS_PER_WEEK = [6, 10, 14, 18, 22, 26, 30, 34];
+  const FRESH_PER_WEEK = [6, 6, 7, 8, 10, 10, 12, 12];
+  // Reorder counts drawn from the fresh cohort exactly 3 weeks earlier — the
+  // week-4 buyer-retention signal (index w-1 => cohort week (w-3)).
+  const RETENTION_PER_WEEK = [0, 0, 0, 2, 1, 3, 2, 3];
+
+  const freshBuyersByWeek: number[][] = Array.from({ length: PILOT_WEEKS }, () => []);
+  const everOrderedPool: number[] = [];
+  const weekFirstOrder: Record<number, { id: number; buyerId: number; sellerId: number | null; totalInPaise: number }> = {};
+  let pilotOtpSeq = 0;
+
+  for (let w = 1; w <= PILOT_WEEKS; w++) {
+    const ordersThisWeek = ORDERS_PER_WEEK[w - 1];
+    const freshCount = FRESH_PER_WEEK[w - 1];
+    const retentionCount = RETENTION_PER_WEEK[w - 1];
+    const roster = SELLER_ROSTER_BY_WEEK[w - 1];
+    const pattern = FULFILLMENT_PATTERN_BY_WEEK[w - 1];
+
+    const retentionBuyerIds = retentionCount > 0 ? freshBuyersByWeek[w - 4].slice(0, retentionCount) : [];
+    const weekNewBuyerIds = buyersByWeek[w - 1];
+    const freshBuyerIds = weekNewBuyerIds.slice(0, freshCount);
+    const protectedCount = retentionBuyerIds.length + freshBuyerIds.length;
+
+    const assignments: number[] = [...retentionBuyerIds, ...freshBuyerIds];
+    const genericRepeatSlots = ordersThisWeek - assignments.length;
+    // The generic repeat draw excludes the ENTIRE cohort this week is
+    // measuring week-4 retention for (w >= 4 only) — otherwise the draw,
+    // which always starts from the front of the pool, would keep
+    // coincidentally re-selecting whichever cohort sits earliest in it
+    // (exactly the cohort being measured most weeks), inflating retention
+    // far past what RETENTION_PER_WEEK actually intends. This way the ONLY
+    // route a cohort member can reappear in their own measured week is the
+    // explicit retentionBuyerIds draw above, so retained count is always
+    // exactly RETENTION_PER_WEEK[w-1] — deliberate, not incidental.
+    const measuredCohort = w >= 4 ? new Set(freshBuyersByWeek[w - 4]) : new Set<number>();
+    const drawPool = everOrderedPool.filter((id) => !measuredCohort.has(id));
+    for (let i = 0; i < genericRepeatSlots; i++) {
+      assignments.push(drawPool[i % drawPool.length]);
+    }
+
+    for (let i = 0; i < ordersThisWeek; i++) {
+      const buyerId = assignments[i];
+      const isFreshOrder = i >= retentionBuyerIds.length && i < protectedCount;
+      const sellerId = roster[i % roster.length];
+      const sellerListings = listingsBySeller[sellerId];
+      const item = sellerListings[i % sellerListings.length];
+      const qty = i % 4 === 0 ? 2 : 1;
+      const subtotal = qty * item.priceInPaise;
+
+      let fulfillmentType: PilotFulfillment = pattern[i % pattern.length];
+      if (fulfillmentType === 'seller_delivery' && !sellerDeliveryOk[sellerId]) fulfillmentType = 'self_pickup';
+      if (fulfillmentType === 'platform_delivery' && subtotal < DEFAULTS.platformDeliveryMinOrderPaise) fulfillmentType = 'self_pickup';
+
+      const deliveryFee =
+        fulfillmentType === 'seller_delivery'
+          ? sellerDeliveryFee[sellerId] ?? 2500
+          : fulfillmentType === 'platform_delivery'
+            ? 4900
+            : 0;
+
+      // Only generic-repeat slots (never a retention/fresh one) can be
+      // cancelled — keeps the hand-tuned retention-cohort counts exact.
+      const isCancelled = i >= protectedCount && (i - protectedCount) % 15 === 14;
+      const terminalStatus = fulfillmentType === 'self_pickup' ? 'picked_up' : 'delivered';
+      const status = isCancelled ? 'cancelled' : terminalStatus;
+      // 1..6, never 0: dayOffset=0 would land exactly on a week boundary,
+      // which real (multi-second) seeding wall-clock drift between this
+      // daysAgo() call and metrics.ts's own `now` at query time could tip
+      // into the adjacent week's bucket — see DECISIONS.md #99.
+      const dayOffset = (i % 6) + 1;
+
+      pilotOtpSeq++;
+      const order = await seedOrder({
+        buyerId,
+        type: 'home_delivery',
+        sellerId,
+        fulfillmentType,
+        gstPct: DEFAULTS.gstPct,
+        status,
+        items: [{ listingId: item.id, title: item.title, qty, unitPaise: item.priceInPaise }],
+        deliveryFee,
+        createdDaysAgo: weekStartDaysAgo(w) - dayOffset,
+        paid: !isCancelled,
+        commissionPct: 12,
+        otp: String(6000 + pilotOtpSeq).slice(-4),
+        events: isCancelled
+          ? [
+              { status: 'placed', minutesAfter: 0 },
+              { status: 'cancelled', note: 'Payment not completed within 15 minutes', minutesAfter: 15 },
+            ]
+          : [
+              { status: 'placed', minutesAfter: 0 },
+              { status: terminalStatus, minutesAfter: 45 },
+            ],
+      });
+
+      if (!isCancelled) {
+        if (isFreshOrder) freshBuyersByWeek[w - 1].push(buyerId);
+        if (!everOrderedPool.includes(buyerId)) everOrderedPool.push(buyerId);
+        if (i === 0) weekFirstOrder[w] = order;
+      }
+    }
+  }
+
+  // Two resolved complaints with a partial refund each — placed on the
+  // FIRST (guaranteed non-cancelled) order of weeks 7 and 8, so the
+  // refund/complaint-rate metric shows a rough week (1 of 30 ≈ 3.3%, just
+  // over the <3% target) improving into a healthy one (1 of 34 ≈ 2.9%,
+  // just under it) rather than a flat, unrealistically perfect 0% throughout.
+  async function seedResolvedComplaint(
+    order: { id: number; buyerId: number; sellerId: number | null; totalInPaise: number },
+    daysAgoResolved: number,
+  ) {
+    const refundAmount = Math.round(order.totalInPaise * 0.25);
+    await db.insert(complaints).values({
+      orderId: order.id,
+      buyerId: order.buyerId,
+      sellerId: order.sellerId,
+      category: 'quality',
+      description: 'A couple of pieces were undercooked.',
+      status: 'resolved',
+      outcome: 'partial_refund',
+      refundInPaise: refundAmount,
+      resolutionNote: '25% partial refund issued after review.',
+      resolvedByAdminId: admin.id,
+      resolvedAt: daysAgo(daysAgoResolved),
+      createdAt: daysAgo(daysAgoResolved + 1),
+    });
+    await db.update(orders).set({ refundInPaise: refundAmount }).where(eq(orders.id, order.id));
+    const [payment] = await db.select().from(payments).where(eq(payments.orderId, order.id));
+    if (payment) {
+      const newRefunded = payment.refundedInPaise + refundAmount;
+      await db
+        .update(payments)
+        .set({ refundedInPaise: newRefunded, status: newRefunded >= order.totalInPaise ? 'refunded' : payment.status })
+        .where(eq(payments.orderId, order.id));
+    }
+  }
+  if (weekFirstOrder[7]) await seedResolvedComplaint(weekFirstOrder[7], 8);
+  if (weekFirstOrder[8]) await seedResolvedComplaint(weekFirstOrder[8], 1);
+
+  console.log(
+    'Seed complete: 2 societies, 9 kitchens, 25 dishes, 1 mall, 175 orders (incl. 8 weeks of pilot-metrics history), 3 complaints, 1 referral credit.',
+  );
 }

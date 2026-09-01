@@ -20,6 +20,11 @@ export type PlatformSettings = {
   referralCreditPaise: number;
   referralCreditCapPerUser: number;
   featuredSellerId: string;
+  // Pilot Hardening v2 — Phase 7 (Pilot metrics dashboard, DECISIONS.md #99+).
+  killWeek8PenetrationPct: number;
+  killWeek8RetentionPct: number;
+  killWeek14PenetrationPct: number;
+  killWeek14RetentionPct: number;
 };
 
 /** Admin-editable settings stored in platform_config, defaults from config.ts. */
@@ -63,6 +68,10 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
     referralCreditPaise: num('referralCreditPaise', DEFAULTS.referralCreditPaise),
     referralCreditCapPerUser: num('referralCreditCapPerUser', DEFAULTS.referralCreditCapPerUser),
     featuredSellerId: str('featuredSellerId', DEFAULTS.featuredSellerId),
+    killWeek8PenetrationPct: num('killWeek8PenetrationPct', DEFAULTS.killWeek8PenetrationPct),
+    killWeek8RetentionPct: num('killWeek8RetentionPct', DEFAULTS.killWeek8RetentionPct),
+    killWeek14PenetrationPct: num('killWeek14PenetrationPct', DEFAULTS.killWeek14PenetrationPct),
+    killWeek14RetentionPct: num('killWeek14RetentionPct', DEFAULTS.killWeek14RetentionPct),
   };
 }
 
