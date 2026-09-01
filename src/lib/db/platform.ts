@@ -13,6 +13,9 @@ export type PlatformSettings = {
   platformDeliveryEnabled: boolean;
   platformDeliveryFeeInPaise: number;
   platformDeliveryMinOrderPaise: number;
+  // Pilot Hardening v2 — Phase 4 (Compliance center refinements, DECISIONS.md #62+).
+  fssaiSponsorshipCapPerCohort: number;
+  platformFssaiCentralLicenseNo: string;
 };
 
 /** Admin-editable settings stored in platform_config, defaults from config.ts. */
@@ -29,6 +32,10 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
     const v = map[key];
     return v === undefined ? fallback : v === 'true';
   };
+  const str = (key: string, fallback: string) => {
+    const v = map[key];
+    return v === undefined ? fallback : v;
+  };
   return {
     commissionHomePct: num('commissionHomePct', DEFAULTS.commissionHomePct),
     commissionMallPct: num('commissionMallPct', DEFAULTS.commissionMallPct),
@@ -40,6 +47,14 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
     platformDeliveryMinOrderPaise: num(
       'platformDeliveryMinOrderPaise',
       DEFAULTS.platformDeliveryMinOrderPaise,
+    ),
+    fssaiSponsorshipCapPerCohort: num(
+      'fssaiSponsorshipCapPerCohort',
+      DEFAULTS.fssaiSponsorshipCapPerCohort,
+    ),
+    platformFssaiCentralLicenseNo: str(
+      'platformFssaiCentralLicenseNo',
+      DEFAULTS.platformFssaiCentralLicenseNo,
     ),
   };
 }

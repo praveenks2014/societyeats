@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, EmptyState, Input, Skeleton } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { formatINR } from '@/lib/money';
 
 type AppRow = {
   id: number;
@@ -15,6 +17,9 @@ type AppRow = {
   foscosRefNumber: string | null;
   documentsJson: { label: string; url: string }[] | null;
   createdAt: string;
+  filingMode: 'facilitator' | 'self';
+  facilitationCostInPaise: number;
+  sponsoredByPlatform: boolean;
 };
 
 const STATUS_BADGE: Record<string, { label: string; tone: 'amber' | 'green' | 'red' | 'neutral' }> = {
@@ -37,7 +42,7 @@ export default function AdminFssai() {
   }
   useEffect(load, []);
 
-  async function act(id: number, body: Record<string, string>) {
+  async function act(id: number, body: Record<string, string | boolean>) {
     const res = await fetch(`/api/admin/fssai/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -59,8 +64,10 @@ export default function AdminFssai() {
     <div className="mx-auto max-w-2xl">
       <h1 className="text-2xl font-bold">FSSAI back-office queue</h1>
       <p className="mt-1 text-sm text-ink-soft">
-        The team files each application on FoSCoS manually (there is no public government API), then
-        records the reference number and final grant here.
+        Sellers who chose "File it for me" land here — the team files each on FoSCoS manually (there
+        is no public government API), then records the reference number and final grant. Sellers
+        filing it themselves don&apos;t appear until they share a FoSCoS reference — track their grant
+        the same way from that point on.
       </p>
 
       {rows.length === 0 ? (
@@ -79,7 +86,8 @@ export default function AdminFssai() {
                     </div>
                     <div className="text-xs text-ink-faint">
                       {a.applicantName} · {a.sellerPhone} ·{' '}
-                      {a.licenseType === 'state' ? 'State License' : 'Basic Registration'}
+                      {a.licenseType === 'state' ? 'State License' : 'Basic Registration'} ·{' '}
+                      {a.filingMode === 'self' ? 'self-filed' : 'GharSe files'}
                     </div>
                   </div>
                   <Badge tone={badge.tone}>{badge.label}</Badge>
@@ -100,10 +108,31 @@ export default function AdminFssai() {
                     ))}
                   </div>
                 )}
+                <Link
+                  href={`/fssai/${a.id}/summary`}
+                  className="mt-2 inline-block text-xs font-semibold text-leaf underline"
+                >
+                  View prefilled summary & bundle →
+                </Link>
                 {a.foscosRefNumber && (
                   <p className="mt-2 text-xs">
                     FoSCoS ref: <strong>{a.foscosRefNumber}</strong>
                   </p>
+                )}
+                {a.filingMode === 'facilitator' && (
+                  <div className="mt-2 flex items-center gap-2 text-xs">
+                    <span className={a.sponsoredByPlatform ? 'text-leaf' : 'text-ink-faint'}>
+                      {a.sponsoredByPlatform
+                        ? `✅ Sponsored (${formatINR(a.facilitationCostInPaise)}) — GharSe acquisition cost, not a seller debt`
+                        : '⛔ Not sponsored (outside cohort cap)'}
+                    </span>
+                    <button
+                      className="text-ink-faint underline hover:text-ink"
+                      onClick={() => act(a.id, { action: 'sponsor', sponsoredByPlatform: !a.sponsoredByPlatform })}
+                    >
+                      Toggle
+                    </button>
+                  </div>
                 )}
 
                 {a.status === 'submitted_to_backoffice' && (

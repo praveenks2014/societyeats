@@ -34,6 +34,14 @@ export const fssaiAppStatusEnum = pgEnum('fssai_app_status', [
 
 export const licenseTypeEnum = pgEnum('license_type', ['registration', 'state']);
 
+// Pilot Hardening v2 — Phase 4 (Compliance center refinements, DECISIONS.md
+// #62+). Who actually files the application on FoSCoS: 'facilitator' = the
+// GharSe compliance back-office (a real back-office task is created);
+// 'self' = the seller files it themselves using the wizard's prefilled
+// summary + document bundle as a walkthrough aid — no back-office task, no
+// facilitation cost.
+export const fssaiFilingModeEnum = pgEnum('fssai_filing_mode', ['facilitator', 'self']);
+
 export const orderTypeEnum = pgEnum('order_type', ['home_delivery', 'mall_pickup']);
 
 // Pilot Hardening v2 — fulfillment pivot (see DECISIONS.md #37+): how the
@@ -155,11 +163,22 @@ export const fssaiApplications = pgTable('fssai_applications', {
     .references(() => users.id),
   applicantName: varchar('applicant_name', { length: 160 }).notNull(),
   kitchenAddress: text('kitchen_address').notNull(),
-  licenseType: licenseTypeEnum('license_type').notNull().default('state'),
+  // Default flipped registration<-state Phase 4 (DECISIONS.md #62+): FSSAI
+  // Basic Registration is the recommended default post-1-Apr-2026 rule
+  // (turnover <= 1.5cr) — State License stays available, never asserted as
+  // definitive either way (see the wizard's own "confirm on FoSCoS" note).
+  licenseType: licenseTypeEnum('license_type').notNull().default('registration'),
   documentsJson: jsonb('documents_json').$type<{ label: string; url: string }[]>(),
   status: fssaiAppStatusEnum('status').notNull().default('draft'),
   foscosRefNumber: varchar('foscos_ref_number', { length: 60 }),
   timelineJson: jsonb('timeline_json').$type<{ at: string; event: string }[]>(),
+  // Pilot Hardening v2 — Phase 4 (DECISIONS.md #62+). See fssaiFilingModeEnum.
+  filingMode: fssaiFilingModeEnum('filing_mode').notNull().default('facilitator'),
+  // Recorded as GharSe's own acquisition cost when sponsoredByPlatform is
+  // true — never billed back to the seller as a debt. 0 for self-filed
+  // applications (GharSe does no facilitation work on those).
+  facilitationCostInPaise: integer('facilitation_cost_in_paise').notNull().default(200000),
+  sponsoredByPlatform: boolean('sponsored_by_platform').notNull().default(true),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

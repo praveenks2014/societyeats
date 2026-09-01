@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic';
 type Body =
   | { action: 'file'; foscosRefNumber: string }
   | { action: 'grant'; licenseNumber: string }
-  | { action: 'reject'; reason?: string };
+  | { action: 'reject'; reason?: string }
+  | { action: 'sponsor'; sponsoredByPlatform: boolean };
 
 /** Back-office completes the honest FSSAI loop: file on FoSCoS by hand, then record the outcome. */
 export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => {
@@ -82,6 +83,15 @@ export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => 
       body.reason || 'Our compliance team could not file this application. Please review and resubmit.',
       '/seller/compliance',
     );
+  } else if (body.action === 'sponsor') {
+    // Per-application admin toggle (DECISIONS.md #62+ simplifies the brief's
+    // "per society/cohort" toggle to per-application, since the pilot has
+    // exactly one society and one cohort). Purely an internal acquisition-
+    // cost record — never creates or removes a seller debt either way.
+    await db
+      .update(fssaiApplications)
+      .set({ sponsoredByPlatform: body.sponsoredByPlatform, updatedAt: new Date() })
+      .where(eq(fssaiApplications.id, id));
   } else {
     throw new ApiError(400, 'Unknown action');
   }

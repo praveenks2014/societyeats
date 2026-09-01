@@ -15,7 +15,7 @@ import {
   users,
   type DeliveryAddress,
 } from '@/lib/db/schema';
-import { DEFAULTS } from '@/lib/config';
+import { DEFAULTS, isMockMode } from '@/lib/config';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { getBestQuote } from '@/lib/delivery/orchestrator';
 import { haversineKm, type GeoPoint } from '@/lib/geo';
@@ -47,6 +47,17 @@ export const POST = api(async (req) => {
   if (!body.items?.length) throw new ApiError(400, 'Cart is empty');
   const db = await getDb();
   const settings = await getPlatformSettings();
+
+  // Pilot Hardening v2 — Phase 4 (DECISIONS.md #62+): GharSe itself needs a
+  // Central FSSAI e-commerce license before real (non-mock) orders can be
+  // taken. MOCK_MODE keeps every integration — including this gate — dormant
+  // in demo/dev; it only bites once someone actually flips MOCK_MODE=false.
+  if (!isMockMode() && !settings.platformFssaiCentralLicenseNo) {
+    throw new ApiError(
+      503,
+      'Live orders are paused — the platform FSSAI Central License has not been entered yet. Contact support.',
+    );
+  }
 
   if (body.type === 'home_delivery') {
     if (!body.sellerId) throw new ApiError(400, 'Missing seller');

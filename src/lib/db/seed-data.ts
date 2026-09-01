@@ -215,6 +215,9 @@ export async function runSeed(db: Db): Promise<void> {
       ],
       status: 'filed_on_foscos',
       foscosRefNumber: 'FOSCOS-TS-2026-118842',
+      filingMode: 'facilitator',
+      facilitationCostInPaise: 200000,
+      sponsoredByPlatform: true,
       timelineJson: [
         { at: daysAgo(9).toISOString(), event: 'Application submitted to GharSe compliance team' },
         { at: daysAgo(7).toISOString(), event: 'Documents verified by back-office' },
@@ -235,6 +238,9 @@ export async function runSeed(db: Db): Promise<void> {
         { label: 'Signed declaration', url: '/placeholder-doc.svg' },
       ],
       status: 'submitted_to_backoffice',
+      filingMode: 'facilitator',
+      facilitationCostInPaise: 200000,
+      sponsoredByPlatform: true,
       timelineJson: [
         { at: daysAgo(2).toISOString(), event: 'Application submitted to GharSe compliance team' },
       ],
@@ -370,6 +376,10 @@ export async function runSeed(db: Db): Promise<void> {
     { key: 'platformFeePaise', value: '0' },
     { key: 'fssaiPendingMaxDays', value: '30' },
     { key: 'radiusKm', value: '10' },
+    { key: 'fssaiSponsorshipCapPerCohort', value: '10' },
+    // platformFssaiCentralLicenseNo deliberately left unseeded (empty) — the
+    // admin "live orders blocked" banner should be visible out of the box
+    // until a real Central License is entered (DECISIONS.md #62+).
   ]);
 
   // ---- historical orders ----

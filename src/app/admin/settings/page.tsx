@@ -13,6 +13,8 @@ type Settings = {
   platformDeliveryEnabled: boolean;
   platformDeliveryFeeInPaise: number;
   platformDeliveryMinOrderPaise: number;
+  fssaiSponsorshipCapPerCohort: number;
+  platformFssaiCentralLicenseNo: string;
 };
 
 const FIELDS: { key: keyof Settings; label: string; hint: string }[] = [
@@ -21,6 +23,11 @@ const FIELDS: { key: keyof Settings; label: string; hint: string }[] = [
   { key: 'platformFeePaise', label: 'Buyer platform fee (paise)', hint: '0 = free at launch. 500 = ₹5/order.' },
   { key: 'fssaiPendingMaxDays', label: 'FSSAI-pending grace window (days)', hint: 'Listings auto-pause after this.' },
   { key: 'radiusKm', label: 'Delivery radius (km)', hint: 'The hyperlocal boundary. Default 10.' },
+  {
+    key: 'fssaiSponsorshipCapPerCohort',
+    label: 'FSSAI sponsorship cap (sellers)',
+    hint: 'Founder default: sponsor facilitation for the first 10 sellers in the pilot cohort.',
+  },
 ];
 
 const PLATFORM_DELIVERY_FIELDS: { key: keyof Settings; label: string; hint: string }[] = [
@@ -41,6 +48,7 @@ export default function AdminSettings() {
   const [mockMode, setMockMode] = useState(true);
   const [form, setForm] = useState<Record<string, string>>({});
   const [platformDeliveryEnabled, setPlatformDeliveryEnabled] = useState(false);
+  const [fssaiLicenseNo, setFssaiLicenseNo] = useState('');
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
@@ -51,10 +59,11 @@ export default function AdminSettings() {
         setSettings(d.settings);
         setMockMode(d.mockMode);
         setPlatformDeliveryEnabled(!!d.settings.platformDeliveryEnabled);
+        setFssaiLicenseNo(d.settings.platformFssaiCentralLicenseNo ?? '');
         setForm(
           Object.fromEntries(
             Object.entries(d.settings)
-              .filter(([k]) => k !== 'platformDeliveryEnabled')
+              .filter(([k]) => k !== 'platformDeliveryEnabled' && k !== 'platformFssaiCentralLicenseNo')
               .map(([k, v]) => [k, String(v)]),
           ),
         );
@@ -64,7 +73,10 @@ export default function AdminSettings() {
 
   async function save() {
     setBusy(true);
-    const body: Record<string, number | boolean> = { platformDeliveryEnabled };
+    const body: Record<string, number | boolean | string> = {
+      platformDeliveryEnabled,
+      platformFssaiCentralLicenseNo: fssaiLicenseNo.trim(),
+    };
     for (const f of [...FIELDS, ...PLATFORM_DELIVERY_FIELDS]) body[f.key] = Number(form[f.key]);
     const res = await fetch('/api/admin/settings', {
       method: 'PATCH',
@@ -79,6 +91,7 @@ export default function AdminSettings() {
     }
     setSettings(d.settings);
     setPlatformDeliveryEnabled(!!d.settings.platformDeliveryEnabled);
+    setFssaiLicenseNo(d.settings.platformFssaiCentralLicenseNo ?? '');
     toast('Settings live ✅ — applies to the next order');
   }
 
@@ -133,6 +146,28 @@ export default function AdminSettings() {
             />
           </Field>
         ))}
+
+        <Card className={`p-4 ${!fssaiLicenseNo.trim() ? 'border-chili bg-chili-tint/40' : ''}`}>
+          <div className="eyebrow mb-2">COMPLIANCE — PLATFORM FSSAI LICENSE</div>
+          <Field
+            label="Platform FSSAI Central License No."
+            hint="GharSe's own 14-digit Central e-commerce FSSAI license — required before real (non-mock) orders can be placed."
+          >
+            <Input
+              inputMode="numeric"
+              maxLength={14}
+              placeholder="14-digit license number"
+              value={fssaiLicenseNo}
+              onChange={(e) => setFssaiLicenseNo(e.target.value.replace(/\D/g, ''))}
+            />
+          </Field>
+          {!fssaiLicenseNo.trim() && (
+            <p className="mt-2 text-xs text-chili-dark">
+              ⚠️ Live orders blocked until platform FSSAI Central License is entered (MOCK_MODE=false
+              only — this pilot currently runs in MOCK_MODE and is unaffected).
+            </p>
+          )}
+        </Card>
 
         <Button size="lg" className="w-full" loading={busy} onClick={save}>
           Save — applies immediately

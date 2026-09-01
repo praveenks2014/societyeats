@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, ne } from 'drizzle-orm';
 import { api, ok } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
@@ -14,6 +14,10 @@ export const GET = api(async () => {
     .from(fssaiApplications)
     .innerJoin(users, eq(fssaiApplications.sellerId, users.id))
     .leftJoin(sellerProfiles, eq(fssaiApplications.sellerId, sellerProfiles.userId))
+    // 'draft' = a self-filed application the seller hasn't reported filing
+    // yet — no back-office task exists for it, so it stays off this queue
+    // until the seller shares a FoSCoS reference (DECISIONS.md #62+).
+    .where(ne(fssaiApplications.status, 'draft'))
     .orderBy(desc(fssaiApplications.createdAt));
   return ok({
     applications: rows.map((r) => ({

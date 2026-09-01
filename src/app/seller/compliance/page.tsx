@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Modal, Skeleton, Textarea } from '@/components/ui';
 import { useToast } from '@/components/providers';
@@ -18,12 +20,15 @@ type Summary = {
     foscosRefNumber: string | null;
     timelineJson: { at: string; event: string }[] | null;
     createdAt: string;
+    filingMode: 'facilitator' | 'self';
+    sponsoredByPlatform: boolean;
   } | null;
   pendingDaysLeft: number | null;
   settings: { fssaiPendingMaxDays: number };
 };
 
 const APP_STEPS: Record<string, string> = {
+  draft: 'Ready for you to file on FoSCoS',
   submitted_to_backoffice: 'With GharSe compliance team',
   filed_on_foscos: 'Filed on FoSCoS',
   granted: 'License granted 🎉',
@@ -34,6 +39,7 @@ export default function CompliancePage() {
   const [data, setData] = useState<Summary | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const toast = useToast();
+  const router = useRouter();
 
   function load() {
     fetch('/api/seller/summary')
@@ -91,7 +97,12 @@ export default function CompliancePage() {
             ))}
             <div className="flex gap-3 text-sm text-ink-faint">
               <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-rice-line" />
-              <div>{APP_STEPS[application.status]} — our compliance team files on FoSCoS within 48h and tracks it to grant.</div>
+              <div>
+                {APP_STEPS[application.status]} —{' '}
+                {application.filingMode === 'facilitator'
+                  ? 'our compliance team files on FoSCoS within 48h and tracks it to grant.'
+                  : "you're filing this yourself — GharSe tracks it to grant once you share your FoSCoS reference."}
+              </div>
             </div>
           </div>
           {application.foscosRefNumber && (
@@ -99,6 +110,14 @@ export default function CompliancePage() {
               FoSCoS reference: <strong>{application.foscosRefNumber}</strong>
             </p>
           )}
+          <Link
+            href={`/fssai/${application.id}/summary`}
+            className="mt-3 inline-block text-sm font-semibold text-leaf underline"
+          >
+            {application.filingMode === 'self'
+              ? 'View your application summary & FoSCoS walkthrough →'
+              : 'View your application summary →'}
+          </Link>
         </Card>
       )}
 
@@ -109,9 +128,10 @@ export default function CompliancePage() {
             <div className="text-2xl">🧭</div>
             <h2 className="mt-2 font-display text-lg font-bold">Get me a license</h2>
             <p className="mt-1 flex-1 text-sm text-ink-soft">
-              No license yet? Answer 5 questions, upload 4 documents, and our compliance team files
-              your application on FoSCoS within 48 hours. You can start selling with an amber
-              “FSSAI Pending” badge meanwhile.
+              No license yet? Answer a few questions, upload your documents, and either have our
+              compliance team file it on FoSCoS for you, or file it yourself with a prefilled summary
+              and step-by-step walkthrough. You can start selling with an amber “FSSAI Pending” badge
+              meanwhile.
             </p>
             <Button className="mt-4" onClick={() => setWizardOpen(true)}>
               Start guided application
@@ -123,19 +143,25 @@ export default function CompliancePage() {
       <Card className="mt-6 p-4 text-xs leading-relaxed text-ink-faint">
         <strong>How this works (no shortcuts):</strong> FSSAI&apos;s FoSCoS portal has no public API
         for submitting applications — anyone claiming instant government filing is bluffing. GharSe
-        verifies existing licenses instantly via a verification partner, and files new applications
-        manually through our trained compliance team, tracking each one to grant. Home kitchens
-        selling through e-commerce platforms generally need a <strong>State License</strong> under
-        the 2026 rules.
+        verifies existing licenses instantly via a verification partner. For new applications, our
+        compliance team files manually on your behalf if you ask them to, or you can file it yourself
+        using GharSe&apos;s prefilled summary. Most home kitchens qualify for{' '}
+        <strong>Basic Registration</strong> (turnover up to ₹1.5 crore, effective 1 April 2026) — but
+        some categories require a <strong>State License</strong> regardless of turnover. Confirm your
+        exact Kind of Business on FoSCoS or with your CA before filing.
       </Card>
 
       <FssaiWizard
         open={wizardOpen}
         kitchenName={profile.kitchenName}
         onClose={() => setWizardOpen(false)}
-        onDone={() => {
+        onDone={(applicationId, filingMode) => {
           setWizardOpen(false);
-          toast('Application submitted! Track it here.');
+          if (filingMode === 'self') {
+            router.push(`/fssai/${applicationId}/summary`);
+          } else {
+            toast('Application submitted! Track it here.');
+          }
           load();
         }}
       />
@@ -199,13 +225,17 @@ function FssaiWizard({
   open: boolean;
   kitchenName: string;
   onClose: () => void;
-  onDone: () => void;
+  onDone: (applicationId: number, filingMode: 'facilitator' | 'self') => void;
 }) {
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [applicantName, setApplicantName] = useState('');
   const [kitchenAddress, setKitchenAddress] = useState('');
-  const [licenseType, setLicenseType] = useState<'state' | 'registration'>('state');
+  // FSSAI Basic Registration is the recommended default (turnover <= 1.5cr,
+  // rule effective 1 Apr 2026) — never asserted as definitive, see the note
+  // in step 3 below (DECISIONS.md #62+).
+  const [licenseType, setLicenseType] = useState<'state' | 'registration'>('registration');
+  const [filingMode, setFilingMode] = useState<'facilitator' | 'self'>('facilitator');
   const [docs, setDocs] = useState<Record<string, string>>({});
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
@@ -234,6 +264,7 @@ function FssaiWizard({
         applicantName,
         kitchenAddress,
         licenseType,
+        filingMode,
         documents: Object.entries(docs).map(([label, url]) => ({ label, url })),
       }),
     });
@@ -243,7 +274,14 @@ function FssaiWizard({
       toast(d.error || 'Could not submit', 'err');
       return;
     }
-    onDone();
+    // Reset for next time this modal opens.
+    setStep(0);
+    setApplicantName('');
+    setKitchenAddress('');
+    setLicenseType('registration');
+    setFilingMode('facilitator');
+    setDocs({});
+    onDone(d.application.id, filingMode);
   }
 
   const steps = [
@@ -271,14 +309,16 @@ function FssaiWizard({
       body: (
         <div className="space-y-3">
           <p className="rounded-xl bg-leaf-tint px-3 py-2.5 text-sm text-leaf-dark">
-            💡 <strong>Our recommendation: State License.</strong> Home kitchens selling via
-            e-commerce platforms generally need a State License under the 2026 rules — Basic
-            Registration only covers very small direct sales.
+            💡 <strong>Our default recommendation: Basic Registration.</strong> Most home kitchens
+            with turnover up to ₹1.5 crore qualify, under the rule effective 1 April 2026. Some
+            categories require a State License regardless of turnover — confirm your exact Kind of
+            Business on FoSCoS. Neither tier is definitive here — it&apos;s guidance, not a filed
+            determination.
           </p>
           {(
             [
-              ['state', 'State License (recommended)', 'For food businesses selling via platforms like GharSe'],
-              ['registration', 'Basic Registration', 'Turnover under ₹12 lakh, direct sales only'],
+              ['registration', 'Basic Registration (recommended)', 'Turnover up to ₹1.5 crore — most home kitchens'],
+              ['state', 'State License', 'Some categories require this regardless of turnover — check FoSCoS'],
             ] as const
           ).map(([value, label, hint]) => (
             <label key={value} className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3 ${licenseType === value ? 'border-leaf bg-leaf-tint/40' : 'border-rice-line'}`}>
@@ -330,7 +370,45 @@ function FssaiWizard({
       ),
     },
     {
-      title: '5 · Review & submit',
+      title: '5 · How do you want to file?',
+      valid: true,
+      body: (
+        <div className="space-y-3">
+          {(
+            [
+              [
+                'facilitator',
+                'File it for me (recommended)',
+                'GharSe’s compliance team files this on FoSCoS by hand within 48 hours and tracks it to grant. Sponsored for this pilot cohort.',
+              ],
+              [
+                'self',
+                'I’ll file it myself',
+                'Get a prefilled application summary, document bundle and step-by-step FoSCoS walkthrough — you file it, at your own pace.',
+              ],
+            ] as const
+          ).map(([value, label, hint]) => (
+            <label
+              key={value}
+              className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3 ${filingMode === value ? 'border-leaf bg-leaf-tint/40' : 'border-rice-line'}`}
+            >
+              <input
+                type="radio"
+                checked={filingMode === value}
+                onChange={() => setFilingMode(value)}
+                className="mt-1 accent-leaf"
+              />
+              <span>
+                <span className="block text-sm font-semibold">{label}</span>
+                <span className="block text-xs text-ink-faint">{hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      ),
+    },
+    {
+      title: '6 · Review & submit',
       valid: true,
       body: (
         <div className="space-y-2 text-sm">
@@ -338,11 +416,19 @@ function FssaiWizard({
           <Row k="Kitchen" v={kitchenAddress} />
           <Row k="License type" v={licenseType === 'state' ? 'State License' : 'Basic Registration'} />
           <Row k="Documents" v={`${Object.keys(docs).length}/${DOCS.length} uploaded`} />
-          <p className="mt-3 rounded-xl bg-turmeric-tint px-3 py-2.5 text-xs text-ink-soft">
-            Our compliance team reviews and files this on FoSCoS within 48 hours, then tracks it to
-            grant. You&apos;ll see every step here. Meanwhile your dishes can go live with an amber
-            “FSSAI Pending” badge.
-          </p>
+          <Row k="Filing" v={filingMode === 'facilitator' ? 'GharSe compliance team' : 'You (self-filed)'} />
+          {filingMode === 'facilitator' ? (
+            <p className="mt-3 rounded-xl bg-turmeric-tint px-3 py-2.5 text-xs text-ink-soft">
+              Our compliance team reviews and files this on FoSCoS within 48 hours, then tracks it to
+              grant. You&apos;ll see every step here. Meanwhile your dishes can go live with an amber
+              “FSSAI Pending” badge.
+            </p>
+          ) : (
+            <p className="mt-3 rounded-xl bg-turmeric-tint px-3 py-2.5 text-xs text-ink-soft">
+              You&apos;ll get a prefilled summary and a step-by-step FoSCoS walkthrough to file this
+              yourself. Meanwhile your dishes can go live with an amber “FSSAI Pending” badge.
+            </p>
+          )}
         </div>
       ),
     },
