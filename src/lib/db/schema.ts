@@ -2,6 +2,7 @@ import {
   boolean,
   date,
   doublePrecision,
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -77,26 +78,35 @@ export const subscriptionPlanEnum = pgEnum('subscription_plan', ['free', 'pro'])
 
 // ---------- core tables ----------
 
-export const societies = pgTable('societies', {
-  id: serial('id').primaryKey(),
-  name: varchar('name', { length: 160 }).notNull(),
-  city: varchar('city', { length: 80 }).notNull(),
-  lat: doublePrecision('lat').notNull(),
-  lng: doublePrecision('lng').notNull(),
-  addressText: text('address_text').notNull(),
-});
+export const societies = pgTable(
+  'societies',
+  {
+    id: serial('id').primaryKey(),
+    name: varchar('name', { length: 160 }).notNull(),
+    city: varchar('city', { length: 80 }).notNull(),
+    lat: doublePrecision('lat').notNull(),
+    lng: doublePrecision('lng').notNull(),
+    addressText: text('address_text').notNull(),
+  },
+  (table) => [index('societies_lat_lng_idx').on(table.lat, table.lng)],
+);
 
-export const users = pgTable('users', {
-  id: serial('id').primaryKey(),
-  phone: varchar('phone', { length: 15 }).notNull().unique(),
-  name: varchar('name', { length: 120 }).notNull(),
-  passwordHash: text('password_hash').notNull(),
-  role: roleEnum('role').notNull().default('buyer'),
-  societyId: integer('society_id').references(() => societies.id),
-  lat: doublePrecision('lat'),
-  lng: doublePrecision('lng'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+export const users = pgTable(
+  'users',
+  {
+    id: serial('id').primaryKey(),
+    phone: varchar('phone', { length: 15 }).notNull().unique(),
+    name: varchar('name', { length: 120 }).notNull(),
+    passwordHash: text('password_hash').notNull(),
+    role: roleEnum('role').notNull().default('buyer'),
+    societyId: integer('society_id').references(() => societies.id),
+    lat: doublePrecision('lat'),
+    lng: doublePrecision('lng'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  // Backs the SQL Haversine radius filter in src/lib/browse.ts (browseListings).
+  (table) => [index('users_lat_lng_idx').on(table.lat, table.lng)],
+);
 
 export const sellerProfiles = pgTable('seller_profiles', {
   userId: integer('user_id')

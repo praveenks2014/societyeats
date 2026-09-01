@@ -11,6 +11,10 @@ out/
 # local dev database (PGlite fallback)
 .data/
 
+# generated at build time (npm run prebuild) from public/sw.template.js —
+# see scripts/gen-sw.mjs
+public/sw.js
+
 # user uploads (seeded demo images are remote URLs)
 public/uploads/*
 !public/uploads/.gitkeep

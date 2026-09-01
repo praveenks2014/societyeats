@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, ne } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, ne, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import {
   fssaiApplications,
@@ -11,6 +11,24 @@ import {
 } from '@/lib/db/schema';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { haversineKm, type GeoPoint } from '@/lib/geo';
+
+const EARTH_RADIUS_KM = 6371; // matches src/lib/geo.ts's haversineKm exactly
+
+/**
+ * Great-circle distance (km) between (lat, lng) and a seller's effective
+ * point, as a SQL fragment — the same haversine formula as geo.ts's
+ * haversineKm(), translated to SQL so it can run inside the WHERE clause
+ * (filtered + indexed in Postgres) instead of over every row in JS.
+ */
+function haversineKmSql(lat: number, lng: number, latExpr: SQL, lngExpr: SQL): SQL<number> {
+  return sql<number>`(
+    2 * ${EARTH_RADIUS_KM} * asin(sqrt(
+      power(sin(radians(${lat} - ${latExpr}) / 2), 2) +
+      cos(radians(${latExpr})) * cos(radians(${lat})) *
+      power(sin(radians(${lng} - ${lngExpr}) / 2), 2)
+    ))
+  )`;
+}
 
 export type ListingCard = {
   id: number;
@@ -75,44 +93,49 @@ export async function browseListings(opts: {
   const db = await getDb();
   const settings = await eligibleSellerFilter();
 
+  // Effective seller point: their own lat/lng if set, else their society's —
+  // same fallback the buyer-facing distance always used, now computed once
+  // in SQL and reused for both the filter and the displayed distance.
+  const effLat = sql`coalesce(${users.lat}, ${societies.lat})`;
+  const effLng = sql`coalesce(${users.lng}, ${societies.lng})`;
+  const hasLoc = opts.lat != null && opts.lng != null;
+  const distanceExpr = hasLoc ? haversineKmSql(opts.lat!, opts.lng!, effLat, effLng) : null;
+
+  const conditions = [
+    eq(listings.isActive, true),
+    gt(listings.availableQty, 0),
+    eq(sellerProfiles.isApproved, true),
+    ne(sellerProfiles.fssaiStatus, 'unverified'),
+  ];
+  if (distanceExpr) {
+    // Hard 10 km rule, enforced in SQL against indexed lat/lng columns
+    // (users_lat_lng_idx / societies_lat_lng_idx). Sellers with no
+    // coordinates at all (no direct lat/lng and no society) can't be
+    // distance-checked, so a location-scoped browse excludes them rather
+    // than showing them at an unknown distance.
+    conditions.push(
+      sql`${effLat} is not null and ${effLng} is not null and ${distanceExpr} <= ${settings.radiusKm}`,
+    );
+  }
+
   const rows = await db
     .select({
       listing: listings,
       profile: sellerProfiles,
-      seller: users,
       society: societies,
+      distanceKm: distanceExpr ?? sql<number | null>`null`,
     })
     .from(listings)
     .innerJoin(sellerProfiles, eq(listings.sellerId, sellerProfiles.userId))
     .innerJoin(users, eq(listings.sellerId, users.id))
     .leftJoin(societies, eq(users.societyId, societies.id))
-    .where(
-      and(
-        eq(listings.isActive, true),
-        gt(listings.availableQty, 0),
-        eq(sellerProfiles.isApproved, true),
-        ne(sellerProfiles.fssaiStatus, 'unverified'),
-      ),
-    );
+    .where(and(...conditions));
 
   const q = opts.q?.trim().toLowerCase();
   const cards: ListingCard[] = [];
   const cuisines = new Set<string>();
 
-  for (const { listing, profile, seller, society } of rows) {
-    const sellerPoint: GeoPoint | null =
-      seller.lat != null && seller.lng != null
-        ? { lat: seller.lat, lng: seller.lng }
-        : society
-          ? { lat: society.lat, lng: society.lng }
-          : null;
-
-    let distanceKm: number | null = null;
-    if (opts.lat != null && opts.lng != null && sellerPoint) {
-      distanceKm = haversineKm({ lat: opts.lat, lng: opts.lng }, sellerPoint);
-      if (distanceKm > settings.radiusKm) continue; // hard 10 km rule
-    }
-
+  for (const { listing, profile, society, distanceKm } of rows) {
     cuisines.add(listing.cuisine);
     if (opts.veg && !listing.isVeg) continue;
     if (opts.cuisine && listing.cuisine !== opts.cuisine) continue;
@@ -143,7 +166,7 @@ export async function browseListings(opts: {
       fssaiStatus: profile.fssaiStatus,
       fssaiNumber: profile.fssaiNumber,
       societyName: society?.name ?? null,
-      distanceKm,
+      distanceKm: distanceKm != null ? Number(distanceKm) : null,
     });
   }
 

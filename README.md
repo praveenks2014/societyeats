@@ -21,9 +21,14 @@ _(placeholder — add screenshots of: parallax home hero, browse grid, checkout 
 
 Seed data: 2 Hyderabad societies (Aparna Cyberzon & My Home Avatar, ~9 km apart), 6 home kitchens (verified / FSSAI-pending / unapproved), 20 dishes, GVK One mall with 3 counters × 5 items, 6 historical orders, reviews.
 
-## Run it locally (zero setup)
+## Run it locally
 
 ```bash
+cp .env.example .env
+# edit .env and set JWT_SECRET — e.g. `openssl rand -hex 32` — the app
+# refuses to start without one (no dev fallback). DATABASE_URL can stay
+# empty: leaving it unset is the zero-setup path (embedded PGlite).
+
 npm install
 npm run db:push     # no DATABASE_URL? uses embedded PGlite (WASM Postgres) at ./.data
 npm run db:seed
@@ -82,5 +87,7 @@ In test mode use: card `4111 1111 1111 1111` (any future expiry, any CVV), or su
 - **No background jobs anywhere**: mock rider progress is derived from timestamps at read time; tracking syncs lazily when someone views an order.
 - **Delivery orchestrator** (`src/lib/delivery/orchestrator.ts`): priority list from `provider_health`, 8s timeout per provider, every attempt logged to `deliveries.attemptsJson`, consecutive-failure auto-disable, admin chaos toggle, `delivery_unassigned` + admin alert when all fail.
 - **Compliance guardrails**: sellers can't publish without FSSAI verified *or* a pending application (amber badge, 30-day grace, then auto-pause); every listing shows the license number or pending badge; checkout shows the full bill breakup.
-- **Auth**: phone + password with an httpOnly JWT cookie; the auth module is structured so an OTP provider (MSG91) can replace the password check without touching session handling.
-- **PWA**: manifest + hand-rolled service worker (offline shell for browse pages, never caches `/api/*`).
+- **Auth**: phone + password with an httpOnly JWT cookie; the auth module is structured so an OTP provider (MSG91) can replace the password check without touching session handling. `JWT_SECRET` is mandatory — `src/instrumentation.ts` validates required env vars (via `src/lib/env.ts`, zod) at server boot and refuses to start with a clear, complete list of what's missing, rather than failing on the first request that needs a secret.
+- **Rate limiting**: an in-memory token bucket (`src/lib/rate-limit.ts`) throttles login, registration, order creation, and delivery-OTP verification — fine for this pilot's single instance; swap for a shared store before running more than one.
+- **10 km radius filter**: enforced in SQL (a Haversine expression in the `browseListings` query, `src/lib/browse.ts`) against indexed `lat`/`lng` columns, not filtered in application code after the fact. `npm test` proves the boundary: 9.9 km in, 10.1 km out.
+- **PWA**: manifest + hand-rolled service worker generated from `public/sw.template.js` (see `scripts/gen-sw.mjs`, run via the `prebuild` npm script) with a cache name stamped from `package.json`'s version plus a fresh build id, so every deploy busts every older cache. Network-first for HTML navigations and `/api/*` GETs (falling back to the last cached copy, or the offline shell, only when offline); cache-first for static assets and remote images. A returning visitor whose tab has an older worker waiting sees an "Update available — reload" prompt (`src/components/sw-register.tsx`).

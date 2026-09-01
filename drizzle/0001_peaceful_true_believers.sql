@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS "societies_lat_lng_idx" ON "societies" USING btree ("lat","lng");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "users_lat_lng_idx" ON "users" USING btree ("lat","lng");

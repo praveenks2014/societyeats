@@ -9,7 +9,9 @@
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
     "db:push": "node scripts/db-push.mjs",
-    "db:seed": "tsx src/lib/db/seed.ts"
+    "db:seed": "tsx src/lib/db/seed.ts",
+    "test": "tsx --test src/lib/browse.test.ts",
+    "prebuild": "node scripts/gen-sw.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.14",

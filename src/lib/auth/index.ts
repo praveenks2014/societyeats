@@ -23,7 +23,11 @@ const COOKIE_NAME = 'gharse_session';
 const SESSION_DAYS = 30;
 
 function jwtSecret(): Uint8Array {
-  const secret = process.env.JWT_SECRET || 'gharse-dev-secret-change-in-production';
+  // No dev fallback on purpose: startup env validation (src/instrumentation.ts)
+  // already refuses to boot the server without JWT_SECRET, so reaching here
+  // without one means that guard was bypassed — fail closed, not open.
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET is not set — the app cannot sign or verify sessions');
   return new TextEncoder().encode(secret);
 }
 

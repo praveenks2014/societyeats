@@ -20,6 +20,7 @@ import { getBestQuote } from '@/lib/delivery/orchestrator';
 import { haversineKm, type GeoPoint } from '@/lib/geo';
 import { pctOf } from '@/lib/money';
 import { createPaymentForOrder } from '@/lib/payments';
+import { rateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,9 @@ type CreateBody = {
 
 export const POST = api(async (req) => {
   const session = await requireSession();
+  // keyed by account, not IP: a whole society can sit behind one shared
+  // NAT gateway, so IP-based limiting here would punish neighbours together
+  rateLimit(`orders:create:${session.uid}`, { limit: 20, windowMs: 5 * 60 * 1000 });
   const body = await readJson<CreateBody>(req);
   if (!body.items?.length) throw new ApiError(400, 'Cart is empty');
   const db = await getDb();

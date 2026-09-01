@@ -4,6 +4,7 @@ import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { deliveries, orderEvents, orders } from '@/lib/db/schema';
 import { notify } from '@/lib/db/notify';
+import { rateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +16,11 @@ export const dynamic = 'force-dynamic';
  */
 export const POST = api<{ params: { id: string } }>(async (req, { params }) => {
   const session = await requireSession();
-  const { otp } = await readJson<{ otp: string }>(req);
   const orderId = Number(params.id);
+  // a 4-digit OTP is only 10,000 combinations — throttle guesses hard,
+  // keyed per order+account so it can't be used to lock other buyers out
+  rateLimit(`verify-otp:${orderId}:${session.uid}`, { limit: 8, windowMs: 10 * 60 * 1000 });
+  const { otp } = await readJson<{ otp: string }>(req);
   const db = await getDb();
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
   if (!order) throw new ApiError(404, 'Order not found');
