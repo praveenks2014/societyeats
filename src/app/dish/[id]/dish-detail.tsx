@@ -40,9 +40,11 @@ type Props = {
   radiusKm: number;
   reviews: { id: number; rating: number; text: string | null; buyerName: string; createdAt: string }[];
   otherDishes: { id: number; title: string; priceInPaise: number; isVeg: boolean; photoUrl: string | null; availableQty: number }[];
+  /** DECISIONS.md #37+: seller has hit maxOrdersPerSlot for the current meal slot. */
+  slotSoldOut: boolean;
 };
 
-export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, otherDishes }: Props) {
+export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, otherDishes, slotSoldOut }: Props) {
   const { loc, openPicker } = useLocation();
   const distanceKm = loc && sellerPoint ? haversineKm(loc, sellerPoint) : null;
   const outOfRange = distanceKm != null && distanceKm > radiusKm;
@@ -121,7 +123,13 @@ export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, ot
           Sold out for today — home kitchens cook in small batches. Check back tomorrow!
         </div>
       )}
-      {!soldOut && outOfRange && (
+      {!soldOut && slotSoldOut && (
+        <div className="mt-4 rounded-2xl bg-chili-tint px-4 py-3 text-sm text-chili-dark">
+          {seller.kitchenName} is sold out for this meal slot — they've hit their order cap for
+          now. Check back at the next mealtime.
+        </div>
+      )}
+      {!soldOut && !slotSoldOut && outOfRange && (
         <div className="mt-4 rounded-2xl bg-chili-tint px-4 py-3 text-sm text-chili-dark">
           This kitchen is {formatDistance(distanceKm!)} away — outside the {radiusKm} km delivery
           radius for your location.
@@ -137,7 +145,7 @@ export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, ot
       )}
 
       {/* add to cart */}
-      {!soldOut && !outOfRange && (
+      {!soldOut && !slotSoldOut && !outOfRange && (
         <div className="mt-5">
           <AddButton listing={listing} seller={seller} />
           <div className="mt-1.5 text-center text-xs text-ink-faint">

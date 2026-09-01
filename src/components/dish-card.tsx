@@ -23,6 +23,8 @@ export type DishCardData = {
   distanceKm?: number | null;
   societyName?: string | null;
   href?: string;
+  /** DECISIONS.md #37+: seller has hit maxOrdersPerSlot for the current meal slot. */
+  slotSoldOut?: boolean;
 };
 
 export function DishCard({
@@ -50,6 +52,7 @@ export function DishCard({
   };
 
   function onAdd() {
+    if (dish.slotSoldOut) return;
     if (requireLocation && !loc) {
       openPicker();
       return;
@@ -77,10 +80,15 @@ export function DishCard({
             FSSAI ✓
           </Badge>
         )}
-        {dish.availableQty <= 3 && (
+        {dish.availableQty <= 3 && !dish.slotSoldOut && (
           <Badge tone="red" className="absolute right-2 top-2">
             Only {dish.availableQty} left
           </Badge>
+        )}
+        {dish.slotSoldOut && (
+          <div className="absolute inset-x-0 bottom-0 bg-ink/80 py-1 text-center text-[11px] font-semibold text-white">
+            Sold out for this slot
+          </div>
         )}
       </div>
       <div className="flex flex-1 flex-col p-3">
@@ -106,13 +114,14 @@ export function DishCard({
           <motion.div key={pop} animate={pop ? { scale: [1, 1.25, 1] } : undefined} transition={{ duration: 0.3 }}>
             <Button
               size="sm"
+              disabled={dish.slotSoldOut}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 onAdd();
               }}
             >
-              ADD +
+              {dish.slotSoldOut ? 'Sold out' : 'ADD +'}
             </Button>
           </motion.div>
         </div>

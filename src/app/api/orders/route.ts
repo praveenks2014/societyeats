@@ -15,14 +15,19 @@ import {
   users,
   type DeliveryAddress,
 } from '@/lib/db/schema';
+import { DEFAULTS } from '@/lib/config';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { getBestQuote } from '@/lib/delivery/orchestrator';
 import { haversineKm, type GeoPoint } from '@/lib/geo';
-import { pctOf } from '@/lib/money';
+import { formatINR, pctOf } from '@/lib/money';
 import { createPaymentForOrder } from '@/lib/payments';
 import { rateLimit } from '@/lib/rate-limit';
+import { currentSlot, isSlotSoldOut } from '@/lib/slots';
 
 export const dynamic = 'force-dynamic';
+
+type FulfillmentType = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
+const FULFILLMENT_TYPES: FulfillmentType[] = ['self_pickup', 'seller_delivery', 'platform_delivery'];
 
 type CreateBody = {
   type: 'home_delivery' | 'mall_pickup';
@@ -30,6 +35,7 @@ type CreateBody = {
   restaurantId?: number;
   items: { id: number; qty: number }[];
   address?: DeliveryAddress;
+  fulfillmentType?: FulfillmentType;
 };
 
 export const POST = api(async (req) => {
@@ -43,11 +49,12 @@ export const POST = api(async (req) => {
   const settings = await getPlatformSettings();
 
   if (body.type === 'home_delivery') {
-    if (!body.sellerId || !body.address) throw new ApiError(400, 'Missing seller or address');
-    const addr = body.address;
-    if (typeof addr.lat !== 'number' || typeof addr.lng !== 'number' || !addr.flat?.trim()) {
-      throw new ApiError(400, 'Delivery address is incomplete');
+    if (!body.sellerId) throw new ApiError(400, 'Missing seller');
+    const fulfillmentType: FulfillmentType = body.fulfillmentType ?? 'self_pickup';
+    if (!FULFILLMENT_TYPES.includes(fulfillmentType)) {
+      throw new ApiError(400, 'Invalid fulfillment type');
     }
+    const needsAddress = fulfillmentType !== 'self_pickup';
 
     const [profile] = await db
       .select()
@@ -56,18 +63,44 @@ export const POST = api(async (req) => {
     if (!profile?.isApproved || profile.fssaiStatus === 'unverified') {
       throw new ApiError(400, 'This kitchen is not accepting orders right now');
     }
-    const [seller] = await db.select().from(users).where(eq(users.id, body.sellerId));
-    let sellerPoint: GeoPoint | null =
-      seller?.lat != null && seller?.lng != null ? { lat: seller.lat, lng: seller.lng } : null;
-    if (!sellerPoint && seller?.societyId) {
-      const [soc] = await db.select().from(societies).where(eq(societies.id, seller.societyId));
-      if (soc) sellerPoint = { lat: soc.lat, lng: soc.lng };
+    if (fulfillmentType === 'self_pickup' && !profile.offersSelfPickup) {
+      throw new ApiError(400, 'This kitchen does not offer self-pickup');
     }
-    if (!sellerPoint) throw new ApiError(400, 'Kitchen location unavailable');
+    if (fulfillmentType === 'seller_delivery' && !profile.offersSellerDelivery) {
+      throw new ApiError(400, 'This kitchen does not offer its own delivery');
+    }
+    if (fulfillmentType === 'platform_delivery' && !settings.platformDeliveryEnabled) {
+      throw new ApiError(400, 'Delivery partner pickup is not available right now');
+    }
 
-    const distance = haversineKm({ lat: addr.lat, lng: addr.lng }, sellerPoint);
-    if (distance > settings.radiusKm) {
-      throw new ApiError(400, `This kitchen is ${distance.toFixed(1)} km away — outside the ${settings.radiusKm} km delivery radius`);
+    let addr: DeliveryAddress | null = null;
+    let sellerPoint: GeoPoint | null = null;
+    let distance = 0;
+    if (needsAddress) {
+      if (!body.address) throw new ApiError(400, 'Missing delivery address');
+      addr = body.address;
+      if (typeof addr.lat !== 'number' || typeof addr.lng !== 'number' || !addr.flat?.trim()) {
+        throw new ApiError(400, 'Delivery address is incomplete');
+      }
+      const [seller] = await db.select().from(users).where(eq(users.id, body.sellerId));
+      sellerPoint =
+        seller?.lat != null && seller?.lng != null ? { lat: seller.lat, lng: seller.lng } : null;
+      if (!sellerPoint && seller?.societyId) {
+        const [soc] = await db.select().from(societies).where(eq(societies.id, seller.societyId));
+        if (soc) sellerPoint = { lat: soc.lat, lng: soc.lng };
+      }
+      if (!sellerPoint) throw new ApiError(400, 'Kitchen location unavailable');
+
+      distance = haversineKm({ lat: addr.lat, lng: addr.lng }, sellerPoint);
+      if (distance > settings.radiusKm) {
+        throw new ApiError(400, `This kitchen is ${distance.toFixed(1)} km away — outside the ${settings.radiusKm} km delivery radius`);
+      }
+      if (fulfillmentType === 'seller_delivery' && distance > profile.sellerDeliveryRadiusKm) {
+        throw new ApiError(
+          400,
+          `This kitchen only delivers within ${profile.sellerDeliveryRadiusKm} km — you're ${distance.toFixed(1)} km away. Try self-pickup instead.`,
+        );
+      }
     }
 
     const rows = await db
@@ -95,9 +128,39 @@ export const POST = api(async (req) => {
       });
     }
 
-    const quote = await getBestQuote(sellerPoint, { lat: addr.lat, lng: addr.lng });
+    if (fulfillmentType === 'platform_delivery' && subtotal < settings.platformDeliveryMinOrderPaise) {
+      throw new ApiError(
+        400,
+        `Delivery partner pickup needs an order of ${formatINR(settings.platformDeliveryMinOrderPaise)} or more — try self-pickup or seller delivery.`,
+      );
+    }
+
+    // Seller-level slot capacity (DECISIONS.md #37+): a cap on in-flight
+    // orders per meal slot, independent of any single dish's availableQty.
+    const slot = currentSlot();
+    const cartSlots = rows.flatMap((l) => l.slotsJson?.slots ?? []);
+    if (slot && (cartSlots.length === 0 || cartSlots.includes(slot))) {
+      const soldOut = await isSlotSoldOut(body.sellerId, profile.maxOrdersPerSlot, cartSlots);
+      if (soldOut) {
+        throw new ApiError(400, 'This kitchen is sold out for the current meal slot — try again next slot');
+      }
+    }
+
+    let deliveryFeeInPaise = 0;
+    if (fulfillmentType === 'seller_delivery') {
+      deliveryFeeInPaise = profile.sellerDeliveryFeeInPaise;
+    } else if (fulfillmentType === 'platform_delivery') {
+      const quote = await getBestQuote(sellerPoint!, { lat: addr!.lat, lng: addr!.lng });
+      deliveryFeeInPaise = quote.amountInPaise;
+    }
+
+    // Commission is on the item subtotal only — seller delivery fees are the
+    // seller's own money, never platform revenue (DECISIONS.md founder spec).
     const commission = pctOf(subtotal, settings.commissionHomePct);
-    const total = subtotal + quote.amountInPaise + settings.platformFeePaise;
+    // GST 5% on home-food orders: GharSe is the deemed supplier under Sec
+    // 9(5) CGST, so this is collected and remitted by the platform, not the cook.
+    const gstInPaise = pctOf(subtotal, DEFAULTS.gstPct);
+    const total = subtotal + deliveryFeeInPaise + settings.platformFeePaise + gstInPaise;
 
     const [order] = await db
       .insert(orders)
@@ -106,10 +169,12 @@ export const POST = api(async (req) => {
         type: 'home_delivery',
         sellerId: body.sellerId,
         status: 'placed',
+        fulfillmentType,
         subtotalInPaise: subtotal,
-        deliveryFeeInPaise: quote.amountInPaise,
+        deliveryFeeInPaise,
         platformFeeInPaise: settings.platformFeePaise,
         commissionInPaise: commission,
+        gstInPaise,
         totalInPaise: total,
         deliveryAddressJson: addr,
         otpCode: otp4(),

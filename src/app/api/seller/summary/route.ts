@@ -33,8 +33,10 @@ export const GET = api(async () => {
   const active = myOrders.filter((o) =>
     ['paid', 'accepted', 'preparing', 'ready', 'out_for_delivery', 'delivery_unassigned'].includes(o.status),
   );
+  // 'delivered' (seller/platform delivery) and 'picked_up' (self-pickup) are
+  // both terminal-success states — see DECISIONS.md #37+.
   const todayDelivered = myOrders.filter(
-    (o) => o.status === 'delivered' && o.createdAt >= today,
+    (o) => (o.status === 'delivered' || o.status === 'picked_up') && o.createdAt >= today,
   );
 
   let pendingDaysLeft: number | null = null;

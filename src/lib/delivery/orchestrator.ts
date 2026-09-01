@@ -9,6 +9,7 @@ import {
   type DeliveryAttempt,
 } from '@/lib/db/schema';
 import { DEFAULTS } from '@/lib/config';
+import { getPlatformSettings } from '@/lib/db/platform';
 import type { GeoPoint } from '@/lib/geo';
 import { notify } from '@/lib/db/notify';
 import { PorterAdapter } from './providers/porter';
@@ -78,7 +79,13 @@ async function notifyAdmins(title: string, body: string, href: string) {
   await Promise.all(admins.map((a) => notify(a.id, title, body, href)));
 }
 
-/** Best available quote, walking the priority list. Falls back to a flat ₹49. */
+/**
+ * Best available quote, walking the priority list. Falls back to the
+ * admin-editable `platformDeliveryFeeInPaise` platform_config value
+ * (DECISIONS.md #37+) when every provider is unreachable/disabled — this is
+ * the buyer-facing platform-delivery fee's ultimate floor, so it's config,
+ * not a hardcoded literal.
+ */
 export async function getBestQuote(pickup: GeoPoint, drop: GeoPoint): Promise<Quote> {
   const providers = await enabledProviders();
   for (const row of providers) {
@@ -93,7 +100,8 @@ export async function getBestQuote(pickup: GeoPoint, drop: GeoPoint): Promise<Qu
       // quote failures are non-fatal — try the next provider
     }
   }
-  return { provider: 'porter', amountInPaise: 4900, etaMins: 30 };
+  const settings = await getPlatformSettings();
+  return { provider: 'porter', amountInPaise: settings.platformDeliveryFeeInPaise, etaMins: 30 };
 }
 
 /**

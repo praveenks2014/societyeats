@@ -35,6 +35,17 @@ export const licenseTypeEnum = pgEnum('license_type', ['registration', 'state'])
 
 export const orderTypeEnum = pgEnum('order_type', ['home_delivery', 'mall_pickup']);
 
+// Pilot Hardening v2 — fulfillment pivot (see DECISIONS.md #37+): how the
+// order physically reaches the buyer. Self-pickup is the default (₹0, no
+// delivery cost to subsidize); seller-delivery is the seller's own fee;
+// platform-delivery is the third-party orchestrator (Porter/Shadowfax/Borzo),
+// kept as a feature-flagged overflow option (platform_config.platformDeliveryEnabled).
+export const fulfillmentTypeEnum = pgEnum('fulfillment_type', [
+  'self_pickup',
+  'seller_delivery',
+  'platform_delivery',
+]);
+
 export const orderStatusEnum = pgEnum('order_status', [
   'placed',
   'paid',
@@ -122,6 +133,13 @@ export const sellerProfiles = pgTable('seller_profiles', {
   rating: doublePrecision('rating').notNull().default(0),
   ratingCount: integer('rating_count').notNull().default(0),
   payoutVpaOrBank: varchar('payout_vpa_or_bank', { length: 160 }),
+  // Pilot Hardening v2 — fulfillment pivot (DECISIONS.md #37+).
+  offersSelfPickup: boolean('offers_self_pickup').notNull().default(true),
+  offersSellerDelivery: boolean('offers_seller_delivery').notNull().default(false),
+  sellerDeliveryFeeInPaise: integer('seller_delivery_fee_in_paise').notNull().default(0),
+  sellerDeliveryRadiusKm: doublePrecision('seller_delivery_radius_km').notNull().default(5),
+  pickupInstructions: text('pickup_instructions'),
+  maxOrdersPerSlot: integer('max_orders_per_slot').notNull().default(8),
 });
 
 export const fssaiApplications = pgTable('fssai_applications', {
@@ -214,10 +232,15 @@ export const orders = pgTable('orders', {
   sellerId: integer('seller_id').references(() => users.id),
   restaurantId: integer('restaurant_id').references(() => restaurants.id),
   status: orderStatusEnum('status').notNull().default('placed'),
+  fulfillmentType: fulfillmentTypeEnum('fulfillment_type').notNull().default('self_pickup'),
   subtotalInPaise: integer('subtotal_in_paise').notNull(),
   deliveryFeeInPaise: integer('delivery_fee_in_paise').notNull().default(0),
   platformFeeInPaise: integer('platform_fee_in_paise').notNull().default(0),
   commissionInPaise: integer('commission_in_paise').notNull().default(0),
+  // GST 5% on the food subtotal — GharSe is the deemed supplier under Sec
+  // 9(5) CGST for home-food orders, so the platform (not the cook) remits
+  // this. 0 for mall/restaurant orders (out of scope for this pivot).
+  gstInPaise: integer('gst_in_paise').notNull().default(0),
   totalInPaise: integer('total_in_paise').notNull(),
   deliveryAddressJson: jsonb('delivery_address_json').$type<DeliveryAddress>(),
   otpCode: varchar('otp_code', { length: 4 }).notNull(),

@@ -62,6 +62,7 @@ export default async function DishPage({ params }: { params: { id: string } }) {
         photoUrl: d.photoUrl,
         availableQty: d.availableQty,
       }))}
+      slotSoldOut={detail.slotSoldOut}
     />
   );
 }

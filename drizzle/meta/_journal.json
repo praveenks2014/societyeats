@@ -15,6 +15,13 @@
       "when": 1788251780493,
       "tag": "0001_peaceful_true_believers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788253146684,
+      "tag": "0002_small_norrin_radd",
+      "breakpoints": true
     }
   ]
 }

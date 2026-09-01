@@ -42,10 +42,11 @@ export const GET = api<{ params: { id: string } }>(async (_req, { params }) => {
   }
   if (!allowed) throw new ApiError(403, 'Not your order');
 
-  // lazily sync courier tracking for active home deliveries
+  // lazily sync courier tracking — only meaningful for platform-delivery
+  // orders, the only fulfillment type that ever gets a `deliveries` row
   let tracking = null;
   if (
-    order.type === 'home_delivery' &&
+    order.fulfillmentType === 'platform_delivery' &&
     ['ready', 'out_for_delivery'].includes(order.status)
   ) {
     tracking = await syncDeliveryTracking(orderId);

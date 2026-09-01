@@ -117,6 +117,12 @@ export async function runSeed(db: Db): Promise<void> {
       rating: 4.8,
       ratingCount: 132,
       payoutVpaOrBank: 'lakshmi@upi',
+      offersSelfPickup: true,
+      offersSellerDelivery: true,
+      sellerDeliveryFeeInPaise: 3000,
+      sellerDeliveryRadiusKm: 4,
+      pickupInstructions: 'Tower B, Flat 1204, Aparna Cyberzon — collect between 12:30–1:30 or 7:30–8:30',
+      maxOrdersPerSlot: 8,
     },
     {
       userId: seller2.id,
@@ -130,6 +136,10 @@ export async function runSeed(db: Db): Promise<void> {
       rating: 4.6,
       ratingCount: 98,
       payoutVpaOrBank: 'subbalakshmi@upi',
+      offersSelfPickup: true,
+      offersSellerDelivery: false,
+      pickupInstructions: 'Tower A, Flat 802, Aparna Cyberzon — collect between 7:30–9:00am',
+      maxOrdersPerSlot: 6,
     },
     {
       userId: seller3.id,
@@ -141,6 +151,8 @@ export async function runSeed(db: Db): Promise<void> {
       rating: 4.4,
       ratingCount: 41,
       payoutVpaOrBank: 'anindita@upi',
+      offersSelfPickup: true,
+      pickupInstructions: 'Tower C, Flat 501, Aparna Cyberzon',
     },
     {
       userId: seller4.id,
@@ -154,6 +166,11 @@ export async function runSeed(db: Db): Promise<void> {
       rating: 4.7,
       ratingCount: 76,
       payoutVpaOrBank: 'kavita@upi',
+      offersSelfPickup: true,
+      offersSellerDelivery: true,
+      sellerDeliveryFeeInPaise: 2500,
+      sellerDeliveryRadiusKm: 3,
+      pickupInstructions: 'My Home Avatar, Tower 4, Flat 1102, Narsingi',
     },
     {
       userId: seller5.id,
@@ -165,6 +182,8 @@ export async function runSeed(db: Db): Promise<void> {
       rating: 4.3,
       ratingCount: 27,
       payoutVpaOrBank: 'ritu@upi',
+      offersSelfPickup: true,
+      pickupInstructions: 'My Home Avatar, Tower 6, Flat 704, Narsingi',
     },
     {
       userId: seller6.id,
@@ -176,6 +195,7 @@ export async function runSeed(db: Db): Promise<void> {
       rating: 0,
       ratingCount: 0,
       payoutVpaOrBank: 'harpreet@upi',
+      offersSelfPickup: true,
     },
   ]);
 

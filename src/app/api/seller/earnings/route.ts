@@ -15,7 +15,9 @@ export const GET = api(async () => {
     .where(eq(orders.sellerId, session.uid))
     .orderBy(desc(orders.createdAt));
 
-  const completed = rows.filter((o) => o.status === 'delivered');
+  // 'delivered' (seller/platform delivery) and 'picked_up' (self-pickup) are
+  // both terminal-success states — see DECISIONS.md #37+.
+  const completed = rows.filter((o) => o.status === 'delivered' || o.status === 'picked_up');
   const gross = completed.reduce((s, o) => s + o.subtotalInPaise, 0);
   const commission = completed.reduce((s, o) => s + o.commissionInPaise, 0);
   const deliveryCollected = completed.reduce((s, o) => s + o.deliveryFeeInPaise, 0);

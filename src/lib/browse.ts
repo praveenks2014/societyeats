@@ -11,6 +11,7 @@ import {
 } from '@/lib/db/schema';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { haversineKm, type GeoPoint } from '@/lib/geo';
+import { currentSlot, isSlotSoldOut, slotOrderCount } from '@/lib/slots';
 
 const EARTH_RADIUS_KM = 6371; // matches src/lib/geo.ts's haversineKm exactly
 
@@ -49,6 +50,8 @@ export type ListingCard = {
   fssaiNumber: string | null;
   societyName: string | null;
   distanceKm: number | null;
+  /** DECISIONS.md #37+: this listing's seller has hit maxOrdersPerSlot for the current meal slot. */
+  slotSoldOut: boolean;
 };
 
 /** Seller rows eligible to appear to buyers, with FSSAI-pending auto-pause applied. */
@@ -135,6 +138,20 @@ export async function browseListings(opts: {
   const cards: ListingCard[] = [];
   const cuisines = new Set<string>();
 
+  // Slot-capacity cache: one order-count query per seller per browse call,
+  // not per listing (a seller may list several dishes for the same slot).
+  const slot = currentSlot();
+  const slotFullBySeller = new Map<number, boolean>();
+  async function sellerSlotFull(sellerId: number, maxOrdersPerSlot: number): Promise<boolean> {
+    if (!slot) return false;
+    const cached = slotFullBySeller.get(sellerId);
+    if (cached !== undefined) return cached;
+    const count = await slotOrderCount(sellerId, slot);
+    const full = count >= maxOrdersPerSlot;
+    slotFullBySeller.set(sellerId, full);
+    return full;
+  }
+
   for (const { listing, profile, society, distanceKm } of rows) {
     cuisines.add(listing.cuisine);
     if (opts.veg && !listing.isVeg) continue;
@@ -147,6 +164,12 @@ export async function browseListings(opts: {
         .includes(q)
     )
       continue;
+
+    const listingSlots = listing.slotsJson?.slots;
+    const slotSoldOut =
+      slot && (!listingSlots || listingSlots.length === 0 || listingSlots.includes(slot))
+        ? await sellerSlotFull(listing.sellerId, profile.maxOrdersPerSlot)
+        : false;
 
     cards.push({
       id: listing.id,
@@ -167,6 +190,7 @@ export async function browseListings(opts: {
       fssaiNumber: profile.fssaiNumber,
       societyName: society?.name ?? null,
       distanceKm: distanceKm != null ? Number(distanceKm) : null,
+      slotSoldOut,
     });
   }
 
@@ -222,5 +246,11 @@ export async function getListingDetail(id: number, loc?: GeoPoint | null) {
     )
     .limit(6);
 
-  return { ...row, distanceKm, sellerReviews, otherDishes };
+  const slotSoldOut = await isSlotSoldOut(
+    row.listing.sellerId,
+    row.profile.maxOrdersPerSlot,
+    row.listing.slotsJson?.slots,
+  );
+
+  return { ...row, distanceKm, sellerReviews, otherDishes, slotSoldOut };
 }

@@ -9,15 +9,28 @@ import { useCart, useLocation, useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 import { formatDistance } from '@/lib/geo';
 
-type QuoteResp =
-  | { withinRange: false; distanceKm: number; radiusKm: number }
-  | {
-      withinRange: true;
-      distanceKm: number;
-      deliveryFeeInPaise: number;
-      etaMins: number;
-      platformFeePaise: number;
-    };
+type FulfillmentType = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
+
+type QuoteResp = {
+  sellerId: number;
+  kitchenName: string;
+  pickupInstructions: string | null;
+  offersSelfPickup: boolean;
+  offersSellerDelivery: boolean;
+  sellerDeliveryFeeInPaise: number;
+  sellerDeliveryRadiusKm: number;
+  platformDeliveryEnabled: boolean;
+  platformDeliveryMinOrderPaise: number;
+  buyerPlatformFeePaise: number;
+  commissionHomePct: number;
+  gstPct: number;
+  radiusKm: number;
+  distanceKm: number | null;
+  withinRange: boolean | null;
+  sellerDeliveryAvailable: boolean | null;
+  platformDeliveryFeeInPaise: number | null;
+  platformDeliveryEtaMins: number | null;
+};
 
 declare global {
   interface Window {
@@ -35,6 +48,7 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
   const [flat, setFlat] = useState('');
   const [addressText, setAddressText] = useState('');
   const [quote, setQuote] = useState<QuoteResp | null>(null);
+  const [fulfillment, setFulfillment] = useState<FulfillmentType>('self_pickup');
   const [placing, setPlacing] = useState(false);
   const [mockSheet, setMockSheet] = useState<{ orderId: number; amount: number } | null>(null);
 
@@ -42,14 +56,44 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
     if (loc && !addressText) setAddressText(loc.label);
   }, [loc, addressText]);
 
+  // reset the choice whenever the checkout target changes
   useEffect(() => {
-    if (!isDelivery || !vendor || !loc) return;
+    setFulfillment('self_pickup');
+  }, [vendor?.id]);
+
+  useEffect(() => {
+    if (!isDelivery || !vendor) return;
     setQuote(null);
-    fetch(`/api/quote?sellerId=${vendor.id}&lat=${loc.lat}&lng=${loc.lng}`)
+    const params = new URLSearchParams({ sellerId: String(vendor.id) });
+    if (loc) {
+      params.set('lat', String(loc.lat));
+      params.set('lng', String(loc.lng));
+    }
+    fetch(`/api/quote?${params}`)
       .then((r) => r.json())
       .then(setQuote)
       .catch(() => {});
   }, [isDelivery, vendor, loc]);
+
+  // keep the selection valid as the offer loads/changes — only force a
+  // switch when the current pick isn't OFFERED at all, never just because
+  // it's temporarily out of range (that's shown inline, not auto-corrected)
+  useEffect(() => {
+    if (!quote) return;
+    const isOffered = (t: FulfillmentType) =>
+      t === 'self_pickup'
+        ? quote.offersSelfPickup
+        : t === 'seller_delivery'
+          ? quote.offersSellerDelivery
+          : quote.platformDeliveryEnabled;
+    setFulfillment((prev) => {
+      if (isOffered(prev)) return prev;
+      if (quote.offersSelfPickup) return 'self_pickup';
+      if (quote.offersSellerDelivery) return 'seller_delivery';
+      if (quote.platformDeliveryEnabled) return 'platform_delivery';
+      return prev;
+    });
+  }, [quote]);
 
   if (items.length === 0 && !mockSheet) {
     return (
@@ -65,14 +109,24 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
     );
   }
 
-  const deliveryFee = quote && quote.withinRange ? quote.deliveryFeeInPaise : 0;
-  const platformFee = quote && quote.withinRange ? quote.platformFeePaise : 0;
-  const total = subtotalPaise + (isDelivery ? deliveryFee + platformFee : 0);
-  const outOfRange = isDelivery && quote != null && !quote.withinRange;
+  const needsAddress = isDelivery && fulfillment !== 'self_pickup';
+  const platformEligibleBySubtotal = quote ? subtotalPaise >= quote.platformDeliveryMinOrderPaise : false;
+  const outOfRange = needsAddress && quote?.withinRange === false;
+
+  const deliveryFee =
+    !isDelivery || fulfillment === 'self_pickup'
+      ? 0
+      : fulfillment === 'seller_delivery'
+        ? (quote?.sellerDeliveryFeeInPaise ?? 0)
+        : (quote?.platformDeliveryFeeInPaise ?? 0);
+  const buyerPlatformFee = quote?.buyerPlatformFeePaise ?? 0;
+  const gstPct = quote?.gstPct ?? 5;
+  const gstInPaise = isDelivery ? Math.round((subtotalPaise * gstPct) / 100) : 0;
+  const total = subtotalPaise + (isDelivery ? deliveryFee + buyerPlatformFee + gstInPaise : 0);
 
   async function placeOrder() {
     if (!vendor) return;
-    if (isDelivery && (!loc || !flat.trim())) {
+    if (needsAddress && (!loc || !flat.trim())) {
       toast(!loc ? 'Set your delivery location first' : 'Enter your flat / house number', 'err');
       if (!loc) openPicker();
       return;
@@ -87,15 +141,20 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
             ? {
                 type: 'home_delivery',
                 sellerId: vendor.id,
+                fulfillmentType: fulfillment,
                 items: items.map((i) => ({ id: i.id, qty: i.qty })),
-                address: {
-                  label: 'Home',
-                  flat: flat.trim(),
-                  societyName: loc!.label,
-                  addressText: addressText.trim() || loc!.label,
-                  lat: loc!.lat,
-                  lng: loc!.lng,
-                },
+                ...(needsAddress
+                  ? {
+                      address: {
+                        label: 'Home',
+                        flat: flat.trim(),
+                        societyName: loc!.label,
+                        addressText: addressText.trim() || loc!.label,
+                        lat: loc!.lat,
+                        lng: loc!.lng,
+                      },
+                    }
+                  : {}),
               }
             : {
                 type: 'mall_pickup',
@@ -191,11 +250,62 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
     <div className="mx-auto max-w-lg pt-6">
       <h1 className="text-2xl font-bold">Checkout</h1>
       <p className="text-sm text-ink-soft">
-        {isDelivery ? `Home delivery from ${vendor?.name}` : `Counter pickup · ${vendor?.name}`}
+        {isDelivery ? `Order from ${vendor?.name}` : `Counter pickup · ${vendor?.name}`}
       </p>
 
       {isDelivery && (
-        <Card className="mt-5 space-y-4 p-4">
+        <Card className="mt-5 space-y-2.5 p-4">
+          <div className="eyebrow">HOW WOULD YOU LIKE THIS?</div>
+          {!quote ? (
+            <Skeleton className="h-16 w-full" />
+          ) : (
+            <div className="space-y-2">
+              {quote.offersSelfPickup && (
+                <FulfillmentOption
+                  active={fulfillment === 'self_pickup'}
+                  onClick={() => setFulfillment('self_pickup')}
+                  title="Self pickup"
+                  sub={quote.pickupInstructions ? `Collect · ${quote.pickupInstructions}` : `Collect from ${quote.kitchenName}`}
+                  feeLabel="₹0"
+                />
+              )}
+              {quote.offersSellerDelivery && (
+                <FulfillmentOption
+                  active={fulfillment === 'seller_delivery'}
+                  onClick={() => setFulfillment('seller_delivery')}
+                  disabled={quote.sellerDeliveryAvailable === false}
+                  title="Seller delivery"
+                  sub={
+                    quote.sellerDeliveryAvailable === false
+                      ? `Outside ${quote.kitchenName}'s ${quote.sellerDeliveryRadiusKm} km delivery range`
+                      : `${quote.kitchenName} delivers it themselves`
+                  }
+                  feeLabel={formatINR(quote.sellerDeliveryFeeInPaise)}
+                />
+              )}
+              {quote.platformDeliveryEnabled && (
+                <FulfillmentOption
+                  active={fulfillment === 'platform_delivery'}
+                  onClick={() => setFulfillment('platform_delivery')}
+                  disabled={quote.withinRange === false || !platformEligibleBySubtotal}
+                  title="Delivery partner"
+                  sub={
+                    quote.withinRange === false
+                      ? `Outside the ${quote.radiusKm} km delivery radius`
+                      : !platformEligibleBySubtotal
+                        ? `Needs an order of ${formatINR(quote.platformDeliveryMinOrderPaise)}+`
+                        : `Porter/Shadowfax/Borzo · ~${quote.platformDeliveryEtaMins ?? 30} min after pickup`
+                  }
+                  feeLabel={quote.platformDeliveryFeeInPaise != null ? formatINR(quote.platformDeliveryFeeInPaise) : '—'}
+                />
+              )}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {needsAddress && (
+        <Card className="mt-4 space-y-4 p-4">
           <div className="flex items-center justify-between">
             <div className="eyebrow">DELIVER TO</div>
             <button onClick={openPicker} className="text-xs font-semibold text-leaf underline">
@@ -213,18 +323,16 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
           <Field label="Address details">
             <Input value={addressText} onChange={(e) => setAddressText(e.target.value)} placeholder="Society, street, landmark" />
           </Field>
-          {quote?.withinRange && (
-            <div className="text-xs text-ink-faint">
-              Kitchen is {formatDistance(quote.distanceKm)} away · rider ETA ~{quote.etaMins} min after pickup
-            </div>
+          {quote?.withinRange && quote.distanceKm != null && (
+            <div className="text-xs text-ink-faint">Kitchen is {formatDistance(quote.distanceKm)} away</div>
           )}
         </Card>
       )}
 
-      {outOfRange && quote && !quote.withinRange && (
+      {outOfRange && quote && (
         <div className="mt-4 rounded-2xl bg-chili-tint px-4 py-3 text-sm text-chili-dark">
-          This kitchen is {formatDistance(quote.distanceKm)} from your location — outside the{' '}
-          {quote.radiusKm} km radius. Change your location or pick a closer kitchen.
+          This kitchen is {quote.distanceKm != null ? formatDistance(quote.distanceKm) : 'too far'} from your
+          location for delivery. Change your location, pick self-pickup, or choose a closer kitchen.
         </div>
       )}
 
@@ -247,14 +355,26 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
           </div>
           {isDelivery && (
             <div className="flex justify-between">
-              <span>Delivery fee {quote?.withinRange ? '' : '(calculating…)'}</span>
-              <span>{quote?.withinRange ? formatINR(deliveryFee) : <Skeleton className="inline-block h-4 w-10" />}</span>
+              <span>
+                {fulfillment === 'self_pickup'
+                  ? 'Delivery (self pickup)'
+                  : fulfillment === 'seller_delivery'
+                    ? 'Delivery fee (kept by the kitchen)'
+                    : 'Delivery fee (via delivery partner)'}
+              </span>
+              <span>{fulfillment === 'self_pickup' ? 'FREE' : quote ? formatINR(deliveryFee) : <Skeleton className="inline-block h-4 w-10" />}</span>
             </div>
           )}
           {isDelivery && (
             <div className="flex justify-between">
               <span>Platform fee</span>
-              <span>{platformFee === 0 ? 'FREE' : formatINR(platformFee)}</span>
+              <span>{buyerPlatformFee === 0 ? 'FREE' : formatINR(buyerPlatformFee)}</span>
+            </div>
+          )}
+          {isDelivery && (
+            <div className="flex justify-between">
+              <span>GST {gstPct}% on food</span>
+              <span>{formatINR(gstInPaise)}</span>
             </div>
           )}
           <div className="flex justify-between border-t border-rice-line pt-2 text-base font-bold">
@@ -263,8 +383,9 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
           </div>
         </div>
         <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
-          Delivery fee goes to the delivery partner at cost. GharSe charges the kitchen a
-          transparent commission — shown on their earnings page, never hidden in your bill.
+          {isDelivery
+            ? "GST is collected by GharSe, the platform of record for home-food orders (deemed supplier under Sec 9(5) CGST) — the kitchen doesn't need its own GST registration for this. A seller-delivery fee goes entirely to the kitchen; a delivery-partner fee is passed through at cost. GharSe charges the kitchen a transparent commission on the food only — shown on their earnings page, never hidden in your bill."
+            : 'GharSe charges the counter a transparent commission — shown on their earnings page, never hidden in your bill.'}
         </p>
       </Card>
 
@@ -289,5 +410,38 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
         }}
       />
     </div>
+  );
+}
+
+function FulfillmentOption({
+  active,
+  disabled,
+  onClick,
+  title,
+  sub,
+  feeLabel,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  title: string;
+  sub: string;
+  feeLabel: string;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`w-full rounded-2xl border-2 p-3 text-left transition-colors ${
+        active ? 'border-leaf bg-leaf/5' : 'border-rice-line'
+      } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-bold">{title}</span>
+        <span className="shrink-0 text-sm font-bold text-leaf">{feeLabel}</span>
+      </div>
+      <div className="mt-0.5 text-xs text-ink-faint">{sub}</div>
+    </button>
   );
 }

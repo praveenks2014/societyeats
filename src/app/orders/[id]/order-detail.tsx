@@ -7,14 +7,18 @@ import { OrderTimeline, STATUS_META, StatusPill } from '@/components/order-statu
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 
+type FulfillmentType = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
+
 type Detail = {
   order: {
     id: number;
     type: 'home_delivery' | 'mall_pickup';
+    fulfillmentType: FulfillmentType;
     status: string;
     subtotalInPaise: number;
     deliveryFeeInPaise: number;
     platformFeeInPaise: number;
+    gstInPaise: number;
     totalInPaise: number;
     otpCode: string | null;
     deliveryAddressJson: { flat: string; addressText: string; lat: number; lng: number } | null;
@@ -125,7 +129,13 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
       {order.otpCode && ['out_for_delivery', 'ready'].includes(order.status) && data.viewerIsBuyer && (
         <Card className="mt-4 p-5">
           <div className="eyebrow">
-            {order.type === 'home_delivery' ? 'SHARE WITH YOUR RIDER' : 'SHOW AT THE COUNTER'}
+            {order.type === 'mall_pickup'
+              ? 'SHOW AT THE COUNTER'
+              : order.fulfillmentType === 'platform_delivery'
+                ? 'SHARE WITH YOUR RIDER'
+                : order.fulfillmentType === 'seller_delivery'
+                  ? 'SHARE WITH THE KITCHEN AT DELIVERY'
+                  : 'SHOW TO THE KITCHEN'}
           </div>
           <div className="mt-2 flex justify-center gap-2">
             {order.otpCode.split('').map((d, i) => (
@@ -137,7 +147,7 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
               </span>
             ))}
           </div>
-          {delivery && order.type === 'home_delivery' && (
+          {delivery && order.fulfillmentType === 'platform_delivery' && (
             <div className="mt-4 flex items-center justify-between rounded-2xl bg-rice px-4 py-3">
               <div>
                 <div className="text-sm font-semibold">🛵 {delivery.riderName ?? 'Assigning rider…'}</div>
@@ -147,12 +157,22 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
               </div>
             </div>
           )}
-          {mockMode && order.status === 'out_for_delivery' && (
+          {mockMode && order.status === 'out_for_delivery' && order.fulfillmentType === 'platform_delivery' && (
             <MockRiderEntry orderId={order.id} onDone={load} />
+          )}
+          {mockMode && order.status === 'out_for_delivery' && order.fulfillmentType === 'seller_delivery' && (
+            <p className="mt-3 text-center text-xs text-ink-faint">
+              (Demo: the kitchen verifies this OTP from their orders page when they hand it over)
+            </p>
           )}
           {mockMode && order.status === 'ready' && order.type === 'mall_pickup' && (
             <p className="mt-3 text-center text-xs text-ink-faint">
               (Demo: counter staff verifies this OTP from the restaurant console)
+            </p>
+          )}
+          {mockMode && order.status === 'ready' && order.type === 'home_delivery' && order.fulfillmentType === 'self_pickup' && (
+            <p className="mt-3 text-center text-xs text-ink-faint">
+              (Demo: the kitchen verifies this OTP from their orders page when you collect)
             </p>
           )}
         </Card>
@@ -209,16 +229,26 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
             </div>
           ))}
           <div className="border-t border-dashed border-rice-line pt-1.5" />
-          {order.deliveryFeeInPaise > 0 && (
-            <div className="flex justify-between">
-              <span>Delivery fee</span>
-              <span>{formatINR(order.deliveryFeeInPaise)}</span>
-            </div>
-          )}
+          <div className="flex justify-between">
+            <span>
+              {order.fulfillmentType === 'self_pickup'
+                ? 'Delivery (self pickup)'
+                : order.fulfillmentType === 'seller_delivery'
+                  ? 'Delivery fee (kept by the kitchen)'
+                  : 'Delivery fee (via delivery partner)'}
+            </span>
+            <span>{order.deliveryFeeInPaise > 0 ? formatINR(order.deliveryFeeInPaise) : 'FREE'}</span>
+          </div>
           {order.platformFeeInPaise > 0 && (
             <div className="flex justify-between">
               <span>Platform fee</span>
               <span>{formatINR(order.platformFeeInPaise)}</span>
+            </div>
+          )}
+          {order.gstInPaise > 0 && (
+            <div className="flex justify-between">
+              <span>GST on food</span>
+              <span>{formatINR(order.gstInPaise)}</span>
             </div>
           )}
           <div className="flex justify-between pt-1 text-base font-bold">

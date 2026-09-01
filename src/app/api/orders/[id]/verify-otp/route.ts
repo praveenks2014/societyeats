@@ -9,10 +9,13 @@ import { rateLimit } from '@/lib/rate-limit';
 export const dynamic = 'force-dynamic';
 
 /**
- * OTP handshake at handover:
- * - home delivery: the rider enters the buyer's OTP (simulated from the mock
- *   tracking screen) → delivered
- * - mall pickup: the counter staff enters the buyer's OTP → picked_up
+ * OTP handshake at handover (DECISIONS.md #37+ generalizes this beyond just
+ * home-delivery vs mall-pickup to every fulfillment type):
+ * - platform_delivery: the rider enters the buyer's OTP (simulated from the
+ *   mock tracking screen) → delivered
+ * - seller_delivery: the seller enters the buyer's OTP at the door → delivered
+ * - self_pickup (home kitchen OR mall counter): the seller/counter staff
+ *   enters the buyer's OTP → picked_up
  */
 export const POST = api<{ params: { id: string } }>(async (req, { params }) => {
   const session = await requireSession();
@@ -26,13 +29,16 @@ export const POST = api<{ params: { id: string } }>(async (req, { params }) => {
   if (!order) throw new ApiError(404, 'Order not found');
   if (order.otpCode !== String(otp).trim()) throw new ApiError(400, 'Wrong OTP — check the 4 digits and try again');
 
-  if (order.type === 'home_delivery') {
+  const isRiderOrSellerDelivered = order.fulfillmentType === 'platform_delivery' || order.fulfillmentType === 'seller_delivery';
+
+  if (isRiderOrSellerDelivered) {
     if (order.status !== 'out_for_delivery') {
       throw new ApiError(409, 'Order is not out for delivery yet');
     }
     await db.update(orders).set({ status: 'delivered', updatedAt: new Date() }).where(eq(orders.id, orderId));
     await db.update(deliveries).set({ status: 'delivered' }).where(eq(deliveries.orderId, orderId));
-    await db.insert(orderEvents).values({ orderId, status: 'delivered', note: 'OTP verified by rider — delivered' });
+    const who = order.fulfillmentType === 'seller_delivery' ? 'by the seller' : 'by rider';
+    await db.insert(orderEvents).values({ orderId, status: 'delivered', note: `OTP verified ${who} — delivered` });
     if (order.sellerId) {
       await notify(order.sellerId, `Order #${orderId} delivered 🎉`, 'Payment will reflect in your earnings.', '/seller/earnings');
     }
@@ -40,9 +46,13 @@ export const POST = api<{ params: { id: string } }>(async (req, { params }) => {
     return ok({ ok: true, status: 'delivered' });
   }
 
+  // self_pickup (home kitchen or mall counter)
   if (order.status !== 'ready') throw new ApiError(409, 'Order is not ready for pickup yet');
   await db.update(orders).set({ status: 'picked_up', updatedAt: new Date() }).where(eq(orders.id, orderId));
-  await db.insert(orderEvents).values({ orderId, status: 'picked_up', note: 'OTP verified at the counter — picked up' });
+  await db.insert(orderEvents).values({ orderId, status: 'picked_up', note: 'OTP verified — picked up' });
+  if (order.sellerId) {
+    await notify(order.sellerId, `Order #${orderId} collected 🎉`, 'Payment will reflect in your earnings.', '/seller/earnings');
+  }
   await notify(order.buyerId, 'Order picked up 🛍️', `Enjoy! Rate your order #${orderId} when you're done.`, `/orders/${orderId}`);
   return ok({ ok: true, status: 'picked_up' });
 });

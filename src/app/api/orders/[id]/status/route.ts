@@ -8,7 +8,7 @@ import { notify } from '@/lib/db/notify';
 
 export const dynamic = 'force-dynamic';
 
-type Action = 'accept' | 'reject' | 'preparing' | 'ready';
+type Action = 'accept' | 'reject' | 'preparing' | 'ready' | 'out_for_delivery';
 
 export const POST = api<{ params: { id: string } }>(async (req, { params }) => {
   const session = await requireSession(['seller', 'restaurant', 'admin']);
@@ -29,6 +29,14 @@ export const POST = api<{ params: { id: string } }>(async (req, { params }) => {
     }
   }
 
+  // out_for_delivery is a manual "I'm on my way" step that only makes sense
+  // when the SELLER is doing the delivering — platform_delivery reaches this
+  // status automatically via the orchestrator's tracking sync, and
+  // self-pickup orders never go through it at all.
+  if (action === 'out_for_delivery' && order.fulfillmentType !== 'seller_delivery') {
+    throw new ApiError(400, "This order's fulfillment type doesn't use a manual out-for-delivery step");
+  }
+
   const transitions: Record<Action, { from: string[]; to: typeof order.status; note: string }> = {
     accept: { from: ['paid'], to: 'accepted', note: 'Order accepted by the kitchen' },
     reject: { from: ['paid'], to: 'refund_pending', note: 'Order rejected — refund initiated' },
@@ -36,8 +44,9 @@ export const POST = api<{ params: { id: string } }>(async (req, { params }) => {
     ready: {
       from: ['preparing', 'accepted'],
       to: 'ready',
-      note: order.type === 'mall_pickup' ? `Ready — collect at Counter ${counterNumber}` : 'Packed and ready for pickup',
+      note: order.type === 'mall_pickup' ? `Ready — collect at Counter ${counterNumber}` : 'Packed and ready',
     },
+    out_for_delivery: { from: ['ready'], to: 'out_for_delivery', note: 'Seller is out for delivery' },
   };
 
   const t = transitions[action];
@@ -57,17 +66,40 @@ export const POST = api<{ params: { id: string } }>(async (req, { params }) => {
     await notify(order.buyerId, `Order #${orderId} accepted ✅`, 'The kitchen has started on your order.', `/orders/${orderId}`);
   }
   if (action === 'ready') {
-    if (order.type === 'home_delivery') {
+    if (order.fulfillmentType === 'platform_delivery') {
       // the signature moment: orchestrated dispatch with failover
       await dispatchDelivery(orderId);
-    } else {
+    } else if (order.type === 'mall_pickup') {
       await notify(
         order.buyerId,
         `Order ready — collect at Counter ${counterNumber} 🔔`,
         `Show your 4-digit OTP at the counter to pick up order #${orderId}.`,
         `/orders/${orderId}`,
       );
+    } else if (order.fulfillmentType === 'self_pickup') {
+      await notify(
+        order.buyerId,
+        `Order ready for pickup 🔔`,
+        `Show your 4-digit OTP to the seller to collect order #${orderId}.`,
+        `/orders/${orderId}`,
+      );
+    } else {
+      // seller_delivery
+      await notify(
+        order.buyerId,
+        `Order ready — on its way soon 🔔`,
+        `The kitchen will deliver order #${orderId} themselves and ask for your 4-digit OTP at the door.`,
+        `/orders/${orderId}`,
+      );
     }
+  }
+  if (action === 'out_for_delivery') {
+    await notify(
+      order.buyerId,
+      `Your order is on the way 🛵`,
+      `The kitchen is out for delivery with order #${orderId} — have your 4-digit OTP ready.`,
+      `/orders/${orderId}`,
+    );
   }
 
   const [updated] = await db.select().from(orders).where(eq(orders.id, orderId));

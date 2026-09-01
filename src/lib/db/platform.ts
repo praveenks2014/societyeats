@@ -9,6 +9,10 @@ export type PlatformSettings = {
   platformFeePaise: number;
   fssaiPendingMaxDays: number;
   radiusKm: number;
+  // Pilot Hardening v2 — fulfillment pivot (DECISIONS.md #37+).
+  platformDeliveryEnabled: boolean;
+  platformDeliveryFeeInPaise: number;
+  platformDeliveryMinOrderPaise: number;
 };
 
 /** Admin-editable settings stored in platform_config, defaults from config.ts. */
@@ -21,12 +25,22 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
     const parsed = v === undefined ? NaN : Number(v);
     return Number.isFinite(parsed) ? parsed : fallback;
   };
+  const bool = (key: string, fallback: boolean) => {
+    const v = map[key];
+    return v === undefined ? fallback : v === 'true';
+  };
   return {
     commissionHomePct: num('commissionHomePct', DEFAULTS.commissionHomePct),
     commissionMallPct: num('commissionMallPct', DEFAULTS.commissionMallPct),
     platformFeePaise: num('platformFeePaise', DEFAULTS.platformFeePaise),
     fssaiPendingMaxDays: num('fssaiPendingMaxDays', DEFAULTS.fssaiPendingMaxDays),
     radiusKm: num('radiusKm', DEFAULTS.radiusKm),
+    platformDeliveryEnabled: bool('platformDeliveryEnabled', DEFAULTS.platformDeliveryEnabled),
+    platformDeliveryFeeInPaise: num('platformDeliveryFeeInPaise', DEFAULTS.platformDeliveryFeeInPaise),
+    platformDeliveryMinOrderPaise: num(
+      'platformDeliveryMinOrderPaise',
+      DEFAULTS.platformDeliveryMinOrderPaise,
+    ),
   };
 }
 
