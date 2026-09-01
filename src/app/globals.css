@@ -49,6 +49,23 @@
   }
 }
 
+/* Per-order invoice print view (src/app/orders/[id]/invoice) — hide chrome,
+   let the invoice card fill the printed page. Tailwind's built-in `print:`
+   variant handles most of this in the component itself; this covers the
+   shared shell (<Header>) that the invoice page can't reach with a class. */
+@media print {
+  header {
+    display: none !important;
+  }
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  @page {
+    margin: 12mm;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

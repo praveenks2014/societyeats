@@ -256,6 +256,14 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
             <span>{formatINR(order.totalInPaise)}</span>
           </div>
         </div>
+        {order.status !== 'placed' && (
+          <Link
+            href={`/orders/${order.id}/invoice`}
+            className="mt-3 block text-center text-sm font-semibold text-leaf underline"
+          >
+            🧾 View invoice
+          </Link>
+        )}
       </Card>
 
       {/* review */}

@@ -18,6 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           { href: '/admin/fssai', label: 'FSSAI queue' },
           { href: '/admin/providers', label: 'Delivery providers' },
           { href: '/admin/orders', label: 'Orders' },
+          { href: '/admin/payouts', label: 'Payouts' },
           { href: '/admin/settings', label: 'Settings' },
         ]}
       />
