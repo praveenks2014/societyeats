@@ -12,7 +12,7 @@ import {
 import { getPlatformSettings } from '@/lib/db/platform';
 import { DEFAULTS } from '@/lib/config';
 import { haversineKm, type GeoPoint } from '@/lib/geo';
-import { neighbourOrderCount } from '@/lib/reputation';
+import { neighbourOrderCount, sellerBadgeTier, sellerCompletedOrderCount } from '@/lib/reputation';
 import { currentSlot, isSlotSoldOut, slotOrderCount } from '@/lib/slots';
 
 const EARTH_RADIUS_KM = 6371; // matches src/lib/geo.ts's haversineKm exactly
@@ -270,6 +270,86 @@ export async function getListingDetail(id: number, loc?: GeoPoint | null) {
     row.listing.slotsJson?.slots,
   );
   const orderedByCount = await neighbourOrderCount(row.listing.sellerId);
+  const completedOrderCount = await sellerCompletedOrderCount(row.listing.sellerId);
 
-  return { ...row, distanceKm, sellerReviews, otherDishes, slotSoldOut, orderedByCount };
+  return {
+    ...row,
+    distanceKm,
+    sellerReviews,
+    otherDishes,
+    slotSoldOut,
+    orderedByCount,
+    completedOrderCount,
+    badgeTier: sellerBadgeTier(completedOrderCount),
+  };
+}
+
+/**
+ * Pilot Hardening v2 — Phase 6 (Society-first launch mechanics, DECISIONS.md
+ * #87+). The public kitchen/seller profile page's data — everything
+ * getListingDetail() already assembles for a single dish's "kitchen card",
+ * but keyed by seller instead of by one dish, plus the order-count badge
+ * tier. Deliberately does NOT gate on isApproved/fssaiStatus the way
+ * browseListings() does — same reasoning as getListingDetail() never
+ * re-checking those either: a direct link should resolve to whatever the
+ * seller's real current state is, with eligibility enforced separately at
+ * browse-time and order-time, not by 404-ing a shared link.
+ */
+export async function getKitchenProfile(sellerId: number) {
+  const db = await getDb();
+  const [row] = await db
+    .select({ profile: sellerProfiles, seller: users, society: societies })
+    .from(sellerProfiles)
+    .innerJoin(users, eq(sellerProfiles.userId, users.id))
+    .leftJoin(societies, eq(users.societyId, societies.id))
+    .where(eq(sellerProfiles.userId, sellerId));
+  if (!row) return null;
+
+  const activeListings = await db
+    .select()
+    .from(listings)
+    .where(
+      and(eq(listings.sellerId, sellerId), eq(listings.isActive, true), gt(listings.availableQty, 0)),
+    )
+    .orderBy(desc(listings.id));
+
+  const sellerReviews = await db
+    .select({ review: reviews, buyer: users })
+    .from(reviews)
+    .innerJoin(orders, eq(reviews.orderId, orders.id))
+    .innerJoin(users, eq(reviews.buyerId, users.id))
+    .where(eq(orders.sellerId, sellerId))
+    .orderBy(desc(reviews.createdAt))
+    .limit(10);
+
+  const [orderedByCount, completedOrderCount, settings] = await Promise.all([
+    neighbourOrderCount(sellerId),
+    sellerCompletedOrderCount(sellerId),
+    getPlatformSettings(),
+  ]);
+
+  return {
+    ...row,
+    activeListings,
+    sellerReviews,
+    orderedByCount,
+    completedOrderCount,
+    badgeTier: sellerBadgeTier(completedOrderCount),
+    isFeatured: settings.featuredSellerId === String(sellerId),
+  };
+}
+
+/**
+ * "Neighbour's kitchen of the week" — admin-pickable via
+ * platform_config.featuredSellerId (PATCH /api/admin/sellers, action
+ * 'feature'). Returns null when unset, the seller no longer exists, or the
+ * seller has no dishes currently on sale (nothing to actually showcase).
+ */
+export async function getFeaturedKitchen() {
+  const settings = await getPlatformSettings();
+  const sellerId = Number(settings.featuredSellerId);
+  if (!settings.featuredSellerId || !Number.isFinite(sellerId)) return null;
+  const profile = await getKitchenProfile(sellerId);
+  if (!profile || profile.activeListings.length === 0) return null;
+  return profile;
 }

@@ -104,6 +104,13 @@ export function Header({ session }: { session: Session | null }) {
                         Browse food
                       </Link>
                     )}
+                    <Link
+                      href="/refer"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2.5 text-sm hover:bg-rice"
+                    >
+                      🎁 Invite neighbours
+                    </Link>
                     <button
                       onClick={logout}
                       className="block w-full px-4 py-2.5 text-left text-sm text-chili hover:bg-rice"

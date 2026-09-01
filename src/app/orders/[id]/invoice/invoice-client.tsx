@@ -23,6 +23,7 @@ type Invoice = {
     gstInPaise: number;
     cgstInPaise: number;
     sgstInPaise: number;
+    referralCreditAppliedInPaise: number;
     totalInPaise: number;
   };
   items: { title: string; qty: number; unitPriceInPaise: number; amountInPaise: number }[];
@@ -179,6 +180,12 @@ export function InvoiceView({ orderId }: { orderId: number }) {
                 <span>{formatINR(order.sgstInPaise)}</span>
               </div>
             </>
+          )}
+          {order.referralCreditAppliedInPaise > 0 && (
+            <div className="flex justify-between">
+              <span className="text-ink-soft">Referral credit applied</span>
+              <span>−{formatINR(order.referralCreditAppliedInPaise)}</span>
+            </div>
           )}
           <div className="flex justify-between border-t border-rice-line pt-1.5 text-base font-bold">
             <span>Total</span>

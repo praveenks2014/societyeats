@@ -7,9 +7,11 @@ import { useCart, useToast } from '@/components/providers';
 import { FoodImage } from '@/components/food-image';
 import { CartBar } from '@/components/cart-bar';
 import { DishCard } from '@/components/dish-card';
+import { ShareButton } from '@/components/share-button';
 import { useLocation } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 import { formatDistance, haversineKm, type GeoPoint } from '@/lib/geo';
+import { BADGE_TIER_LABEL } from '@/lib/reputation-labels';
 
 type Props = {
   listing: {
@@ -41,6 +43,8 @@ type Props = {
     cookingSinceYear: number | null;
     cuisines: string[];
     orderedByCount: number;
+    /** DECISIONS.md #87+: highest completed-order badge tier this kitchen has hit, if any. */
+    badgeTier: number | null;
   };
   sellerPoint: GeoPoint | null;
   radiusKm: number;
@@ -105,7 +109,9 @@ export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, ot
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="eyebrow">HOME KITCHEN</div>
-            <div className="mt-0.5 font-display text-lg font-bold">{seller.kitchenName}</div>
+            <Link href={`/kitchen/${seller.id}`} className="mt-0.5 block font-display text-lg font-bold hover:underline">
+              {seller.kitchenName}
+            </Link>
             <div className="mt-0.5 text-xs text-ink-faint">
               {seller.societyName}
               {seller.vegOnly && ' · Pure veg kitchen'}
@@ -141,6 +147,18 @@ export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, ot
           {seller.orderedByCount > 0 && (
             <Badge tone="neutral">Ordered by {seller.orderedByCount} neighbours</Badge>
           )}
+          {seller.badgeTier && (
+            <Badge tone="green">{BADGE_TIER_LABEL[seller.badgeTier] ?? `🏅 ${seller.badgeTier}+ orders`}</Badge>
+          )}
+        </div>
+        <div className="mt-3 flex items-center gap-3">
+          <Link href={`/kitchen/${seller.id}`} className="text-sm font-semibold text-leaf underline">
+            View kitchen profile →
+          </Link>
+          <ShareButton
+            text={`${listing.title} from ${seller.kitchenName} on GharSe 🍲`}
+            className="ml-auto"
+          />
         </div>
       </Card>
 

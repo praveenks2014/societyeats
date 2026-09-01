@@ -15,6 +15,9 @@ type SellerRow = {
   fssaiNumber: string | null;
   rating: number;
   ratingCount: number;
+  completedOrderCount: number;
+  badgeTier: number | null;
+  isFeatured: boolean;
 };
 
 export default function AdminSellers() {
@@ -43,6 +46,20 @@ export default function AdminSellers() {
     load();
   }
 
+  async function toggleFeatured(userId: number, currentlyFeatured: boolean) {
+    const res = await fetch('/api/admin/sellers', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, action: currentlyFeatured ? 'unfeature' : 'feature' }),
+    });
+    if (!res.ok) {
+      toast('Could not update', 'err');
+      return;
+    }
+    toast(currentlyFeatured ? 'Removed from kitchen of the week' : "Set as neighbour's kitchen of the week 🌟");
+    load();
+  }
+
   if (!rows) return <Skeleton className="h-64 w-full" />;
 
   return (
@@ -62,15 +79,26 @@ export default function AdminSellers() {
                 {s.fssaiStatus === 'pending_application' && <Badge tone="amber">FSSAI Pending</Badge>}
                 {s.fssaiStatus === 'unverified' && <Badge tone="red">No FSSAI</Badge>}
                 {s.isApproved ? <Badge tone="green">Approved</Badge> : <Badge tone="neutral">Awaiting approval</Badge>}
+                {s.badgeTier && <Badge tone="neutral">🏅 {s.badgeTier}+ orders ({s.completedOrderCount})</Badge>}
+                {s.isFeatured && <Badge tone="amber">🌟 Kitchen of the week</Badge>}
               </div>
             </div>
-            <Button
-              size="sm"
-              variant={s.isApproved ? 'ghost' : 'primary'}
-              onClick={() => setApproved(s.userId, !s.isApproved)}
-            >
-              {s.isApproved ? 'Suspend' : 'Approve'}
-            </Button>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                size="sm"
+                variant={s.isFeatured ? 'ghost' : 'secondary'}
+                onClick={() => toggleFeatured(s.userId, s.isFeatured)}
+              >
+                {s.isFeatured ? 'Unfeature' : '⭐ Feature'}
+              </Button>
+              <Button
+                size="sm"
+                variant={s.isApproved ? 'ghost' : 'primary'}
+                onClick={() => setApproved(s.userId, !s.isApproved)}
+              >
+                {s.isApproved ? 'Suspend' : 'Approve'}
+              </Button>
+            </div>
           </Card>
         ))}
       </div>

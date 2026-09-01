@@ -43,6 +43,13 @@
       "when": 1788257752295,
       "tag": "0005_flowery_silver_samurai",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788260047260,
+      "tag": "0006_premium_green_goblin",
+      "breakpoints": true
     }
   ]
 }

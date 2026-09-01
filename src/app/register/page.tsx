@@ -12,11 +12,16 @@ function RegisterForm() {
   const toast = useToast();
   const [role, setRole] = useState<'buyer' | 'seller'>(params.get('as') === 'seller' ? 'seller' : 'buyer');
   const [societies, setSocieties] = useState<{ id: number; name: string }[]>([]);
+  // Pilot Hardening v2 — Phase 6 (DECISIONS.md #87+): pick from the pilot's
+  // live society/societies, or switch to an invite code for a not-yet-public one.
+  const [societyMode, setSocietyMode] = useState<'select' | 'code'>('select');
+  const referredByCode = params.get('ref') ?? '';
   const [form, setForm] = useState({
     name: '',
     phone: '',
     password: '',
     societyId: '',
+    inviteCode: '',
     kitchenName: '',
     bio: '',
     vegOnly: false,
@@ -24,7 +29,7 @@ function RegisterForm() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetch('/api/societies')
+    fetch('/api/societies?live=1')
       .then((r) => r.json())
       .then((d) => setSocieties(d.societies))
       .catch(() => {});
@@ -40,6 +45,8 @@ function RegisterForm() {
         ...form,
         role,
         societyId: form.societyId ? Number(form.societyId) : undefined,
+        inviteCode: societyMode === 'code' ? form.inviteCode.trim() : undefined,
+        referredByCode: referredByCode || undefined,
       }),
     });
     const data = await res.json();
@@ -95,15 +102,44 @@ function RegisterForm() {
             required
           />
         </Field>
-        <Field label="Your society">
-          <Select value={form.societyId} onChange={(e) => set('societyId', e.target.value)}>
-            <option value="">Select society (optional)</option>
-            {societies.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
+        {referredByCode && (
+          <p className="rounded-xl bg-leaf-tint px-3 py-2 text-xs font-medium text-leaf">
+            👋 You were invited by a neighbour — welcome to GharSe!
+          </p>
+        )}
+
+        <Field
+          label="Your society"
+          hint={
+            societyMode === 'select'
+              ? 'GharSe is live in one society right now — more coming soon.'
+              : 'Got a code from your society WhatsApp group? Enter it here.'
+          }
+        >
+          {societyMode === 'select' ? (
+            <Select value={form.societyId} onChange={(e) => set('societyId', e.target.value)} required>
+              <option value="">Select your society</option>
+              {societies.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <Input
+              value={form.inviteCode}
+              onChange={(e) => set('inviteCode', e.target.value.toUpperCase())}
+              placeholder="e.g. CYBERZON"
+              required
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => setSocietyMode((m) => (m === 'select' ? 'code' : 'select'))}
+            className="mt-1.5 text-xs font-semibold text-leaf underline"
+          >
+            {societyMode === 'select' ? 'Have an invite code instead?' : '← Choose from the list instead'}
+          </button>
         </Field>
 
         {role === 'seller' && (

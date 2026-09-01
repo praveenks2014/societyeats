@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { eq } from 'drizzle-orm';
 import type { Db } from './index';
 import {
   complaints,
@@ -13,6 +14,7 @@ import {
   payments,
   platformConfig,
   providerHealth,
+  referralCredits,
   restaurantItems,
   restaurants,
   reviews,
@@ -21,6 +23,13 @@ import {
   subscriptions,
   users,
 } from './schema';
+
+// Mirrors src/lib/referrals.ts's referralCodeFor() exactly — duplicated as a
+// trivial pure one-liner rather than imported, so this seed module (which
+// db/index.ts dynamically imports from *inside* getDb()'s own init path)
+// never has to load that file's getDb()/getPlatformSettings() imports —
+// avoids any risk of a module-init cycle through db/index.ts.
+const referralCode = (userId: number) => `GS${userId.toString(36).toUpperCase()}`;
 
 /**
  * Hyderabad demo universe. Demo password for every account: demo1234
@@ -42,6 +51,13 @@ export async function runSeed(db: Db): Promise<void> {
   const hash = bcrypt.hashSync('demo1234', 10);
 
   // ---- societies (~8.9 km apart) ----
+  // Pilot Hardening v2 — Phase 6 (Society-first launch mechanics,
+  // DECISIONS.md #87+): the pilot is one live, publicly-joinable society
+  // (Aparna Cyberzon) — new signups pick it from the register form's
+  // dropdown. My Home Avatar demonstrates the invite-code path: not yet
+  // public (isLive: false), but still onboardable ahead of general
+  // availability via a code shared directly (e.g. a phased building-by-
+  // building rollout), so both signup paths have a real seeded case.
   const [cyberzon, avatar] = await db
     .insert(societies)
     .values([
@@ -51,6 +67,8 @@ export async function runSeed(db: Db): Promise<void> {
         lat: 17.465,
         lng: 78.31,
         addressText: 'Aparna Cyberzon, Nallagandla, Hyderabad 500019',
+        inviteCode: 'CYBERZON',
+        isLive: true,
       },
       {
         name: 'My Home Avatar',
@@ -58,6 +76,8 @@ export async function runSeed(db: Db): Promise<void> {
         lat: 17.396,
         lng: 78.352,
         addressText: 'My Home Avatar, Narsingi, Hyderabad 500075',
+        inviteCode: 'AVATAR-EARLY',
+        isLive: false,
       },
     ])
     .returning();
@@ -102,6 +122,18 @@ export async function runSeed(db: Db): Promise<void> {
       mkUser('9999999912', 'Aditya Rao', 'buyer', avatar.id, 17.3961, 78.3521),
     ])
     .returning();
+
+  // Every account gets a referral code (Pilot Hardening v2 — Phase 6,
+  // DECISIONS.md #87+) — set in a follow-up UPDATE since it's derived from
+  // the now-known id, exactly matching POST /api/auth/register's own
+  // insert-then-update sequence. buyer2 is seeded as already referred by
+  // buyer (with a pre-granted credit below) so /refer has a real demo case
+  // out of the box.
+  const allUsers = [buyer, seller1, restMgr1, admin, seller2, seller3, seller4, seller5, seller6, restMgr2, restMgr3, buyer2];
+  for (const u of allUsers) {
+    await db.update(users).set({ referralCode: referralCode(u.id) }).where(eq(users.id, u.id));
+  }
+  await db.update(users).set({ referredByUserId: buyer.id }).where(eq(users.id, buyer2.id));
 
   // ---- seller profiles ----
   const in2027 = '2027-06-30';
@@ -396,6 +428,13 @@ export async function runSeed(db: Db): Promise<void> {
     // platformFssaiCentralLicenseNo deliberately left unseeded (empty) — the
     // admin "live orders blocked" banner should be visible out of the box
     // until a real Central License is entered (DECISIONS.md #62+).
+    { key: 'referralCreditPaise', value: '3000' },
+    { key: 'referralCreditCapPerUser', value: '5' },
+    // "Neighbour's kitchen of the week" (DECISIONS.md #87+) — pre-featuring
+    // Ammama's Biryani Ghar so the home page's featured slot has a real
+    // out-of-the-box demo case rather than only being reachable by an admin
+    // action taken after seeding.
+    { key: 'featuredSellerId', value: String(seller1.id) },
   ]);
 
   // ---- historical orders ----
@@ -625,7 +664,7 @@ export async function runSeed(db: Db): Promise<void> {
   });
 
   // 4. preparing keto order
-  await seedOrder({
+  const o4 = await seedOrder({
     buyerId: buyer2.id,
     type: 'home_delivery',
     sellerId: seller5.id,
@@ -689,6 +728,45 @@ export async function runSeed(db: Db): Promise<void> {
     ],
   });
 
+  // 7-15. nine more small delivered orders from Ammama's Biryani Ghar, purely
+  // so the seller-recognition badge (10 / 50 / 100 completed orders —
+  // DECISIONS.md #87+) has a real out-of-the-box demo case: order #1 above
+  // is this kitchen's only "hand-authored" order, which alone wouldn't cross
+  // the lowest tier. Minimal events (no delivery/review rows) since only
+  // orders.status matters for the badge count.
+  for (let i = 0; i < 9; i++) {
+    await seedOrder({
+      buyerId: i % 2 === 0 ? buyer.id : buyer2.id,
+      type: 'home_delivery',
+      sellerId: seller1.id,
+      status: 'delivered',
+      items: [{ listingId: l(2).id, title: l(2).title, qty: 1, unitPaise: l(2).priceInPaise }],
+      deliveryFee: 3000,
+      createdDaysAgo: 10 + i,
+      paid: true,
+      commissionPct: 12,
+      otp: String(3001 + i),
+      events: [
+        { status: 'placed', minutesAfter: 0 },
+        { status: 'delivered', note: 'OTP verified by rider', minutesAfter: 45 },
+      ],
+    });
+  }
+
+  // Pilot Hardening v2 — Phase 6 (Society-first launch mechanics,
+  // DECISIONS.md #87+): buyer2 was referred by buyer (referredByUserId set
+  // above) — pre-granting buyer an available ₹30 credit here so /refer and
+  // checkout's "apply credit" toggle both have a real demo case out of the
+  // box, without needing to walk a referred account through a full delivered
+  // order first. `referredOrderId` points at buyer2's real seeded order o4.
+  await db.insert(referralCredits).values({
+    buyerId: buyer.id,
+    referredUserId: buyer2.id,
+    referredOrderId: o4.id,
+    amountInPaise: 3000,
+    status: 'available',
+  });
+
   // welcome notification for the demo buyer
   await db.insert(notifications).values({
     userId: buyer.id,
@@ -697,5 +775,5 @@ export async function runSeed(db: Db): Promise<void> {
     href: '/orders',
   });
 
-  console.log('Seed complete: 2 societies, 6 kitchens, 20 dishes, 1 mall, 6 orders, 1 demo complaint.');
+  console.log('Seed complete: 2 societies, 6 kitchens, 20 dishes, 1 mall, 15 orders, 1 demo complaint, 1 referral credit.');
 }

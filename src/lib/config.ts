@@ -46,6 +46,11 @@ export const DEFAULTS = {
   minKitchenPhotosRequired: 3, // onboarding: kitchen photos required before the "complete your profile" nudge clears
   complaintWindowHours: 24, // buyer can raise a complaint within this many hours of delivery/pickup
   hygieneAutoPauseThreshold: 3, // this many UPHELD 'hygiene' complaints auto-pauses the seller
+  // Pilot Hardening v2 — Phase 6 (Society-first launch mechanics, DECISIONS.md #87+).
+  referralCreditPaise: 3000, // ₹30 credit to the referrer once a referred neighbour completes their first order
+  referralCreditCapPerUser: 5, // lifetime cap on how many credits one referrer can earn
+  featuredSellerId: '', // platform_config only — empty until an admin picks a "kitchen of the week"
+  sellerOrderBadgeTiers: [10, 50, 100], // completed-order milestones a seller's profile badges at
 };
 
 export function isMockMode(): boolean {

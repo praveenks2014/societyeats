@@ -23,6 +23,23 @@ import { formatINR, pctOf } from '@/lib/money';
 import { createPaymentForOrder } from '@/lib/payments';
 import { rateLimit } from '@/lib/rate-limit';
 import { currentSlot, isSlotSoldOut } from '@/lib/slots';
+import { applyCredit, availableCreditPaise } from '@/lib/referrals';
+
+/**
+ * Pilot Hardening v2 — Phase 6 (Society-first launch mechanics, DECISIONS.md
+ * #87+): caps how much referral credit a single order can absorb, so the
+ * payable amount never hits ₹0 (a real payment gateway needs a positive
+ * amount, and mock mode should mirror that constraint rather than special-case it).
+ */
+const MIN_PAYABLE_PAISE = 100;
+
+/** Never trusts a client-supplied amount — recomputes from the buyer's real balance. */
+async function creditToApply(buyerId: number, useCredit: boolean | undefined, totalBeforeCredit: number): Promise<number> {
+  if (!useCredit) return 0;
+  const available = await availableCreditPaise(buyerId);
+  const maxApplicable = Math.max(0, totalBeforeCredit - MIN_PAYABLE_PAISE);
+  return Math.min(available, maxApplicable);
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +53,8 @@ type CreateBody = {
   items: { id: number; qty: number }[];
   address?: DeliveryAddress;
   fulfillmentType?: FulfillmentType;
+  /** Pilot Hardening v2 — Phase 6 (DECISIONS.md #87+): apply available referral credit, if any. */
+  useCredit?: boolean;
 };
 
 export const POST = api(async (req) => {
@@ -171,7 +190,9 @@ export const POST = api(async (req) => {
     // GST 5% on home-food orders: GharSe is the deemed supplier under Sec
     // 9(5) CGST, so this is collected and remitted by the platform, not the cook.
     const gstInPaise = pctOf(subtotal, DEFAULTS.gstPct);
-    const total = subtotal + deliveryFeeInPaise + settings.platformFeePaise + gstInPaise;
+    const totalBeforeCredit = subtotal + deliveryFeeInPaise + settings.platformFeePaise + gstInPaise;
+    const creditApplied = await creditToApply(session.uid, body.useCredit, totalBeforeCredit);
+    const total = totalBeforeCredit - creditApplied;
 
     const [order] = await db
       .insert(orders)
@@ -186,6 +207,7 @@ export const POST = api(async (req) => {
         platformFeeInPaise: settings.platformFeePaise,
         commissionInPaise: commission,
         gstInPaise,
+        referralCreditAppliedInPaise: creditApplied,
         totalInPaise: total,
         deliveryAddressJson: addr,
         otpCode: otp4(),
@@ -193,6 +215,7 @@ export const POST = api(async (req) => {
       .returning();
     await db.insert(orderItems).values(itemRows.map((r) => ({ ...r, orderId: order.id })));
     await db.insert(orderEvents).values({ orderId: order.id, status: 'placed', note: 'Order placed' });
+    if (creditApplied > 0) await applyCredit(session.uid, order.id, creditApplied);
 
     const payment = await createPaymentForOrder(order.id, total);
     return ok({ orderId: order.id, totalInPaise: total, payment });
@@ -230,7 +253,9 @@ export const POST = api(async (req) => {
   }
 
   const commission = pctOf(subtotal, settings.commissionMallPct);
-  const total = subtotal + settings.platformFeePaise;
+  const totalBeforeCredit = subtotal + settings.platformFeePaise;
+  const creditApplied = await creditToApply(session.uid, body.useCredit, totalBeforeCredit);
+  const total = totalBeforeCredit - creditApplied;
   const [order] = await db
     .insert(orders)
     .values({
@@ -242,12 +267,14 @@ export const POST = api(async (req) => {
       deliveryFeeInPaise: 0,
       platformFeeInPaise: settings.platformFeePaise,
       commissionInPaise: commission,
+      referralCreditAppliedInPaise: creditApplied,
       totalInPaise: total,
       otpCode: otp4(),
     })
     .returning();
   await db.insert(orderItems).values(itemRows.map((r) => ({ ...r, orderId: order.id })));
   await db.insert(orderEvents).values({ orderId: order.id, status: 'placed', note: 'Order placed' });
+  if (creditApplied > 0) await applyCredit(session.uid, order.id, creditApplied);
 
   const payment = await createPaymentForOrder(order.id, total);
   return ok({ orderId: order.id, totalInPaise: total, payment });

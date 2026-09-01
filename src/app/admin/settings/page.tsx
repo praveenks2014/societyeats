@@ -15,6 +15,9 @@ type Settings = {
   platformDeliveryMinOrderPaise: number;
   fssaiSponsorshipCapPerCohort: number;
   platformFssaiCentralLicenseNo: string;
+  referralCreditPaise: number;
+  referralCreditCapPerUser: number;
+  featuredSellerId: string;
 };
 
 const FIELDS: { key: keyof Settings; label: string; hint: string }[] = [
@@ -27,6 +30,16 @@ const FIELDS: { key: keyof Settings; label: string; hint: string }[] = [
     key: 'fssaiSponsorshipCapPerCohort',
     label: 'FSSAI sponsorship cap (sellers)',
     hint: 'Founder default: sponsor facilitation for the first 10 sellers in the pilot cohort.',
+  },
+  {
+    key: 'referralCreditPaise',
+    label: 'Referral credit (paise)',
+    hint: '3000 = ₹30. Credited to the referrer once a referred neighbour completes their first order.',
+  },
+  {
+    key: 'referralCreditCapPerUser',
+    label: 'Referral credit cap (per user)',
+    hint: 'Lifetime cap on how many credits one referrer can earn. Default 5.',
   },
 ];
 

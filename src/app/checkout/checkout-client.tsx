@@ -51,6 +51,18 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
   const [fulfillment, setFulfillment] = useState<FulfillmentType>('self_pickup');
   const [placing, setPlacing] = useState(false);
   const [mockSheet, setMockSheet] = useState<{ orderId: number; amount: number } | null>(null);
+  // Pilot Hardening v2 — Phase 6 (DECISIONS.md #87+): referral credit,
+  // opt-out toggle — default to applying it, matching how most wallet/credit
+  // balances behave elsewhere (Amazon Pay, Swiggy Money).
+  const [availableCreditPaise, setAvailableCreditPaise] = useState(0);
+  const [useCredit, setUseCredit] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/referrals')
+      .then((r) => r.json())
+      .then((d) => setAvailableCreditPaise(d.availablePaise ?? 0))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (loc && !addressText) setAddressText(loc.label);
@@ -122,7 +134,12 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
   const buyerPlatformFee = quote?.buyerPlatformFeePaise ?? 0;
   const gstPct = quote?.gstPct ?? 5;
   const gstInPaise = isDelivery ? Math.round((subtotalPaise * gstPct) / 100) : 0;
-  const total = subtotalPaise + (isDelivery ? deliveryFee + buyerPlatformFee + gstInPaise : 0);
+  const totalBeforeCredit = subtotalPaise + (isDelivery ? deliveryFee + buyerPlatformFee + gstInPaise : 0);
+  // Mirrors the server's own cap (POST /api/orders) so the displayed total
+  // matches what will actually be charged — the server recomputes and
+  // enforces this independently, this is display-only.
+  const creditApplied = useCredit ? Math.min(availableCreditPaise, Math.max(0, totalBeforeCredit - 100)) : 0;
+  const total = totalBeforeCredit - creditApplied;
 
   async function placeOrder() {
     if (!vendor) return;
@@ -143,6 +160,7 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
                 sellerId: vendor.id,
                 fulfillmentType: fulfillment,
                 items: items.map((i) => ({ id: i.id, qty: i.qty })),
+                useCredit,
                 ...(needsAddress
                   ? {
                       address: {
@@ -160,6 +178,7 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
                 type: 'mall_pickup',
                 restaurantId: vendor.id,
                 items: items.map((i) => ({ id: i.id, qty: i.qty })),
+                useCredit,
               },
         ),
       });
@@ -377,11 +396,28 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
               <span>{formatINR(gstInPaise)}</span>
             </div>
           )}
+          {creditApplied > 0 && (
+            <div className="flex justify-between text-leaf">
+              <span>Referral credit applied</span>
+              <span>−{formatINR(creditApplied)}</span>
+            </div>
+          )}
           <div className="flex justify-between border-t border-rice-line pt-2 text-base font-bold">
             <span>To pay</span>
             <span>{formatINR(total)}</span>
           </div>
         </div>
+        {availableCreditPaise > 0 && (
+          <label className="mt-3 flex items-center gap-2 rounded-xl bg-leaf-tint px-3 py-2 text-sm text-leaf">
+            <input
+              type="checkbox"
+              checked={useCredit}
+              onChange={(e) => setUseCredit(e.target.checked)}
+              className="h-4 w-4 accent-leaf"
+            />
+            Apply your {formatINR(availableCreditPaise)} referral credit
+          </label>
+        )}
         <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
           {isDelivery
             ? "GST is collected by GharSe, the platform of record for home-food orders (deemed supplier under Sec 9(5) CGST) — the kitchen doesn't need its own GST registration for this. A seller-delivery fee goes entirely to the kitchen; a delivery-partner fee is passed through at cost. GharSe charges the kitchen a transparent commission on the food only — shown on their earnings page, never hidden in your bill."

@@ -23,6 +23,7 @@ type Detail = {
     gstInPaise: number;
     totalInPaise: number;
     refundInPaise: number;
+    referralCreditAppliedInPaise: number;
     otpCode: string | null;
     deliveryAddressJson: { flat: string; addressText: string; lat: number; lng: number } | null;
     createdAt: string;
@@ -252,6 +253,12 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
             <div className="flex justify-between">
               <span>GST on food</span>
               <span>{formatINR(order.gstInPaise)}</span>
+            </div>
+          )}
+          {order.referralCreditAppliedInPaise > 0 && (
+            <div className="flex justify-between text-leaf">
+              <span>Referral credit applied</span>
+              <span>−{formatINR(order.referralCreditAppliedInPaise)}</span>
             </div>
           )}
           <div className="flex justify-between pt-1 text-base font-bold">

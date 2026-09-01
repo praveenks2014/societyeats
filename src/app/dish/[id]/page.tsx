@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getListingDetail } from '@/lib/browse';
 import { getPlatformSettings } from '@/lib/db/platform';
@@ -5,6 +6,23 @@ import { DEFAULTS } from '@/lib/config';
 import { DishDetail } from './dish-detail';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+  const id = Number(params.id);
+  if (!Number.isFinite(id)) return {};
+  const detail = await getListingDetail(id);
+  if (!detail) return {};
+  const title = `${detail.listing.title} — ${detail.profile.kitchenName}`;
+  const description =
+    detail.listing.description ||
+    `${detail.listing.cuisine} from ${detail.profile.kitchenName}${detail.society ? `, ${detail.society.name}` : ''} — order on GharSe.`;
+  return {
+    title,
+    description,
+    openGraph: { title, description, type: 'website' },
+    twitter: { card: 'summary_large_image', title, description },
+  };
+}
 
 export default async function DishPage({ params }: { params: { id: string } }) {
   const id = Number(params.id);
@@ -52,6 +70,7 @@ export default async function DishPage({ params }: { params: { id: string } }) {
         cookingSinceYear: detail.profile.cookingSinceYear,
         cuisines: detail.profile.cuisinesJson ?? [],
         orderedByCount: detail.orderedByCount,
+        badgeTier: detail.badgeTier,
       }}
       sellerPoint={sellerPoint}
       radiusKm={settings.radiusKm}

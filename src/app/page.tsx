@@ -1,13 +1,28 @@
 import Link from 'next/link';
 import { Hero } from '@/components/hero';
 import { Browse } from '@/components/browse';
+import { FeaturedKitchen } from '@/components/featured-kitchen';
+import { getFeaturedKitchen } from '@/lib/browse';
 
 export const dynamic = 'force-dynamic';
 
-export default function HomePage() {
+export default async function HomePage() {
+  const featured = await getFeaturedKitchen();
   return (
     <>
       <Hero />
+      {featured && (
+        <FeaturedKitchen
+          sellerId={featured.seller.id}
+          kitchenName={featured.profile.kitchenName}
+          bio={featured.profile.bio}
+          rating={featured.profile.rating}
+          ratingCount={featured.profile.ratingCount}
+          societyName={featured.society?.name ?? null}
+          photoUrl={featured.profile.kitchenPhotosJson?.[0] ?? featured.activeListings[0]?.photoUrl ?? null}
+          badgeTier={featured.badgeTier}
+        />
+      )}
       <Browse />
       <footer className="mt-16 border-t border-rice-line pt-8 pb-4 text-xs text-ink-faint">
         <div className="flex flex-wrap gap-x-5 gap-y-2">

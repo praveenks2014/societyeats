@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db';
 import { deliveries, orderEvents, orders } from '@/lib/db/schema';
 import { notify } from '@/lib/db/notify';
 import { rateLimit } from '@/lib/rate-limit';
+import { maybeGrantReferralCredit } from '@/lib/referrals';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,6 +44,9 @@ export const POST = api<{ params: { id: string } }>(async (req, { params }) => {
       await notify(order.sellerId, `Order #${orderId} delivered 🎉`, 'Payment will reflect in your earnings.', '/seller/earnings');
     }
     await notify(order.buyerId, 'Enjoy your meal! 🍽️', `Order #${orderId} was delivered. Tell the kitchen how it was.`, `/orders/${orderId}`);
+    // Pilot Hardening v2 — Phase 6 (DECISIONS.md #87+): a referred buyer's
+    // first COMPLETED order (not just placed) is what earns the referrer credit.
+    await maybeGrantReferralCredit({ id: orderId, buyerId: order.buyerId });
     return ok({ ok: true, status: 'delivered' });
   }
 
@@ -54,5 +58,6 @@ export const POST = api<{ params: { id: string } }>(async (req, { params }) => {
     await notify(order.sellerId, `Order #${orderId} collected 🎉`, 'Payment will reflect in your earnings.', '/seller/earnings');
   }
   await notify(order.buyerId, 'Order picked up 🛍️', `Enjoy! Rate your order #${orderId} when you're done.`, `/orders/${orderId}`);
+  await maybeGrantReferralCredit({ id: orderId, buyerId: order.buyerId });
   return ok({ ok: true, status: 'picked_up' });
 });

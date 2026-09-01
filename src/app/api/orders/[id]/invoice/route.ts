@@ -90,6 +90,7 @@ export const GET = api<{ params: { id: string } }>(async (_req, { params }) => {
       gstInPaise: order.gstInPaise,
       cgstInPaise,
       sgstInPaise,
+      referralCreditAppliedInPaise: order.referralCreditAppliedInPaise,
       totalInPaise: order.totalInPaise,
     },
     items: items.map((i) => ({

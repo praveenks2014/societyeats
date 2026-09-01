@@ -16,6 +16,10 @@ export type PlatformSettings = {
   // Pilot Hardening v2 — Phase 4 (Compliance center refinements, DECISIONS.md #62+).
   fssaiSponsorshipCapPerCohort: number;
   platformFssaiCentralLicenseNo: string;
+  // Pilot Hardening v2 — Phase 6 (Society-first launch mechanics, DECISIONS.md #87+).
+  referralCreditPaise: number;
+  referralCreditCapPerUser: number;
+  featuredSellerId: string;
 };
 
 /** Admin-editable settings stored in platform_config, defaults from config.ts. */
@@ -56,6 +60,9 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
       'platformFssaiCentralLicenseNo',
       DEFAULTS.platformFssaiCentralLicenseNo,
     ),
+    referralCreditPaise: num('referralCreditPaise', DEFAULTS.referralCreditPaise),
+    referralCreditCapPerUser: num('referralCreditCapPerUser', DEFAULTS.referralCreditCapPerUser),
+    featuredSellerId: str('featuredSellerId', DEFAULTS.featuredSellerId),
   };
 }
 

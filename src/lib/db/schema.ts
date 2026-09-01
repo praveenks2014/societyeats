@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   boolean,
   date,
   doublePrecision,
@@ -125,6 +126,11 @@ export const complaintOutcomeEnum = pgEnum('complaint_outcome', [
   'rejected',
 ]);
 
+// Pilot Hardening v2 — Phase 6 (Society-first launch mechanics, DECISIONS.md
+// #87+). 'available' = granted, not yet spent; 'applied' = consumed against
+// one of the referrer's own orders (referralCredits.appliedToOrderId).
+export const referralCreditStatusEnum = pgEnum('referral_credit_status', ['available', 'applied']);
+
 // ---------- core tables ----------
 
 export const societies = pgTable(
@@ -136,6 +142,14 @@ export const societies = pgTable(
     lat: doublePrecision('lat').notNull(),
     lng: doublePrecision('lng').notNull(),
     addressText: text('address_text').notNull(),
+    // Pilot Hardening v2 — Phase 6 (Society-first launch mechanics,
+    // DECISIONS.md #87+). The pilot targets exactly one live, publicly
+    // joinable society; `inviteCode` lets a not-yet-public society (or a
+    // private cohort within the live one) be onboarded ahead of that via a
+    // WhatsApp-shared code, regardless of `isLive`. New signups must resolve
+    // to a society either way — see POST /api/auth/register.
+    inviteCode: varchar('invite_code', { length: 24 }).unique(),
+    isLive: boolean('is_live').notNull().default(false),
   },
   (table) => [index('societies_lat_lng_idx').on(table.lat, table.lng)],
 );
@@ -151,6 +165,16 @@ export const users = pgTable(
     societyId: integer('society_id').references(() => societies.id),
     lat: doublePrecision('lat'),
     lng: doublePrecision('lng'),
+    // Pilot Hardening v2 — Phase 6 (DECISIONS.md #87+). Nullable + unique
+    // (not not-null): Postgres allows multiple NULLs under a unique index,
+    // so existing/pre-phase rows can stay unset until they next touch a
+    // referral-aware path, while every new registration always sets one —
+    // same "generate lazily, backfill on first use" spirit as other
+    // additive columns in this file. See src/lib/referrals.ts's
+    // referralCodeFor() (derived from id, so no collision retries needed).
+    referralCode: varchar('referral_code', { length: 12 }).unique(),
+    // Who referred this user at signup, if anyone (self-referencing FK).
+    referredByUserId: integer('referred_by_user_id').references((): AnyPgColumn => users.id),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   // Backs the SQL Haversine radius filter in src/lib/browse.ts (browseListings).
@@ -310,6 +334,14 @@ export const orders = pgTable('orders', {
   // from a seller payout (src/lib/payouts.ts) so a later batch never double-deducts it.
   refundInPaise: integer('refund_in_paise').notNull().default(0),
   refundDeductedAt: timestamp('refund_deducted_at'),
+  // Pilot Hardening v2 — Phase 6 (Society-first launch mechanics, DECISIONS.md
+  // #87+). Referral credit (src/lib/referrals.ts) redeemed against this
+  // order's total at checkout — server-computed from the buyer's real
+  // available balance, never trusted from the client. Comes entirely out of
+  // GharSe's own margin, same as buyerPlatformFeePaise being ₹0 by default:
+  // it never reduces subtotalInPaise/commissionInPaise, so seller payouts
+  // (which key off those, not totalInPaise) are unaffected.
+  referralCreditAppliedInPaise: integer('referral_credit_applied_in_paise').notNull().default(0),
   // Pilot Hardening v2 — merchant-of-record / payouts (DECISIONS.md #51+). Set
   // once this order has been swept into a T+2 payout batch, so a later batch
   // run never re-counts it. Null = not yet paid out to the seller.
@@ -513,6 +545,34 @@ export const complaints = pgTable('complaints', {
   resolvedByAdminId: integer('resolved_by_admin_id').references(() => users.id),
   resolvedAt: timestamp('resolved_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// ---------- referral credits (Pilot Hardening v2 — Phase 6, DECISIONS.md #87+) ----------
+// A referrer earns one fixed-amount credit row the first time a neighbour
+// they referred completes their first order; credits are spent oldest-first
+// at the referrer's own checkout (src/lib/referrals.ts). One row per grant —
+// deliberately not a single running-balance column on `users`, so every
+// grant/spend is its own auditable record (same reasoning as `payouts` being
+// rows, not a mutable balance, per DECISIONS.md #51).
+export const referralCredits = pgTable('referral_credits', {
+  id: serial('id').primaryKey(),
+  // The referrer — who earns and later spends this credit.
+  buyerId: integer('buyer_id')
+    .notNull()
+    .references(() => users.id),
+  // The referred neighbour whose first completed order triggered this grant.
+  referredUserId: integer('referred_user_id')
+    .notNull()
+    .references(() => users.id),
+  referredOrderId: integer('referred_order_id')
+    .notNull()
+    .references(() => orders.id),
+  amountInPaise: integer('amount_in_paise').notNull(),
+  status: referralCreditStatusEnum('status').notNull().default('available'),
+  // Set once spent — the referrer's own order this credit was applied to.
+  appliedToOrderId: integer('applied_to_order_id').references(() => orders.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  appliedAt: timestamp('applied_at'),
 });
 
 export const subscriptions = pgTable('subscriptions', {

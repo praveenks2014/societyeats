@@ -14,6 +14,9 @@ const EDITABLE = new Set([
   'platformDeliveryFeeInPaise',
   'platformDeliveryMinOrderPaise',
   'fssaiSponsorshipCapPerCohort',
+  // Pilot Hardening v2 — Phase 6 (DECISIONS.md #87+).
+  'referralCreditPaise',
+  'referralCreditCapPerUser',
 ]);
 // platform_config values are always stored as text; booleans get their own
 // set so PATCH knows to expect true/false instead of a non-negative number.
