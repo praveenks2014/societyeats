@@ -10,7 +10,9 @@ import {
   users,
 } from '@/lib/db/schema';
 import { getPlatformSettings } from '@/lib/db/platform';
+import { DEFAULTS } from '@/lib/config';
 import { haversineKm, type GeoPoint } from '@/lib/geo';
+import { neighbourOrderCount } from '@/lib/reputation';
 import { currentSlot, isSlotSoldOut, slotOrderCount } from '@/lib/slots';
 
 const EARTH_RADIUS_KM = 6371; // matches src/lib/geo.ts's haversineKm exactly
@@ -52,6 +54,10 @@ export type ListingCard = {
   distanceKm: number | null;
   /** DECISIONS.md #37+: this listing's seller has hit maxOrdersPerSlot for the current meal slot. */
   slotSoldOut: boolean;
+  /** DECISIONS.md #73+: kitchenPhotosJson has at least DEFAULTS.minKitchenPhotosRequired entries. */
+  kitchenPhotosVerified: boolean;
+  /** DECISIONS.md #73+: distinct buyers with a completed order from this seller — "Ordered by N neighbours". */
+  orderedByCount: number;
 };
 
 /** Seller rows eligible to appear to buyers, with FSSAI-pending auto-pause applied. */
@@ -152,6 +158,16 @@ export async function browseListings(opts: {
     return full;
   }
 
+  // Same per-seller caching approach for "Ordered by N neighbours" (DECISIONS.md #73+).
+  const neighbourCountBySeller = new Map<number, number>();
+  async function sellerNeighbourCount(sellerId: number): Promise<number> {
+    const cached = neighbourCountBySeller.get(sellerId);
+    if (cached !== undefined) return cached;
+    const count = await neighbourOrderCount(sellerId);
+    neighbourCountBySeller.set(sellerId, count);
+    return count;
+  }
+
   for (const { listing, profile, society, distanceKm } of rows) {
     cuisines.add(listing.cuisine);
     if (opts.veg && !listing.isVeg) continue;
@@ -191,6 +207,8 @@ export async function browseListings(opts: {
       societyName: society?.name ?? null,
       distanceKm: distanceKm != null ? Number(distanceKm) : null,
       slotSoldOut,
+      kitchenPhotosVerified: (profile.kitchenPhotosJson?.length ?? 0) >= DEFAULTS.minKitchenPhotosRequired,
+      orderedByCount: await sellerNeighbourCount(listing.sellerId),
     });
   }
 
@@ -251,6 +269,7 @@ export async function getListingDetail(id: number, loc?: GeoPoint | null) {
     row.profile.maxOrdersPerSlot,
     row.listing.slotsJson?.slots,
   );
+  const orderedByCount = await neighbourOrderCount(row.listing.sellerId);
 
-  return { ...row, distanceKm, sellerReviews, otherDishes, slotSoldOut };
+  return { ...row, distanceKm, sellerReviews, otherDishes, slotSoldOut, orderedByCount };
 }

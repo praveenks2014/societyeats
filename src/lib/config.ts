@@ -40,6 +40,12 @@ export const DEFAULTS = {
   // Pilot Hardening v2 — Phase 4 (Compliance center refinements, DECISIONS.md #62+).
   fssaiSponsorshipCapPerCohort: 10, // founder-specified: facilitation sponsored for at most this many sellers
   platformFssaiCentralLicenseNo: '', // empty until the real Central FSSAI e-commerce license is entered by an admin
+  // Pilot Hardening v2 — Phase 5 (Trust & hygiene, DECISIONS.md #73+). Fixed
+  // policy constants, not admin-tunable — same treatment as gstPct/tds194OPct
+  // above (a trust/safety rule, not a pricing lever an admin should casually retune).
+  minKitchenPhotosRequired: 3, // onboarding: kitchen photos required before the "complete your profile" nudge clears
+  complaintWindowHours: 24, // buyer can raise a complaint within this many hours of delivery/pickup
+  hygieneAutoPauseThreshold: 3, // this many UPHELD 'hygiene' complaints auto-pauses the seller
 };
 
 export function isMockMode(): boolean {

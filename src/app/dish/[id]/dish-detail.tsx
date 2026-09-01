@@ -35,10 +35,16 @@ type Props = {
     fssaiNumber: string | null;
     vegOnly: boolean;
     societyName: string | null;
+    kitchenPhotos: string[];
+    kitchenPhotosVerified: boolean;
+    kitchenVideoUrl: string | null;
+    cookingSinceYear: number | null;
+    cuisines: string[];
+    orderedByCount: number;
   };
   sellerPoint: GeoPoint | null;
   radiusKm: number;
-  reviews: { id: number; rating: number; text: string | null; buyerName: string; createdAt: string }[];
+  reviews: { id: number; rating: number; text: string | null; buyerName: string; createdAt: string; sellerReplyText: string | null }[];
   otherDishes: { id: number; title: string; priceInPaise: number; isVeg: boolean; photoUrl: string | null; availableQty: number }[];
   /** DECISIONS.md #37+: seller has hit maxOrdersPerSlot for the current meal slot. */
   slotSoldOut: boolean;
@@ -103,16 +109,37 @@ export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, ot
             <div className="mt-0.5 text-xs text-ink-faint">
               {seller.societyName}
               {seller.vegOnly && ' · Pure veg kitchen'}
+              {seller.cookingSinceYear && ` · Cooking since ${seller.cookingSinceYear}`}
             </div>
+            {seller.cuisines.length > 0 && (
+              <div className="mt-0.5 text-xs text-ink-faint">{seller.cuisines.join(' · ')}</div>
+            )}
           </div>
           <Stars rating={seller.rating} count={seller.ratingCount} />
         </div>
         {seller.bio && <p className="mt-2 text-sm text-ink-soft">{seller.bio}</p>}
-        <div className="mt-3">
+
+        {seller.kitchenPhotos.length > 0 && (
+          <div className="mt-3 flex gap-2 overflow-x-auto">
+            {seller.kitchenPhotos.map((url, i) => (
+              <FoodImage key={i} src={url} alt="Kitchen" className="h-20 w-20 shrink-0 rounded-xl" />
+            ))}
+          </div>
+        )}
+        {seller.kitchenVideoUrl && (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video src={seller.kitchenVideoUrl} controls className="mt-3 w-full rounded-xl bg-ink" />
+        )}
+
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
           {seller.fssaiStatus === 'verified' ? (
             <Badge tone="green">FSSAI Verified ✅ · Lic. {seller.fssaiNumber}</Badge>
           ) : (
             <Badge tone="amber">FSSAI Pending — application under process</Badge>
+          )}
+          {seller.kitchenPhotosVerified && <Badge tone="neutral">📷 Kitchen photos ✓</Badge>}
+          {seller.orderedByCount > 0 && (
+            <Badge tone="neutral">Ordered by {seller.orderedByCount} neighbours</Badge>
           )}
         </div>
       </Card>
@@ -168,6 +195,12 @@ export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, ot
                   </span>
                 </div>
                 {r.text && <p className="mt-1.5 text-sm text-ink-soft">{r.text}</p>}
+                {r.sellerReplyText && (
+                  <div className="mt-2 rounded-xl bg-rice-deep px-3 py-2 text-sm">
+                    <span className="font-semibold">{seller.kitchenName} replied: </span>
+                    {r.sellerReplyText}
+                  </div>
+                )}
               </Card>
             ))}
           </div>

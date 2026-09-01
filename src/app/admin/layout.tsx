@@ -19,6 +19,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           { href: '/admin', label: 'Overview' },
           { href: '/admin/sellers', label: 'Sellers' },
           { href: '/admin/fssai', label: 'FSSAI queue' },
+          { href: '/admin/complaints', label: 'Complaints' },
           { href: '/admin/providers', label: 'Delivery providers' },
           { href: '/admin/orders', label: 'Orders' },
           { href: '/admin/payouts', label: 'Payouts' },

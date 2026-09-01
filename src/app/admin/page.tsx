@@ -14,6 +14,7 @@ type Stats = {
   sellersAwaitingApproval: number;
   fssaiQueue: number;
   providersDown: number;
+  openComplaints: number;
 };
 
 export default function AdminOverview() {
@@ -34,6 +35,7 @@ export default function AdminOverview() {
     { label: 'Commission earned', value: formatINR(stats.commissionPaise), href: '/admin/orders' },
     { label: 'Sellers to approve', value: String(stats.sellersAwaitingApproval), href: '/admin/sellers', alert: stats.sellersAwaitingApproval > 0 },
     { label: 'FSSAI queue', value: String(stats.fssaiQueue), href: '/admin/fssai', alert: stats.fssaiQueue > 0 },
+    { label: 'Open complaints', value: String(stats.openComplaints), href: '/admin/complaints', alert: stats.openComplaints > 0 },
     { label: 'Providers disabled', value: String(stats.providersDown), href: '/admin/providers', alert: stats.providersDown > 0 },
     { label: 'All-time orders', value: String(stats.totalOrders), href: '/admin/orders' },
   ];

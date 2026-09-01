@@ -17,6 +17,7 @@ type PayoutRow = {
   commissionInPaise: number;
   gatewayFeeEstimateInPaise: number;
   tds194OInPaise: number;
+  refundDeductionInPaise: number;
   netPayableInPaise: number;
   status: 'pending' | 'paid';
   paidAt: string | null;
@@ -160,6 +161,9 @@ export default function AdminPayouts() {
                 <Row k="Commission" v={`−${formatINR(p.commissionInPaise)}`} />
                 <Row k="Gateway fee (est.)" v={`−${formatINR(p.gatewayFeeEstimateInPaise)}`} />
                 <Row k="TDS 194-O" v={p.tds194OInPaise > 0 ? `−${formatINR(p.tds194OInPaise)}` : '—'} />
+                {p.refundDeductionInPaise > 0 && (
+                  <Row k="Refund deduction" v={`−${formatINR(p.refundDeductionInPaise)}`} />
+                )}
               </div>
               <div className="mt-2 flex items-center justify-between border-t border-dashed border-rice-line pt-2">
                 <span className="text-sm font-semibold">Net payable</span>

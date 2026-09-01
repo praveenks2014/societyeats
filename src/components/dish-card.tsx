@@ -25,6 +25,10 @@ export type DishCardData = {
   href?: string;
   /** DECISIONS.md #37+: seller has hit maxOrdersPerSlot for the current meal slot. */
   slotSoldOut?: boolean;
+  /** DECISIONS.md #73+: kitchen has >= DEFAULTS.minKitchenPhotosRequired photos on file. */
+  kitchenPhotosVerified?: boolean;
+  /** DECISIONS.md #73+: distinct buyers with a completed order from this seller. */
+  orderedByCount?: number;
 };
 
 export function DishCard({
@@ -109,6 +113,12 @@ export function DishCard({
             <div className="text-base font-bold">{formatINR(dish.priceInPaise)}</div>
             {dish.rating !== undefined && dish.rating > 0 && (
               <div className="text-xs text-ink-faint">★ {dish.rating.toFixed(1)} ({dish.ratingCount})</div>
+            )}
+            {(dish.kitchenPhotosVerified || !!dish.orderedByCount) && (
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-ink-faint">
+                {dish.kitchenPhotosVerified && <span>📷 Verified kitchen</span>}
+                {!!dish.orderedByCount && <span>Ordered by {dish.orderedByCount} neighbours</span>}
+              </div>
             )}
           </div>
           <motion.div key={pop} animate={pop ? { scale: [1, 1.25, 1] } : undefined} transition={{ duration: 0.3 }}>

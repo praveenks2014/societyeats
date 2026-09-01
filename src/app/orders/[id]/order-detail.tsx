@@ -2,10 +2,12 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Card, Input, Skeleton, Textarea } from '@/components/ui';
+import { Badge, Button, Card, Field, Input, Modal, Select, Skeleton, Textarea } from '@/components/ui';
+import { FoodImage } from '@/components/food-image';
 import { OrderTimeline, STATUS_META, StatusPill } from '@/components/order-status';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
+import { COMPLAINT_CATEGORIES, COMPLAINT_OUTCOME_LABELS, type ComplaintCategory, type ComplaintOutcome } from '@/lib/complaints';
 
 type FulfillmentType = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
 
@@ -20,6 +22,7 @@ type Detail = {
     platformFeeInPaise: number;
     gstInPaise: number;
     totalInPaise: number;
+    refundInPaise: number;
     otpCode: string | null;
     deliveryAddressJson: { flat: string; addressText: string; lat: number; lng: number } | null;
     createdAt: string;
@@ -34,7 +37,7 @@ type Detail = {
     attemptsJson: { provider: string; at: string; outcome: string; detail?: string }[] | null;
   } | null;
   tracking: { status: string; etaMins?: number; note?: string } | null;
-  review: { rating: number; text: string | null } | null;
+  review: { rating: number; text: string | null; sellerReplyText: string | null } | null;
   vendor:
     | { kind: 'seller'; name: string | null; phone: string | null }
     | { kind: 'restaurant'; name: string; counterNumber: string; mallName?: string };
@@ -255,6 +258,12 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
             <span>Total paid</span>
             <span>{formatINR(order.totalInPaise)}</span>
           </div>
+          {order.refundInPaise > 0 && (
+            <div className="flex justify-between text-leaf">
+              <span>Refunded</span>
+              <span>−{formatINR(order.refundInPaise)}</span>
+            </div>
+          )}
         </div>
         {order.status !== 'placed' && (
           <Link
@@ -269,6 +278,11 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
       {/* review */}
       {data.viewerIsBuyer && ['delivered', 'picked_up'].includes(order.status) && (
         <ReviewBlock orderId={order.id} review={data.review} onDone={load} />
+      )}
+
+      {/* complaint (DECISIONS.md #73+) */}
+      {data.viewerIsBuyer && ['delivered', 'picked_up'].includes(order.status) && (
+        <ComplaintBlock orderId={order.id} />
       )}
 
       <div className="mt-8 text-center">
@@ -330,7 +344,7 @@ function ReviewBlock({
   onDone,
 }: {
   orderId: number;
-  review: { rating: number; text: string | null } | null;
+  review: { rating: number; text: string | null; sellerReplyText: string | null } | null;
   onDone: () => void;
 }) {
   const [rating, setRating] = useState(0);
@@ -344,6 +358,12 @@ function ReviewBlock({
         <div className="eyebrow mb-1.5">YOUR RATING</div>
         <div className="text-lg">{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</div>
         {review.text && <p className="mt-1 text-sm text-ink-soft">{review.text}</p>}
+        {review.sellerReplyText && (
+          <div className="mt-2 rounded-xl bg-rice-deep px-3 py-2 text-sm">
+            <span className="font-semibold">Kitchen&apos;s reply: </span>
+            {review.sellerReplyText}
+          </div>
+        )}
       </Card>
     );
   }
@@ -390,6 +410,156 @@ function ReviewBlock({
       <Button className="mt-3" onClick={submit} loading={busy} disabled={rating === 0}>
         Submit rating
       </Button>
+    </Card>
+  );
+}
+
+type ComplaintData = {
+  complaint: {
+    id: number;
+    category: ComplaintCategory;
+    description: string;
+    status: 'open' | 'resolved';
+    outcome: ComplaintOutcome | null;
+    refundInPaise: number;
+  } | null;
+  eligible: boolean;
+  windowHours: number;
+};
+
+/** "Report an issue" — buyer-raised complaint within DEFAULTS.complaintWindowHours (DECISIONS.md #73+). */
+function ComplaintBlock({ orderId }: { orderId: number }) {
+  const [data, setData] = useState<ComplaintData | null>(null);
+  const [open, setOpen] = useState(false);
+  const [category, setCategory] = useState<ComplaintCategory>('quality');
+  const [description, setDescription] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  const load = useCallback(() => {
+    fetch(`/api/orders/${orderId}/complaint`)
+      .then((r) => r.json())
+      .then(setData)
+      .catch(() => {});
+  }, [orderId]);
+  useEffect(load, [load]);
+
+  async function upload(file: File) {
+    setUploading(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/uploads', { method: 'POST', body: fd });
+    const d = await res.json();
+    setUploading(false);
+    if (!res.ok) {
+      toast(d.error || 'Upload failed', 'err');
+      return;
+    }
+    setPhotoUrl(d.url);
+  }
+
+  async function submit() {
+    setBusy(true);
+    const res = await fetch(`/api/orders/${orderId}/complaint`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category, description, photoUrl: photoUrl || undefined }),
+    });
+    const d = await res.json();
+    setBusy(false);
+    if (!res.ok) {
+      toast(d.error || 'Could not report the issue', 'err');
+      return;
+    }
+    toast('Issue reported — our team will review it');
+    setOpen(false);
+    setDescription('');
+    setPhotoUrl('');
+    load();
+  }
+
+  if (!data) return null;
+
+  if (data.complaint) {
+    const c = data.complaint;
+    return (
+      <Card className="mt-4 p-4">
+        <div className="eyebrow mb-1.5">YOUR REPORTED ISSUE</div>
+        <p className="text-sm text-ink-soft">{c.description}</p>
+        <div className="mt-2">
+          {c.status === 'open' ? (
+            <Badge tone="amber">Under review</Badge>
+          ) : (
+            <Badge tone={c.outcome === 'rejected' ? 'neutral' : 'green'}>
+              {c.outcome ? COMPLAINT_OUTCOME_LABELS[c.outcome] : 'Resolved'}
+            </Badge>
+          )}
+        </div>
+      </Card>
+    );
+  }
+
+  if (!data.eligible) return null;
+
+  return (
+    <Card className="mt-4 p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="eyebrow mb-0.5">SOMETHING WRONG?</div>
+          <p className="text-xs text-ink-faint">Report within {data.windowHours}h of delivery/pickup</p>
+        </div>
+        <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+          Report an issue
+        </Button>
+      </div>
+
+      <Modal open={open} onClose={() => setOpen(false)} title="Report an issue" sheet>
+        <div className="space-y-4">
+          <Field label="What went wrong?">
+            <Select value={category} onChange={(e) => setCategory(e.target.value as ComplaintCategory)}>
+              {COMPLAINT_CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Tell us more">
+            <Textarea
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What happened with your order?"
+            />
+          </Field>
+          <Field label="Photo (optional)">
+            <div className="flex items-center gap-3">
+              {photoUrl && <FoodImage src={photoUrl} alt="" className="h-14 w-14 rounded-xl" />}
+              <input
+                type="file"
+                accept="image/*"
+                id="complaint-photo-input"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                loading={uploading}
+                onClick={() => document.getElementById('complaint-photo-input')?.click()}
+              >
+                {photoUrl ? 'Change photo' : 'Add photo'}
+              </Button>
+            </div>
+          </Field>
+          <Button className="w-full" onClick={submit} loading={busy} disabled={!description.trim()}>
+            Submit
+          </Button>
+        </div>
+      </Modal>
     </Card>
   );
 }

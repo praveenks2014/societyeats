@@ -36,6 +36,13 @@
       "when": 1788256375567,
       "tag": "0004_left_union_jack",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788257752295,
+      "tag": "0005_flowery_silver_samurai",
+      "breakpoints": true
     }
   ]
 }

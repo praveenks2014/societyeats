@@ -31,6 +31,7 @@ type Payout = {
   commissionInPaise: number;
   gatewayFeeEstimateInPaise: number;
   tds194OInPaise: number;
+  refundDeductionInPaise: number;
   netPayableInPaise: number;
   status: 'pending' | 'paid';
   paidAt: string | null;
@@ -171,6 +172,12 @@ export default function EarningsPage() {
                   <div className="flex justify-between text-chili">
                     <span>TDS (Sec 194-O)</span>
                     <span>−{formatINR(p.tds194OInPaise)}</span>
+                  </div>
+                )}
+                {p.refundDeductionInPaise > 0 && (
+                  <div className="flex justify-between text-chili">
+                    <span>Refund deduction</span>
+                    <span>−{formatINR(p.refundDeductionInPaise)}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t border-dashed border-rice-line pt-1 text-base font-bold text-leaf">

@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { api, ok } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
-import { fssaiApplications, orders, providerHealth, sellerProfiles } from '@/lib/db/schema';
+import { complaints, fssaiApplications, orders, providerHealth, sellerProfiles } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +13,7 @@ export const GET = api(async () => {
   const sellers = await db.select().from(sellerProfiles);
   const apps = await db.select().from(fssaiApplications);
   const providers = await db.select().from(providerHealth);
+  const complaintRows = await db.select().from(complaints);
 
   const active = allOrders.filter((o) =>
     ['paid', 'accepted', 'preparing', 'ready', 'out_for_delivery'].includes(o.status),
@@ -31,6 +32,7 @@ export const GET = api(async () => {
       sellersAwaitingApproval: sellers.filter((s) => !s.isApproved).length,
       fssaiQueue: apps.filter((a) => ['submitted_to_backoffice', 'filed_on_foscos'].includes(a.status)).length,
       providersDown: providers.filter((p) => !p.isEnabled).length,
+      openComplaints: complaintRows.filter((c) => c.status === 'open').length,
     },
   });
 });

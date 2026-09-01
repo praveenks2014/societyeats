@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getListingDetail } from '@/lib/browse';
 import { getPlatformSettings } from '@/lib/db/platform';
+import { DEFAULTS } from '@/lib/config';
 import { DishDetail } from './dish-detail';
 
 export const dynamic = 'force-dynamic';
@@ -44,6 +45,13 @@ export default async function DishPage({ params }: { params: { id: string } }) {
         fssaiNumber: detail.profile.fssaiNumber,
         vegOnly: detail.profile.vegOnly,
         societyName: detail.society?.name ?? null,
+        kitchenPhotos: detail.profile.kitchenPhotosJson ?? [],
+        kitchenPhotosVerified:
+          (detail.profile.kitchenPhotosJson?.length ?? 0) >= DEFAULTS.minKitchenPhotosRequired,
+        kitchenVideoUrl: detail.profile.kitchenVideoUrl,
+        cookingSinceYear: detail.profile.cookingSinceYear,
+        cuisines: detail.profile.cuisinesJson ?? [],
+        orderedByCount: detail.orderedByCount,
       }}
       sellerPoint={sellerPoint}
       radiusKm={settings.radiusKm}
@@ -53,6 +61,7 @@ export default async function DishPage({ params }: { params: { id: string } }) {
         text: r.review.text,
         buyerName: r.buyer.name,
         createdAt: r.review.createdAt.toISOString(),
+        sellerReplyText: r.review.sellerReplyText,
       }))}
       otherDishes={detail.otherDishes.map((d) => ({
         id: d.id,

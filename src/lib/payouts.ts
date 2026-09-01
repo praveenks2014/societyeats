@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lte } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, lte } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { orders, payouts, sellerFyPayoutTotals, sellerProfiles } from '@/lib/db/schema';
 import { DEFAULTS } from '@/lib/config';
@@ -68,11 +68,37 @@ export async function generatePayoutBatch(now: Date = new Date()): Promise<Payou
     else bySeller.set(o.sellerId, [o]);
   }
 
+  // Pilot Hardening v2 — Phase 5 (Trust & hygiene, DECISIONS.md #73+): any
+  // order carrying a complaint refund that hasn't been deducted from a payout
+  // yet gets swept into whichever payout this run produces for its seller —
+  // including orders from an EARLIER (possibly already-paid) batch, since a
+  // refund can land after that order was already paid out. Kept in a
+  // separate map from `bySeller` because these orders may already have a
+  // payoutId (already counted toward an earlier batch's own gross sales) and
+  // must never be re-added to this batch's orderCount/grossSalesInPaise.
+  const undeductedRefunds = await db
+    .select({ id: orders.id, sellerId: orders.sellerId, refundInPaise: orders.refundInPaise })
+    .from(orders)
+    .where(and(gt(orders.refundInPaise, 0), isNull(orders.refundDeductedAt)));
+  const refundBySeller = new Map<number, { amountInPaise: number; orderIds: number[] }>();
+  for (const o of undeductedRefunds) {
+    if (!o.sellerId) continue;
+    const entry = refundBySeller.get(o.sellerId) ?? { amountInPaise: 0, orderIds: [] };
+    entry.amountInPaise += o.refundInPaise;
+    entry.orderIds.push(o.id);
+    refundBySeller.set(o.sellerId, entry);
+  }
+
   const fy = fyLabel(now);
   let payoutsCreated = 0;
   let ordersSwept = 0;
+  const sellerIds = new Set<number>([...bySeller.keys(), ...refundBySeller.keys()]);
 
-  for (const [sellerId, sellerOrders] of bySeller) {
+  for (const sellerId of sellerIds) {
+    const sellerOrders = bySeller.get(sellerId) ?? [];
+    const refundDeduction = refundBySeller.get(sellerId)?.amountInPaise ?? 0;
+    if (sellerOrders.length === 0 && refundDeduction === 0) continue; // defensive; shouldn't happen
+
     const grossSales = sellerOrders.reduce((s, o) => s + o.subtotalInPaise, 0);
     // Sum each order's own commissionInPaise (the rate actually in force when
     // it was placed) rather than re-applying today's commissionHomePct — a
@@ -96,21 +122,24 @@ export async function generatePayoutBatch(now: Date = new Date()): Promise<Payou
         ? Math.round(grossSales * (DEFAULTS.tds194OPct / 100))
         : 0;
 
-    const netPayable = grossSales - commission - gatewayFeeEstimate - tds;
+    // Refunds are a clean top-line deduction, not baked back into
+    // grossSales/commission — same "never rewrite a historical figure"
+    // reasoning as #52/#54 above (DECISIONS.md #73+).
+    const netPayable = grossSales - commission - gatewayFeeEstimate - tds - refundDeduction;
 
     const [profile] = await db
       .select()
       .from(sellerProfiles)
       .where(eq(sellerProfiles.userId, sellerId));
 
-    const periodStart = sellerOrders.reduce(
-      (min, o) => (o.createdAt < min ? o.createdAt : min),
-      sellerOrders[0].createdAt,
-    );
-    const periodEnd = sellerOrders.reduce(
-      (max, o) => (o.updatedAt > max ? o.updatedAt : max),
-      sellerOrders[0].updatedAt,
-    );
+    const periodStart =
+      sellerOrders.length > 0
+        ? sellerOrders.reduce((min, o) => (o.createdAt < min ? o.createdAt : min), sellerOrders[0].createdAt)
+        : now;
+    const periodEnd =
+      sellerOrders.length > 0
+        ? sellerOrders.reduce((max, o) => (o.updatedAt > max ? o.updatedAt : max), sellerOrders[0].updatedAt)
+        : now;
 
     const [payout] = await db
       .insert(payouts)
@@ -123,20 +152,27 @@ export async function generatePayoutBatch(now: Date = new Date()): Promise<Payou
         commissionInPaise: commission,
         gatewayFeeEstimateInPaise: gatewayFeeEstimate,
         tds194OInPaise: tds,
+        refundDeductionInPaise: refundDeduction,
         netPayableInPaise: netPayable,
         payoutDestinationSnapshot: profile?.payoutVpaOrBank ?? null,
       })
       .returning();
 
-    await db
-      .update(orders)
-      .set({ payoutId: payout.id })
-      .where(
-        inArray(
-          orders.id,
-          sellerOrders.map((o) => o.id),
-        ),
-      );
+    if (sellerOrders.length > 0) {
+      await db
+        .update(orders)
+        .set({ payoutId: payout.id })
+        .where(
+          inArray(
+            orders.id,
+            sellerOrders.map((o) => o.id),
+          ),
+        );
+    }
+    const deductedOrderIds = refundBySeller.get(sellerId)?.orderIds ?? [];
+    if (deductedOrderIds.length > 0) {
+      await db.update(orders).set({ refundDeductedAt: now }).where(inArray(orders.id, deductedOrderIds));
+    }
 
     if (fyRow) {
       await db
@@ -156,7 +192,7 @@ export async function generatePayoutBatch(now: Date = new Date()): Promise<Payou
     ordersSwept += sellerOrders.length;
   }
 
-  return { payoutsCreated, sellersCount: bySeller.size, ordersSwept };
+  return { payoutsCreated, sellersCount: sellerIds.size, ordersSwept };
 }
 
 export type PayoutCsvRow = {

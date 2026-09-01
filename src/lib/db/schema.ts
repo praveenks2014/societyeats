@@ -101,6 +101,30 @@ export const subscriptionPlanEnum = pgEnum('subscription_plan', ['free', 'pro'])
 // 'paid' = admin has recorded the transfer (with a UTR reference).
 export const payoutStatusEnum = pgEnum('payout_status', ['pending', 'paid']);
 
+// Pilot Hardening v2 — Phase 5 (Trust & hygiene). What a buyer's complaint is
+// about; drives the admin queue's category filter and the hygiene auto-pause
+// counter (three UPHELD 'hygiene' complaints auto-pause a seller).
+export const complaintCategoryEnum = pgEnum('complaint_category', [
+  'quality',
+  'wrong_item',
+  'hygiene',
+  'not_received',
+]);
+
+// 'open' = raised, awaiting admin review; 'resolved' = an outcome was recorded.
+export const complaintStatusEnum = pgEnum('complaint_status', ['open', 'resolved']);
+
+// The admin's single resolution action per complaint. 'rejected' means the
+// admin reviewed it and found no fault — deliberately NOT counted as
+// "upheld" for the hygiene auto-pause counter; every other outcome is.
+export const complaintOutcomeEnum = pgEnum('complaint_outcome', [
+  'full_refund',
+  'partial_refund',
+  'warning',
+  'seller_paused',
+  'rejected',
+]);
+
 // ---------- core tables ----------
 
 export const societies = pgTable(
@@ -154,6 +178,16 @@ export const sellerProfiles = pgTable('seller_profiles', {
   sellerDeliveryRadiusKm: doublePrecision('seller_delivery_radius_km').notNull().default(5),
   pickupInstructions: text('pickup_instructions'),
   maxOrdersPerSlot: integer('max_orders_per_slot').notNull().default(8),
+  // Pilot Hardening v2 — Phase 5 (Trust & hygiene, DECISIONS.md #73+). Kitchen
+  // onboarding trust signals — see src/app/seller/onboarding. Photos are the
+  // only *required* piece (min DEFAULTS.minKitchenPhotosRequired, nudged via a
+  // seller-layout banner rather than hard-blocked — see decisions log); the
+  // rest are optional, matching the brief's "everything beyond photos + FSSAI
+  // is optional."
+  kitchenPhotosJson: jsonb('kitchen_photos_json').$type<string[]>(),
+  kitchenVideoUrl: text('kitchen_video_url'),
+  cookingSinceYear: integer('cooking_since_year'),
+  cuisinesJson: jsonb('cuisines_json').$type<string[]>(),
 });
 
 export const fssaiApplications = pgTable('fssai_applications', {
@@ -269,6 +303,13 @@ export const orders = pgTable('orders', {
   totalInPaise: integer('total_in_paise').notNull(),
   deliveryAddressJson: jsonb('delivery_address_json').$type<DeliveryAddress>(),
   otpCode: varchar('otp_code', { length: 4 }).notNull(),
+  // Pilot Hardening v2 — Phase 5 (Trust & hygiene, DECISIONS.md #73+). Set by
+  // a complaint's full/partial-refund outcome (src/app/api/admin/complaints).
+  // Cumulative, in case an order somehow gets more than one resolved
+  // complaint. refundDeductedAt marks once this amount has been subtracted
+  // from a seller payout (src/lib/payouts.ts) so a later batch never double-deducts it.
+  refundInPaise: integer('refund_in_paise').notNull().default(0),
+  refundDeductedAt: timestamp('refund_deducted_at'),
   // Pilot Hardening v2 — merchant-of-record / payouts (DECISIONS.md #51+). Set
   // once this order has been swept into a T+2 payout batch, so a later batch
   // run never re-counts it. Null = not yet paid out to the seller.
@@ -311,6 +352,13 @@ export const payments = pgTable('payments', {
   capturedAt: timestamp('captured_at'),
   webhookPayloadJson: jsonb('webhook_payload_json'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
+  // Pilot Hardening v2 — Phase 5 (Trust & hygiene, DECISIONS.md #73+). Amount
+  // refunded against this payment so far (complaint outcomes only — the
+  // pre-existing order-rejection flow keeps flipping `status` straight to
+  // 'refunded' without an amount, unchanged). `status` only flips to
+  // 'refunded' once this reaches the order's totalInPaise (a full refund);
+  // a partial refund stays 'captured' with this field as the running record.
+  refundedInPaise: integer('refunded_in_paise').notNull().default(0),
 });
 
 // ---------- payouts (merchant-of-record, T+2 manual settlement) ----------
@@ -342,6 +390,13 @@ export const payouts = pgTable('payouts', {
   // Sec 194-O TDS at DEFAULTS.tds194OPct, only once this seller's cumulative
   // FY gross sales (seller_fy_payout_totals) crosses DEFAULTS.tds194OThresholdPaise.
   tds194OInPaise: integer('tds_194o_in_paise').notNull().default(0),
+  // Pilot Hardening v2 — Phase 5 (Trust & hygiene, DECISIONS.md #73+). Sum of
+  // orders.refundInPaise swept into this batch — both orders newly included
+  // here that already carried a refund, and orders from an EARLIER (possibly
+  // already-paid) payout whose refund hadn't been deducted yet (see
+  // src/lib/payouts.ts). A clean top-line deduction, not a retroactive
+  // rewrite of grossSalesInPaise/commissionInPaise — same reasoning as #52.
+  refundDeductionInPaise: integer('refund_deduction_in_paise').notNull().default(0),
   netPayableInPaise: integer('net_payable_in_paise').notNull().default(0),
   status: payoutStatusEnum('status').notNull().default('pending'),
   paidAt: timestamp('paid_at'),
@@ -418,6 +473,45 @@ export const reviews = pgTable('reviews', {
     .references(() => users.id),
   rating: integer('rating').notNull(),
   text: text('text'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  // Pilot Hardening v2 — Phase 5 (Trust & hygiene, DECISIONS.md #73+). One
+  // reply per review — sellerRepliedAt gates the "already replied" check
+  // instead of a separate boolean, same as reviews.createdAt doubling as its
+  // own "already exists" marker elsewhere in this file.
+  sellerReplyText: text('seller_reply_text'),
+  sellerRepliedAt: timestamp('seller_replied_at'),
+});
+
+// ---------- complaints (Pilot Hardening v2 — Phase 5, DECISIONS.md #73+) ----------
+// Buyer-raised issue on a delivered/collected order, resolved by an admin
+// with one of: full refund, partial refund, warning, or seller pause.
+// Refunds are recorded against the order/payment and deducted from the
+// seller's next payout batch (src/lib/payouts.ts); three UPHELD hygiene
+// complaints auto-pause the seller (sellerProfiles.isApproved = false — the
+// same flag admin/sellers already uses for a manual suspend, not a new one).
+
+export const complaints = pgTable('complaints', {
+  id: serial('id').primaryKey(),
+  orderId: integer('order_id')
+    .notNull()
+    .references(() => orders.id),
+  buyerId: integer('buyer_id')
+    .notNull()
+    .references(() => users.id),
+  // Snapshot of orders.sellerId at complaint time — null for mall/restaurant
+  // orders (out of scope for hygiene auto-pause, which is seller-only).
+  sellerId: integer('seller_id').references(() => users.id),
+  category: complaintCategoryEnum('category').notNull(),
+  description: text('description').notNull(),
+  photoUrl: text('photo_url'),
+  status: complaintStatusEnum('status').notNull().default('open'),
+  outcome: complaintOutcomeEnum('outcome'),
+  // Set only when outcome is full_refund/partial_refund; mirrors the amount
+  // added to orders.refundInPaise / payments.refundedInPaise for this order.
+  refundInPaise: integer('refund_in_paise').notNull().default(0),
+  resolutionNote: text('resolution_note'),
+  resolvedByAdminId: integer('resolved_by_admin_id').references(() => users.id),
+  resolvedAt: timestamp('resolved_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 

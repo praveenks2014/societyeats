@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import type { Db } from './index';
 import {
+  complaints,
   deliveries,
   fssaiApplications,
   listings,
@@ -123,6 +124,9 @@ export async function runSeed(db: Db): Promise<void> {
       sellerDeliveryRadiusKm: 4,
       pickupInstructions: 'Tower B, Flat 1204, Aparna Cyberzon — collect between 12:30–1:30 or 7:30–8:30',
       maxOrdersPerSlot: 8,
+      kitchenPhotosJson: [img('1556910103-1c02745aae4d'), img('1600628421066-f6bda6a7b797'), img('1585937421612-70a008356fbe')],
+      cookingSinceYear: 2015,
+      cuisinesJson: ['Biryani', 'Desserts'],
     },
     {
       userId: seller2.id,
@@ -140,6 +144,9 @@ export async function runSeed(db: Db): Promise<void> {
       offersSellerDelivery: false,
       pickupInstructions: 'Tower A, Flat 802, Aparna Cyberzon — collect between 7:30–9:00am',
       maxOrdersPerSlot: 6,
+      kitchenPhotosJson: [img('1589301760014-d929f3979dbc'), img('1630409351241-e90e7f397dbf'), img('1668236543090-82eba5ee5976')],
+      cookingSinceYear: 2019,
+      cuisinesJson: ['Tiffins'],
     },
     {
       userId: seller3.id,
@@ -153,6 +160,9 @@ export async function runSeed(db: Db): Promise<void> {
       payoutVpaOrBank: 'anindita@upi',
       offersSelfPickup: true,
       pickupInstructions: 'Tower C, Flat 501, Aparna Cyberzon',
+      kitchenPhotosJson: [img('1601303516534-bf0b1eb70d2c'), img('1606313564200-e75d5e30476c'), img('1571877227200-a0d98ea607e9')],
+      cookingSinceYear: 2021,
+      cuisinesJson: ['Bengali Sweets'],
     },
     {
       userId: seller4.id,
@@ -171,6 +181,9 @@ export async function runSeed(db: Db): Promise<void> {
       sellerDeliveryFeeInPaise: 2500,
       sellerDeliveryRadiusKm: 3,
       pickupInstructions: 'My Home Avatar, Tower 4, Flat 1102, Narsingi',
+      kitchenPhotosJson: [img('1565557623262-b51c2513a641'), img('1589302168068-964664d93dc0'), img('1606491956689-2ea866880c84')],
+      cookingSinceYear: 2017,
+      cuisinesJson: ['Jain Thali'],
     },
     {
       userId: seller5.id,
@@ -184,6 +197,9 @@ export async function runSeed(db: Db): Promise<void> {
       payoutVpaOrBank: 'ritu@upi',
       offersSelfPickup: true,
       pickupInstructions: 'My Home Avatar, Tower 6, Flat 704, Narsingi',
+      kitchenPhotosJson: [img('1512621776951-a57141f2eefd'), img('1546069901-ba9599a7e63c'), img('1540189549336-e6e99c3679fe')],
+      cookingSinceYear: 2023,
+      cuisinesJson: ['Keto Bowls'],
     },
     {
       userId: seller6.id,
@@ -509,6 +525,9 @@ export async function runSeed(db: Db): Promise<void> {
     rating: 5,
     text: 'The dum biryani tasted exactly like my grandmother’s. Rice was perfect!',
     createdAt: daysAgo(5),
+    // Demo of the seller-reply feature (DECISIONS.md #73+) — one reply per review.
+    sellerReplyText: 'Thank you so much! See you again next weekend 🙏',
+    sellerRepliedAt: daysAgo(4),
   });
 
   // 2. delivered tiffin order (reviewed) — failover demo in history
@@ -556,6 +575,18 @@ export async function runSeed(db: Db): Promise<void> {
     buyerId: buyer.id,
     rating: 4,
     text: 'Idlis were incredibly soft. Delivery took a little longer than promised.',
+    createdAt: daysAgo(2),
+  });
+  // Demo complaint (DECISIONS.md #73+) — populates /admin/complaints out of
+  // the box. Seeded directly (bypassing the 24h buyer-facing window check,
+  // which only applies to the create API) so the admin queue isn't empty on
+  // a fresh demo.
+  await db.insert(complaints).values({
+    orderId: o2.id,
+    buyerId: buyer.id,
+    sellerId: seller2.id,
+    category: 'wrong_item',
+    description: 'Got curd rice instead of the pesarattu upma I ordered.',
     createdAt: daysAgo(2),
   });
 
@@ -666,5 +697,5 @@ export async function runSeed(db: Db): Promise<void> {
     href: '/orders',
   });
 
-  console.log('Seed complete: 2 societies, 6 kitchens, 20 dishes, 1 mall, 6 orders.');
+  console.log('Seed complete: 2 societies, 6 kitchens, 20 dishes, 1 mall, 6 orders, 1 demo complaint.');
 }

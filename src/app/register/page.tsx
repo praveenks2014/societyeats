@@ -49,7 +49,9 @@ function RegisterForm() {
       return;
     }
     toast('Welcome to GharSe!');
-    router.push(role === 'seller' ? '/seller' : '/');
+    // Sellers land on the kitchen-profile onboarding step (photos etc.)
+    // before the dashboard — see DECISIONS.md #73+.
+    router.push(role === 'seller' ? '/seller/onboarding' : '/');
     router.refresh();
   }
 
