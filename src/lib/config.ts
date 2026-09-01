@@ -68,6 +68,12 @@ export const DEFAULTS = {
   killWeek8RetentionPct: 8, // week-4 buyer retention, checked at week 8
   killWeek14PenetrationPct: 35, // % of target households registered, checked at week 14
   killWeek14RetentionPct: 15, // week-4 buyer retention, checked at week 14 (matches the steady-state target)
+  // Pilot Hardening v2 — Phase 8 (Feature flags, seed, docs; DECISIONS.md
+  // #112+). Mall Mode's single-store code path is fully retained (see
+  // src/app/m/[mallSlug]) but deferred for this pilot per the founder's
+  // fixed decision — gated off by default, admin-flippable for a future demo
+  // without a redeploy, exactly like platformDeliveryEnabled above.
+  mallModeEnabled: false,
 };
 
 export function isMockMode(): boolean {

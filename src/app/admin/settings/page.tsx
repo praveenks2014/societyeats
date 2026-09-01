@@ -22,6 +22,7 @@ type Settings = {
   killWeek8RetentionPct: number;
   killWeek14PenetrationPct: number;
   killWeek14RetentionPct: number;
+  mallModeEnabled: boolean;
 };
 
 const FIELDS: { key: keyof Settings; label: string; hint: string }[] = [
@@ -76,6 +77,7 @@ export default function AdminSettings() {
   const [mockMode, setMockMode] = useState(true);
   const [form, setForm] = useState<Record<string, string>>({});
   const [platformDeliveryEnabled, setPlatformDeliveryEnabled] = useState(false);
+  const [mallModeEnabled, setMallModeEnabled] = useState(false);
   const [fssaiLicenseNo, setFssaiLicenseNo] = useState('');
   const [busy, setBusy] = useState(false);
   const toast = useToast();
@@ -87,11 +89,17 @@ export default function AdminSettings() {
         setSettings(d.settings);
         setMockMode(d.mockMode);
         setPlatformDeliveryEnabled(!!d.settings.platformDeliveryEnabled);
+        setMallModeEnabled(!!d.settings.mallModeEnabled);
         setFssaiLicenseNo(d.settings.platformFssaiCentralLicenseNo ?? '');
         setForm(
           Object.fromEntries(
             Object.entries(d.settings)
-              .filter(([k]) => k !== 'platformDeliveryEnabled' && k !== 'platformFssaiCentralLicenseNo')
+              .filter(
+                ([k]) =>
+                  k !== 'platformDeliveryEnabled' &&
+                  k !== 'mallModeEnabled' &&
+                  k !== 'platformFssaiCentralLicenseNo',
+              )
               .map(([k, v]) => [k, String(v)]),
           ),
         );
@@ -103,6 +111,7 @@ export default function AdminSettings() {
     setBusy(true);
     const body: Record<string, number | boolean | string> = {
       platformDeliveryEnabled,
+      mallModeEnabled,
       platformFssaiCentralLicenseNo: fssaiLicenseNo.trim(),
     };
     for (const f of [...FIELDS, ...PLATFORM_DELIVERY_FIELDS, ...KILL_PIVOT_FIELDS]) body[f.key] = Number(form[f.key]);
@@ -119,6 +128,7 @@ export default function AdminSettings() {
     }
     setSettings(d.settings);
     setPlatformDeliveryEnabled(!!d.settings.platformDeliveryEnabled);
+    setMallModeEnabled(!!d.settings.mallModeEnabled);
     setFssaiLicenseNo(d.settings.platformFssaiCentralLicenseNo ?? '');
     toast('Settings live ✅ — applies to the next order');
   }
@@ -146,6 +156,25 @@ export default function AdminSettings() {
             />
           </Field>
         ))}
+
+        <Card className="p-4">
+          <div className="eyebrow mb-2">FEATURE_MALL_MODE</div>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={mallModeEnabled}
+              onChange={(e) => setMallModeEnabled(e.target.checked)}
+              className="h-4 w-4 accent-leaf"
+            />
+            Enable Mall Mode (food-court QR order-ahead)
+          </label>
+          <p className="mt-1 text-xs text-ink-faint">
+            Deferred for this pilot — one gated society doesn&apos;t need a mall counter. The
+            single-store code (<code>/m/[mallSlug]</code>) is fully retained and untouched; this
+            just keeps it off the home page and blocks new mall-pickup orders until a mall partner
+            is actually signed. Off by default.
+          </p>
+        </Card>
 
         <Card className="p-4">
           <div className="eyebrow mb-2">FULFILLMENT — PLATFORM DELIVERY (OVERFLOW)</div>

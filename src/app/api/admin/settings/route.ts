@@ -25,7 +25,11 @@ const EDITABLE = new Set([
 ]);
 // platform_config values are always stored as text; booleans get their own
 // set so PATCH knows to expect true/false instead of a non-negative number.
-const EDITABLE_BOOL = new Set(['platformDeliveryEnabled']);
+const EDITABLE_BOOL = new Set([
+  'platformDeliveryEnabled',
+  // Pilot Hardening v2 — Phase 8 (DECISIONS.md #112+).
+  'mallModeEnabled',
+]);
 // Pilot Hardening v2 — Phase 4 (DECISIONS.md #62+): free-text settings, kept
 // separate from EDITABLE (numbers) so PATCH can apply the right validation.
 const EDITABLE_TEXT = new Set(['platformFssaiCentralLicenseNo']);

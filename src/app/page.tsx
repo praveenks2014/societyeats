@@ -3,11 +3,12 @@ import { Hero } from '@/components/hero';
 import { Browse } from '@/components/browse';
 import { FeaturedKitchen } from '@/components/featured-kitchen';
 import { getFeaturedKitchen } from '@/lib/browse';
+import { getPlatformSettings } from '@/lib/db/platform';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
-  const featured = await getFeaturedKitchen();
+  const [featured, settings] = await Promise.all([getFeaturedKitchen(), getPlatformSettings()]);
   return (
     <>
       <Hero />
@@ -30,7 +31,12 @@ export default async function HomePage() {
           <Link href="/legal/food-safety" className="hover:text-ink">Food safety</Link>
           <Link href="/legal/privacy" className="hover:text-ink">Privacy</Link>
           <Link href="/legal/refunds" className="hover:text-ink">Refunds</Link>
-          <Link href="/m/gvk-one" className="hover:text-ink">Mall Mode (GVK One)</Link>
+          {/* Pilot Hardening v2 — Phase 8 (DECISIONS.md #112+): Mall Mode is
+              deferred this pilot (FEATURE_MALL_MODE off by default) — the code
+              at /m/[mallSlug] still works, it's just not promoted here. */}
+          {settings.mallModeEnabled && (
+            <Link href="/m/gvk-one" className="hover:text-ink">Mall Mode (GVK One)</Link>
+          )}
           <Link href="/register?as=seller" className="hover:text-ink">Become a home-chef</Link>
         </div>
         <p className="mt-4">

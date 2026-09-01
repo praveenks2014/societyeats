@@ -16,6 +16,7 @@ import {
   orderItems,
   orders,
   payments,
+  payouts,
   platformConfig,
   providerHealth,
   referralCredits,
@@ -760,8 +761,9 @@ export async function runSeed(db: Db): Promise<void> {
   // is this kitchen's only "hand-authored" order, which alone wouldn't cross
   // the lowest tier. Minimal events (no delivery/review rows) since only
   // orders.status matters for the badge count.
+  let extraComplaintOrder: { id: number; buyerId: number } | null = null;
   for (let i = 0; i < 9; i++) {
-    await seedOrder({
+    const o = await seedOrder({
       buyerId: i % 2 === 0 ? buyer.id : buyer2.id,
       type: 'home_delivery',
       sellerId: seller1.id,
@@ -776,6 +778,21 @@ export async function runSeed(db: Db): Promise<void> {
         { status: 'placed', minutesAfter: 0 },
         { status: 'delivered', note: 'OTP verified by rider', minutesAfter: 45 },
       ],
+    });
+    // 4th demo complaint (DECISIONS.md #112+): left OPEN (unresolved), unlike
+    // the wrong_item one above and the two resolved ones seeded below, so the
+    // admin queue shows all three real-world states (open + resolved x2) out
+    // of the box instead of only "already handled" ones.
+    if (i === 4) extraComplaintOrder = { id: o.id, buyerId: o.buyerId };
+  }
+  if (extraComplaintOrder) {
+    await db.insert(complaints).values({
+      orderId: extraComplaintOrder.id,
+      buyerId: extraComplaintOrder.buyerId,
+      sellerId: seller1.id,
+      category: 'not_received',
+      description: 'Order was marked delivered but never arrived — please check with the rider.',
+      createdAt: daysAgo(4),
     });
   }
 
@@ -1030,6 +1047,18 @@ export async function runSeed(db: Db): Promise<void> {
   const everOrderedPool: number[] = [];
   const weekFirstOrder: Record<number, { id: number; buyerId: number; sellerId: number | null; totalInPaise: number }> = {};
   let pilotOtpSeq = 0;
+  // Pilot Hardening v2 — Phase 8 (DECISIONS.md #112+): every non-cancelled
+  // pilot-history order, tagged with its week, so two T+2 payout batches can
+  // be built from real seeded orders below (see "payout batches" section
+  // after the resolved-complaints block, once refund amounts are known).
+  const payoutCandidateOrders: {
+    id: number;
+    sellerId: number;
+    subtotalInPaise: number;
+    commissionInPaise: number;
+    createdAt: Date;
+    week: number;
+  }[] = [];
 
   for (let w = 1; w <= PILOT_WEEKS; w++) {
     const ordersThisWeek = ORDERS_PER_WEEK[w - 1];
@@ -1120,6 +1149,14 @@ export async function runSeed(db: Db): Promise<void> {
         if (isFreshOrder) freshBuyersByWeek[w - 1].push(buyerId);
         if (!everOrderedPool.includes(buyerId)) everOrderedPool.push(buyerId);
         if (i === 0) weekFirstOrder[w] = order;
+        payoutCandidateOrders.push({
+          id: order.id,
+          sellerId,
+          subtotalInPaise: order.subtotalInPaise,
+          commissionInPaise: order.commissionInPaise,
+          createdAt: order.createdAt,
+          week: w,
+        });
       }
     }
   }
@@ -1161,7 +1198,116 @@ export async function runSeed(db: Db): Promise<void> {
   if (weekFirstOrder[7]) await seedResolvedComplaint(weekFirstOrder[7], 8);
   if (weekFirstOrder[8]) await seedResolvedComplaint(weekFirstOrder[8], 1);
 
+  // ================================================================
+  // Pilot Hardening v2 — Phase 8 (Feature flags, seed, docs; DECISIONS.md
+  // #112+): two T+2 payout batches, so /admin/payouts and /seller/earnings
+  // both have a real "already paid" batch AND a real "awaiting payout"
+  // (pending) batch out of the box — the whole money-out-the-door story a
+  // pilot walkthrough needs, not just money-in.
+  //
+  // Hand-computed here rather than by calling the real
+  // src/lib/payouts.ts#generatePayoutBatch() — that function calls getDb()
+  // itself, and src/lib/db/index.ts's embedded-PGlite fallback calls THIS
+  // seed module from *inside* getDb()'s own still-pending initDb() promise;
+  // awaiting a second getDb() from in here would await a promise that can
+  // only resolve once this very seed run returns, i.e. a real deadlock on
+  // that one (auto-seed, no DATABASE_URL) code path. The math below mirrors
+  // generatePayoutBatch()'s own formula exactly (gross sales minus
+  // commission minus a flat gateway-fee estimate minus any refund
+  // deduction; TDS omitted — no seeded seller gets near the ₹5,00,000 FY
+  // threshold at pilot scale) applied to a fixed, already-known order list
+  // instead of a live DB sweep.
+  //
+  // Batch A ("paid"): weeks 1-6 — simulates an admin having already run and
+  // settled a T+2 batch. Batch B ("pending"): weeks 7-8 — simulates the
+  // batch sitting ready for the admin's next "Generate T+2 batch" click,
+  // and picks up the two resolved-complaint refunds seeded just above
+  // (both land in weeks 7/8) as real refundDeductionInPaise line items.
+  const gatewayFeeEstimateOf = (grossSales: number) =>
+    Math.round((grossSales * DEFAULTS.gatewayFeeEstimatePct) / 100);
+
+  async function seedPayoutBatch(
+    candidates: typeof payoutCandidateOrders,
+    opts: {
+      status: 'pending' | 'paid';
+      paidAt?: Date;
+      utrPrefix?: string;
+      refundBySeller?: Map<number, { amount: number; orderIds: number[] }>;
+    },
+  ) {
+    const bySeller = new Map<number, typeof candidates>();
+    for (const c of candidates) {
+      const list = bySeller.get(c.sellerId);
+      if (list) list.push(c);
+      else bySeller.set(c.sellerId, [c]);
+    }
+    for (const [sellerId, list] of bySeller) {
+      const grossSales = list.reduce((s, o) => s + o.subtotalInPaise, 0);
+      const commissionSum = list.reduce((s, o) => s + o.commissionInPaise, 0);
+      const gatewayFee = gatewayFeeEstimateOf(grossSales);
+      const refund = opts.refundBySeller?.get(sellerId);
+      const refundDeduction = refund?.amount ?? 0;
+      const netPayable = grossSales - commissionSum - gatewayFee - refundDeduction;
+      const periodStart = list.reduce((min, o) => (o.createdAt < min ? o.createdAt : min), list[0].createdAt);
+      const periodEnd = list.reduce((max, o) => (o.createdAt > max ? o.createdAt : max), list[0].createdAt);
+      const [profile] = await db.select().from(sellerProfiles).where(eq(sellerProfiles.userId, sellerId));
+      const [payout] = await db
+        .insert(payouts)
+        .values({
+          sellerId,
+          periodStart,
+          periodEnd,
+          orderCount: list.length,
+          grossSalesInPaise: grossSales,
+          commissionInPaise: commissionSum,
+          gatewayFeeEstimateInPaise: gatewayFee,
+          tds194OInPaise: 0,
+          refundDeductionInPaise: refundDeduction,
+          netPayableInPaise: netPayable,
+          status: opts.status,
+          paidAt: opts.paidAt,
+          utrReference: opts.status === 'paid' ? `${opts.utrPrefix}${sellerId}` : null,
+          payoutDestinationSnapshot: profile?.payoutVpaOrBank ?? null,
+        })
+        .returning();
+      for (const o of list) {
+        await db.update(orders).set({ payoutId: payout.id }).where(eq(orders.id, o.id));
+      }
+      if (refund) {
+        for (const oid of refund.orderIds) {
+          await db
+            .update(orders)
+            .set({ payoutId: payout.id, refundDeductedAt: opts.paidAt ?? new Date() })
+            .where(eq(orders.id, oid));
+        }
+      }
+    }
+  }
+
+  await seedPayoutBatch(
+    payoutCandidateOrders.filter((o) => o.week <= 6),
+    { status: 'paid', paidAt: daysAgo(5), utrPrefix: 'UTR-DEMO-A-' },
+  );
+
+  // Mirrors seedResolvedComplaint()'s own 25%-of-total refund figure for the
+  // same two orders — computed independently here (rather than threaded
+  // through as a return value) since both sides derive it the same simple
+  // way from data already on hand.
+  const refundBySeller = new Map<number, { amount: number; orderIds: number[] }>();
+  for (const order of [weekFirstOrder[7], weekFirstOrder[8]]) {
+    if (!order?.sellerId) continue;
+    const amount = Math.round(order.totalInPaise * 0.25);
+    const entry = refundBySeller.get(order.sellerId) ?? { amount: 0, orderIds: [] };
+    entry.amount += amount;
+    entry.orderIds.push(order.id);
+    refundBySeller.set(order.sellerId, entry);
+  }
+  await seedPayoutBatch(
+    payoutCandidateOrders.filter((o) => o.week >= 7),
+    { status: 'pending', refundBySeller },
+  );
+
   console.log(
-    'Seed complete: 2 societies, 9 kitchens, 25 dishes, 1 mall, 175 orders (incl. 8 weeks of pilot-metrics history), 3 complaints, 1 referral credit.',
+    'Seed complete: 2 societies (1 live), 9 kitchens, 26 dishes, 1 mall (flagged off), 175 orders (incl. 8 weeks of pilot-metrics history), 4 complaints, 1 referral credit, 2 payout batches.',
   );
 }

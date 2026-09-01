@@ -222,6 +222,13 @@ export const POST = api(async (req) => {
   }
 
   // ---- mall pickup ----
+  // Pilot Hardening v2 — Phase 8 (DECISIONS.md #112+): Mall Mode is deferred
+  // this pilot. The buyer-facing storefront already 404s while the flag is
+  // off (src/app/m/[mallSlug]/page.tsx), so this is defense-in-depth against
+  // a direct API call rather than the primary gate.
+  if (!settings.mallModeEnabled) {
+    throw new ApiError(503, 'Mall Mode is not available during this pilot');
+  }
   if (!body.restaurantId) throw new ApiError(400, 'Missing restaurant');
   const [restaurant] = await db
     .select({ restaurant: restaurants, mall: malls })

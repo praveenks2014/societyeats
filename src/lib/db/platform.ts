@@ -25,6 +25,8 @@ export type PlatformSettings = {
   killWeek8RetentionPct: number;
   killWeek14PenetrationPct: number;
   killWeek14RetentionPct: number;
+  // Pilot Hardening v2 — Phase 8 (DECISIONS.md #112+).
+  mallModeEnabled: boolean;
 };
 
 /** Admin-editable settings stored in platform_config, defaults from config.ts. */
@@ -72,6 +74,7 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
     killWeek8RetentionPct: num('killWeek8RetentionPct', DEFAULTS.killWeek8RetentionPct),
     killWeek14PenetrationPct: num('killWeek14PenetrationPct', DEFAULTS.killWeek14PenetrationPct),
     killWeek14RetentionPct: num('killWeek14RetentionPct', DEFAULTS.killWeek14RetentionPct),
+    mallModeEnabled: bool('mallModeEnabled', DEFAULTS.mallModeEnabled),
   };
 }
 
