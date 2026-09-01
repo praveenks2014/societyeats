@@ -4,6 +4,8 @@ import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { fssaiApplications, listings, orders, sellerProfiles, subscriptions } from '@/lib/db/schema';
 import { getPlatformSettings } from '@/lib/db/platform';
+import { fssaiDeemedGrantInfo } from '@/lib/fssai/gate';
+import { maybeNotifyDeemedGrantWindow } from '@/lib/fssai/reminders';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,18 +41,19 @@ export const GET = api(async () => {
     (o) => (o.status === 'delivered' || o.status === 'picked_up') && o.createdAt >= today,
   );
 
-  let pendingDaysLeft: number | null = null;
-  if (profile.fssaiStatus === 'pending_application' && application) {
-    const elapsed = (Date.now() - application.createdAt.getTime()) / (24 * 60 * 60 * 1000);
-    pendingDaysLeft = Math.max(0, Math.ceil(settings.fssaiPendingMaxDays - elapsed));
-  }
+  // FSSAI hardening v3 (DECISIONS.md #119+): the deemed-commencement
+  // countdown/eligibility shown on /seller/compliance, plus the lazy,
+  // dedupe-on-read reminder notification (item 5) — see
+  // src/lib/fssai/reminders.ts for why this fires here rather than a cron.
+  const fssaiDeemedGrant = fssaiDeemedGrantInfo(application ?? null);
+  await maybeNotifyDeemedGrantWindow(session.uid, application ?? null);
 
   return ok({
     profile,
     application: application ?? null,
     plan: sub?.plan ?? 'free',
-    pendingDaysLeft,
-    settings: { commissionHomePct: settings.commissionHomePct, fssaiPendingMaxDays: settings.fssaiPendingMaxDays },
+    fssaiDeemedGrant,
+    settings: { commissionHomePct: settings.commissionHomePct },
     stats: {
       listings: myListings.length,
       activeListings: myListings.filter((l) => l.isActive).length,

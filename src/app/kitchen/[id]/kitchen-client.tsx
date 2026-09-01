@@ -7,6 +7,7 @@ import { DishCard } from '@/components/dish-card';
 import { ShareButton } from '@/components/share-button';
 import { CartBar } from '@/components/cart-bar';
 import { BADGE_TIER_LABEL } from '@/lib/reputation-labels';
+import { fssaiBadge } from '@/lib/fssai/badge';
 
 type Props = {
   seller: {
@@ -15,8 +16,9 @@ type Props = {
     bio: string | null;
     rating: number;
     ratingCount: number;
-    fssaiStatus: 'verified' | 'pending_application' | 'unverified';
+    fssaiStatus: 'verified' | 'pending_application' | 'unverified' | 'awaiting_admin_check';
     fssaiNumber: string | null;
+    eligibleFoscosRef: string | null;
     vegOnly: boolean;
     societyName: string | null;
     kitchenPhotos: string[];
@@ -87,11 +89,7 @@ export function KitchenProfile({ seller, listings, reviews }: Props) {
         )}
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          {seller.fssaiStatus === 'verified' ? (
-            <Badge tone="green">FSSAI Verified ✅ · Lic. {seller.fssaiNumber}</Badge>
-          ) : (
-            <Badge tone="amber">FSSAI Pending — application under process</Badge>
-          )}
+          <Badge tone={fssaiBadge(seller).tone}>{fssaiBadge(seller).label}</Badge>
           {seller.orderedByCount > 0 && (
             <Badge tone="neutral">Ordered by {seller.orderedByCount} neighbours</Badge>
           )}

@@ -12,8 +12,35 @@ import {
 import { getPlatformSettings } from '@/lib/db/platform';
 import { DEFAULTS } from '@/lib/config';
 import { haversineKm, type GeoPoint } from '@/lib/geo';
+import { fssaiFiledEligible, isFssaiEligibleToPublish } from '@/lib/fssai/gate';
 import { neighbourOrderCount, sellerBadgeTier, sellerCompletedOrderCount } from '@/lib/reputation';
 import { currentSlot, isSlotSoldOut, slotOrderCount } from '@/lib/slots';
+
+/**
+ * FSSAI hardening v3 (DECISIONS.md #119+): each seller's own most recent
+ * fssaiApplications row, batch-fetched once per distinct seller in a
+ * result set (never per-listing) — same "fetch once, reduce in JS" pattern
+ * this file already uses for slot capacity / neighbour counts below.
+ * `orderBy(desc(createdAt))` over ALL matching sellers, reduced to the
+ * first (newest) row per sellerId in JS — cheap at pilot scale (a handful
+ * of applications per seller, a handful of sellers).
+ */
+async function latestApplicationsBySeller(
+  sellerIds: number[],
+): Promise<Map<number, typeof fssaiApplications.$inferSelect>> {
+  const map = new Map<number, typeof fssaiApplications.$inferSelect>();
+  if (sellerIds.length === 0) return map;
+  const db = await getDb();
+  const rows = await db
+    .select()
+    .from(fssaiApplications)
+    .where(inArray(fssaiApplications.sellerId, sellerIds))
+    .orderBy(desc(fssaiApplications.createdAt));
+  for (const row of rows) {
+    if (!map.has(row.sellerId)) map.set(row.sellerId, row);
+  }
+  return map;
+}
 
 const EARTH_RADIUS_KM = 6371; // matches src/lib/geo.ts's haversineKm exactly
 
@@ -48,8 +75,10 @@ export type ListingCard = {
   vegOnly: boolean;
   rating: number;
   ratingCount: number;
-  fssaiStatus: 'verified' | 'pending_application' | 'unverified';
+  fssaiStatus: 'verified' | 'pending_application' | 'unverified' | 'awaiting_admin_check';
   fssaiNumber: string | null;
+  /** FSSAI hardening v3 (DECISIONS.md #119+): see FssaiBadgeInput's own doc comment. */
+  eligibleFoscosRef: string | null;
   societyName: string | null;
   distanceKm: number | null;
   /** DECISIONS.md #37+: this listing's seller has hit maxOrdersPerSlot for the current meal slot. */
@@ -60,38 +89,6 @@ export type ListingCard = {
   orderedByCount: number;
 };
 
-/** Seller rows eligible to appear to buyers, with FSSAI-pending auto-pause applied. */
-async function eligibleSellerFilter() {
-  const db = await getDb();
-  const settings = await getPlatformSettings();
-
-  // pending kitchens past the grace window get their listings auto-paused
-  const pending = await db
-    .select({ userId: sellerProfiles.userId })
-    .from(sellerProfiles)
-    .where(eq(sellerProfiles.fssaiStatus, 'pending_application'));
-  if (pending.length > 0) {
-    const apps = await db
-      .select()
-      .from(fssaiApplications)
-      .where(inArray(fssaiApplications.sellerId, pending.map((p) => p.userId)));
-    const cutoffMs = settings.fssaiPendingMaxDays * 24 * 60 * 60 * 1000;
-    for (const p of pending) {
-      const app = apps
-        .filter((a) => a.sellerId === p.userId)
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-      const startedAt = app?.createdAt ?? new Date(0);
-      if (Date.now() - startedAt.getTime() > cutoffMs) {
-        await db
-          .update(listings)
-          .set({ isActive: false })
-          .where(eq(listings.sellerId, p.userId));
-      }
-    }
-  }
-  return settings;
-}
-
 export async function browseListings(opts: {
   lat?: number;
   lng?: number;
@@ -100,7 +97,7 @@ export async function browseListings(opts: {
   q?: string;
 }): Promise<{ listings: ListingCard[]; cuisines: string[]; radiusKm: number }> {
   const db = await getDb();
-  const settings = await eligibleSellerFilter();
+  const settings = await getPlatformSettings();
 
   // Effective seller point: their own lat/lng if set, else their society's —
   // same fallback the buyer-facing distance always used, now computed once
@@ -110,11 +107,18 @@ export async function browseListings(opts: {
   const hasLoc = opts.lat != null && opts.lng != null;
   const distanceExpr = hasLoc ? haversineKmSql(opts.lat!, opts.lng!, effLat, effLng) : null;
 
+  // FSSAI hardening v3 (DECISIONS.md #119+): the old SQL `ne(fssaiStatus,
+  // 'unverified')` filter (plus the fssaiPendingMaxDays auto-pause that used
+  // to keep it honest — deleted, see src/lib/seller.ts) is replaced by the
+  // real publishing-eligibility check below, applied per-row in JS once
+  // each seller's latest application is known (SQL can't express the
+  // deemed-commencement date math against a joined application row cheaply,
+  // and this file already reduces several other per-seller signals in JS —
+  // see the slot/neighbour-count caches further down).
   const conditions = [
     eq(listings.isActive, true),
     gt(listings.availableQty, 0),
     eq(sellerProfiles.isApproved, true),
-    ne(sellerProfiles.fssaiStatus, 'unverified'),
   ];
   if (distanceExpr) {
     // Hard 10 km rule, enforced in SQL against indexed lat/lng columns
@@ -168,6 +172,12 @@ export async function browseListings(opts: {
     return count;
   }
 
+  // FSSAI hardening v3 (DECISIONS.md #119+) — one batched fetch for every
+  // distinct seller in `rows`, not per-listing (a seller may list several
+  // dishes). See isFssaiEligibleToPublish's own doc comment: eligibility
+  // never depends on `profile.fssaiStatus` alone.
+  const applicationBySeller = await latestApplicationsBySeller([...new Set(rows.map((r) => r.listing.sellerId))]);
+
   for (const { listing, profile, society, distanceKm } of rows) {
     cuisines.add(listing.cuisine);
     if (opts.veg && !listing.isVeg) continue;
@@ -180,6 +190,9 @@ export async function browseListings(opts: {
         .includes(q)
     )
       continue;
+
+    const latestApplication = applicationBySeller.get(listing.sellerId) ?? null;
+    if (!isFssaiEligibleToPublish(profile, latestApplication)) continue;
 
     const listingSlots = listing.slotsJson?.slots;
     const slotSoldOut =
@@ -204,6 +217,7 @@ export async function browseListings(opts: {
       ratingCount: profile.ratingCount,
       fssaiStatus: profile.fssaiStatus,
       fssaiNumber: profile.fssaiNumber,
+      eligibleFoscosRef: fssaiFiledEligible(latestApplication) ? latestApplication!.foscosRefNumber : null,
       societyName: society?.name ?? null,
       distanceKm: distanceKm != null ? Number(distanceKm) : null,
       slotSoldOut,
@@ -271,6 +285,10 @@ export async function getListingDetail(id: number, loc?: GeoPoint | null) {
   );
   const orderedByCount = await neighbourOrderCount(row.listing.sellerId);
   const completedOrderCount = await sellerCompletedOrderCount(row.listing.sellerId);
+  // FSSAI hardening v3 (DECISIONS.md #119+) — see the badge doc comment on
+  // ListingCard above; a single-seller lookup here, not the batched one
+  // browseListings() uses (this function only ever looks at one seller).
+  const latestApplication = (await latestApplicationsBySeller([row.listing.sellerId])).get(row.listing.sellerId) ?? null;
 
   return {
     ...row,
@@ -281,6 +299,7 @@ export async function getListingDetail(id: number, loc?: GeoPoint | null) {
     orderedByCount,
     completedOrderCount,
     badgeTier: sellerBadgeTier(completedOrderCount),
+    eligibleFoscosRef: fssaiFiledEligible(latestApplication) ? latestApplication!.foscosRefNumber : null,
   };
 }
 
@@ -322,11 +341,13 @@ export async function getKitchenProfile(sellerId: number) {
     .orderBy(desc(reviews.createdAt))
     .limit(10);
 
-  const [orderedByCount, completedOrderCount, settings] = await Promise.all([
+  const [orderedByCount, completedOrderCount, settings, applicationBySeller] = await Promise.all([
     neighbourOrderCount(sellerId),
     sellerCompletedOrderCount(sellerId),
     getPlatformSettings(),
+    latestApplicationsBySeller([sellerId]),
   ]);
+  const latestApplication = applicationBySeller.get(sellerId) ?? null;
 
   return {
     ...row,
@@ -336,6 +357,8 @@ export async function getKitchenProfile(sellerId: number) {
     completedOrderCount,
     badgeTier: sellerBadgeTier(completedOrderCount),
     isFeatured: settings.featuredSellerId === String(sellerId),
+    // FSSAI hardening v3 (DECISIONS.md #119+) — see ListingCard's own doc comment.
+    eligibleFoscosRef: fssaiFiledEligible(latestApplication) ? latestApplication!.foscosRefNumber : null,
   };
 }
 

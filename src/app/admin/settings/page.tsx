@@ -8,7 +8,6 @@ type Settings = {
   commissionHomePct: number;
   commissionMallPct: number;
   platformFeePaise: number;
-  fssaiPendingMaxDays: number;
   radiusKm: number;
   platformDeliveryEnabled: boolean;
   platformDeliveryFeeInPaise: number;
@@ -29,7 +28,6 @@ const FIELDS: { key: keyof Settings; label: string; hint: string }[] = [
   { key: 'commissionHomePct', label: 'Home-cook commission (%)', hint: 'Deducted from seller payouts. Default 12.' },
   { key: 'commissionMallPct', label: 'Mall restaurant commission (%)', hint: 'No delivery cost — default 6.' },
   { key: 'platformFeePaise', label: 'Buyer platform fee (paise)', hint: '0 = free at launch. 500 = ₹5/order.' },
-  { key: 'fssaiPendingMaxDays', label: 'FSSAI-pending grace window (days)', hint: 'Listings auto-pause after this.' },
   { key: 'radiusKm', label: 'Delivery radius (km)', hint: 'The hyperlocal boundary. Default 10.' },
   {
     key: 'fssaiSponsorshipCapPerCohort',

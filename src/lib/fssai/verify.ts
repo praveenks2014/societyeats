@@ -5,13 +5,27 @@ import { isMockMode } from '@/lib/config';
  *
  * Honest reality check: FSSAI's FoSCoS portal has NO public application-
  * submission API. Third parties only offer license *verification*. GharSe
- * therefore verifies existing licenses here, and new applications go through
- * the human back-office workflow in fssai_applications (filed manually on
- * FoSCoS by the compliance team) — never a fake "submitted to government" API.
+ * therefore verifies existing licenses here — sellers file new applications
+ * themselves on FoSCoS, using GharSe's prefilled summary as a walkthrough —
+ * never a fake "submitted to government" API.
  */
 
 export type FssaiVerification =
-  | { valid: true; holderName: string; status: 'Active'; licenseType: string; expiresOn: string }
+  | {
+      valid: true;
+      holderName: string;
+      status: 'Active';
+      licenseType: string;
+      expiresOn: string;
+      // FSSAI hardening v3 (DECISIONS.md #119+): the licensed address, when
+      // the adapter actually returns one — used to compare against the
+      // kitchen's own address on the admin "Verify licenses" queue.
+      // Deliberately absent in mock mode (an honest adapter doesn't
+      // fabricate data it wasn't given), and only best-effort in the live
+      // branch below since Surepass's own docs weren't verified for this
+      // field's exact shape.
+      address?: string;
+    }
   | { valid: false; reason: string };
 
 export async function verifyFssaiLicense(licenseNumber: string): Promise<FssaiVerification> {
@@ -60,5 +74,6 @@ export async function verifyFssaiLicense(licenseNumber: string): Promise<FssaiVe
     status: 'Active',
     licenseType: d.license_type ?? 'State License',
     expiresOn: d.expiry_date ?? '',
+    address: d.address ?? d.registered_address ?? undefined,
   };
 }

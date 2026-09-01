@@ -199,7 +199,27 @@ export async function runSeed(db: Db): Promise<void> {
       userId: seller3.id,
       kitchenName: 'Mishti Ghor',
       bio: 'Authentic Bengali sweets — rosogolla, sandesh and nolen gur specials.',
-      fssaiStatus: 'pending_application',
+      // FSSAI hardening v3 (DECISIONS.md #119+): demonstrates item 2 (the
+      // "enter it anytime" card) AND item 4 (the regulatory publishing
+      // gate) at once, on a kitchen that ALSO has a filed application —
+      // exactly the "including while an application is pending" case the
+      // spec calls out. fssaiNumber/fssaiCertificateUrl/fssaiLicenseeName
+      // below mirror what POST /api/fssai/verify would have set on a real
+      // submission whose API-returned name didn't fuzzy-match the seller —
+      // deliberately a name mismatch, so this is a real, out-of-the-box
+      // case for the /admin/fssai "Verify licenses" queue.
+      fssaiStatus: 'awaiting_admin_check',
+      fssaiNumber: '23625019991234',
+      fssaiExpiry: '2027-06-30',
+      fssaiCertificateUrl: '/placeholder-doc.svg',
+      fssaiLicenseeName: 'Ramesh Gupta',
+      fssaiLicenseeAddress: null,
+      fssaiVerificationTimelineJson: [
+        {
+          at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+          event: 'License 23625019991234 entered — API found "Ramesh Gupta", queued for admin check (name didn’t auto-match)',
+        },
+      ],
       isApproved: true,
       vegOnly: true,
       rating: 4.4,
@@ -262,7 +282,8 @@ export async function runSeed(db: Db): Promise<void> {
     },
   ]);
 
-  // FSSAI applications for the two pending kitchens
+  // FSSAI applications for Mishti Ghor (awaiting_admin_check — see its
+  // profile above) and FitBowl (pending_application)
   const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
   await db.insert(fssaiApplications).values([
     {
@@ -278,16 +299,23 @@ export async function runSeed(db: Db): Promise<void> {
       ],
       status: 'filed_on_foscos',
       foscosRefNumber: 'FOSCOS-TS-2026-118842',
+      // FSSAI hardening v3 (DECISIONS.md #119+): 65 days ago — past the
+      // 60-day State License deemed-commencement window (src/lib/fssai/
+      // gate.ts), so this kitchen's listings are visible in browse with an
+      // "FSSAI applied · ref FOSCOS-TS-2026-118842" badge out of the box,
+      // demonstrating item 4's regulatory publishing gate and item 5's
+      // reminder notification without waiting for real time to pass.
+      filedAt: daysAgo(65),
       filingMode: 'facilitator',
       facilitationCostInPaise: 200000,
       sponsoredByPlatform: true,
       timelineJson: [
-        { at: daysAgo(9).toISOString(), event: 'Application submitted to GharSe compliance team' },
-        { at: daysAgo(7).toISOString(), event: 'Documents verified by back-office' },
-        { at: daysAgo(6).toISOString(), event: 'Filed on FoSCoS — ref FOSCOS-TS-2026-118842' },
+        { at: daysAgo(65).toISOString(), event: "Application submitted to GharSe's back office" },
+        { at: daysAgo(63).toISOString(), event: 'Documents verified by back-office' },
+        { at: daysAgo(65).toISOString(), event: 'Filed on FoSCoS — ref FOSCOS-TS-2026-118842' },
       ],
-      createdAt: daysAgo(9),
-      updatedAt: daysAgo(6),
+      createdAt: daysAgo(65),
+      updatedAt: daysAgo(65),
     },
     {
       sellerId: seller5.id,
@@ -305,7 +333,7 @@ export async function runSeed(db: Db): Promise<void> {
       facilitationCostInPaise: 200000,
       sponsoredByPlatform: true,
       timelineJson: [
-        { at: daysAgo(2).toISOString(), event: 'Application submitted to GharSe compliance team' },
+        { at: daysAgo(2).toISOString(), event: "Application submitted to GharSe's back office" },
       ],
       createdAt: daysAgo(2),
       updatedAt: daysAgo(2),
@@ -437,7 +465,6 @@ export async function runSeed(db: Db): Promise<void> {
     { key: 'commissionHomePct', value: '12' },
     { key: 'commissionMallPct', value: '6' },
     { key: 'platformFeePaise', value: '0' },
-    { key: 'fssaiPendingMaxDays', value: '30' },
     { key: 'radiusKm', value: '10' },
     { key: 'fssaiSponsorshipCapPerCohort', value: '10' },
     // platformFssaiCentralLicenseNo deliberately left unseeded (empty) — the

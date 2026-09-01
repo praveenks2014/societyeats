@@ -8,10 +8,12 @@ export default async function FoodSafetyPage() {
       <h1>Food Safety</h1>
       <p>
         Every kitchen on {BRAND.name} displays its FSSAI license number, or a clearly-marked amber
-        "FSSAI Pending" badge while its application — filed on FoSCoS either by our compliance team
-        or by the seller themselves using a GharSe-prefilled summary — is under process. Kitchens may
-        operate with the pending badge for a limited grace window, after which their listings pause
-        automatically until the license is granted.
+        "FSSAI Pending" badge while its application — filed on FoSCoS by the seller themselves using
+        a GharSe-prefilled summary — is under process. FoSCoS has no public status API, so GharSe
+        tracks each filing by its reference number: once a filing has gone unanswered past the
+        regulation's own deemed-commencement window (7 days for Basic Registration, 60 for a State
+        License — unless FoSCoS responded with a rejection, inspection order, or inadequacy notice),
+        the kitchen may go live under that provision even before a formal grant.
       </p>
       <h2>What we check</h2>
       <ul>

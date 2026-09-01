@@ -66,7 +66,7 @@ export const POST = api(async (req) => {
       status: filingMode === 'facilitator' ? 'submitted_to_backoffice' : 'draft',
       timelineJson:
         filingMode === 'facilitator'
-          ? [{ at: now, event: 'Application submitted to GharSe compliance team' }]
+          ? [{ at: now, event: "Application submitted to GharSe's back office" }]
           : [{ at: now, event: 'Application created — filing it yourself on FoSCoS' }],
     })
     .returning();

@@ -11,7 +11,9 @@ type Body =
   | { action: 'file'; foscosRefNumber: string }
   | { action: 'grant'; licenseNumber: string }
   | { action: 'reject'; reason?: string }
-  | { action: 'sponsor'; sponsoredByPlatform: boolean };
+  | { action: 'sponsor'; sponsoredByPlatform: boolean }
+  | { action: 'inspection_ordered' }
+  | { action: 'inadequacy_notice' };
 
 /** Back-office completes the honest FSSAI loop: file on FoSCoS by hand, then record the outcome. */
 export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => {
@@ -33,6 +35,10 @@ export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => 
       .set({
         status: 'filed_on_foscos',
         foscosRefNumber: body.foscosRefNumber.trim(),
+        // FSSAI hardening v3 (DECISIONS.md #119+): the anchor the regulatory
+        // publishing gate (src/lib/fssai/gate.ts) measures its 7/60-day
+        // deemed-commencement window from.
+        filedAt: new Date(),
         timelineJson: timeline,
         updatedAt: new Date(),
       })
@@ -80,7 +86,7 @@ export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => 
     await notify(
       app.sellerId,
       'FSSAI application needs attention',
-      body.reason || 'Our compliance team could not file this application. Please review and resubmit.',
+      body.reason || 'This application could not be filed as submitted. Please review and resubmit.',
       '/seller/compliance',
     );
   } else if (body.action === 'sponsor') {
@@ -92,6 +98,29 @@ export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => 
       .update(fssaiApplications)
       .set({ sponsoredByPlatform: body.sponsoredByPlatform, updatedAt: new Date() })
       .where(eq(fssaiApplications.id, id));
+  } else if (body.action === 'inspection_ordered' || body.action === 'inadequacy_notice') {
+    // FSSAI hardening v3 (DECISIONS.md #119+): records that FoSCoS actually
+    // responded during the deemed-commencement waiting window (see
+    // src/lib/fssai/gate.ts) — an inspection order (Basic Registration) or
+    // an inadequacy notice (State License). There's no FoSCoS status API to
+    // detect this automatically, so an admin enters it by hand once they
+    // learn of it; moving status away from 'filed_on_foscos' stops the
+    // regulatory publishing gate from firing for this application.
+    if (app.status !== 'filed_on_foscos') {
+      throw new ApiError(400, 'Only an application currently filed on FoSCoS can be moved to this status');
+    }
+    const label = body.action === 'inspection_ordered' ? 'Inspection ordered' : 'Inadequacy notice issued';
+    timeline.push({ at: now, event: `${label} by FoSCoS` });
+    await db
+      .update(fssaiApplications)
+      .set({ status: body.action, timelineJson: timeline, updatedAt: new Date() })
+      .where(eq(fssaiApplications.id, id));
+    await notify(
+      app.sellerId,
+      `FSSAI: ${label.toLowerCase()}`,
+      `FoSCoS responded to your filing (ref ${app.foscosRefNumber}) with a ${label.toLowerCase()} — check your FoSCoS account for next steps.`,
+      '/seller/compliance',
+    );
   } else {
     throw new ApiError(400, 'Unknown action');
   }

@@ -12,6 +12,7 @@ import { useLocation } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 import { formatDistance, haversineKm, type GeoPoint } from '@/lib/geo';
 import { BADGE_TIER_LABEL } from '@/lib/reputation-labels';
+import { fssaiBadge } from '@/lib/fssai/badge';
 
 type Props = {
   listing: {
@@ -33,8 +34,9 @@ type Props = {
     bio: string | null;
     rating: number;
     ratingCount: number;
-    fssaiStatus: 'verified' | 'pending_application' | 'unverified';
+    fssaiStatus: 'verified' | 'pending_application' | 'unverified' | 'awaiting_admin_check';
     fssaiNumber: string | null;
+    eligibleFoscosRef: string | null;
     vegOnly: boolean;
     societyName: string | null;
     kitchenPhotos: string[];
@@ -138,11 +140,7 @@ export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, ot
         )}
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          {seller.fssaiStatus === 'verified' ? (
-            <Badge tone="green">FSSAI Verified ✅ · Lic. {seller.fssaiNumber}</Badge>
-          ) : (
-            <Badge tone="amber">FSSAI Pending — application under process</Badge>
-          )}
+          <Badge tone={fssaiBadge(seller).tone}>{fssaiBadge(seller).label}</Badge>
           {seller.kitchenPhotosVerified && <Badge tone="neutral">📷 Kitchen photos ✓</Badge>}
           {seller.orderedByCount > 0 && (
             <Badge tone="neutral">Ordered by {seller.orderedByCount} neighbours</Badge>

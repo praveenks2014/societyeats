@@ -7,6 +7,7 @@ import { FoodImage } from '@/components/food-image';
 import { useCart, useLocation, useToast, type CartVendor } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 import { formatDistance } from '@/lib/geo';
+import { fssaiBadge } from '@/lib/fssai/badge';
 
 export type DishCardData = {
   id: number;
@@ -19,7 +20,8 @@ export type DishCardData = {
   kitchenName: string;
   rating?: number;
   ratingCount?: number;
-  fssaiStatus?: 'verified' | 'pending_application' | 'unverified';
+  fssaiStatus?: 'verified' | 'pending_application' | 'unverified' | 'awaiting_admin_check';
+  eligibleFoscosRef?: string | null;
   distanceKm?: number | null;
   societyName?: string | null;
   href?: string;
@@ -70,18 +72,21 @@ export function DishCard({
     }
   }
 
+  // Compact card badge: the full fssaiBadge() label is a bit long for a
+  // corner-of-a-photo chip, so "FSSAI ✓" stands in for the verified case
+  // specifically (still the same tone) — every other status uses the
+  // shared label as-is, same as the fuller detail pages.
+  const badge = dish.fssaiStatus && dish.fssaiStatus !== 'unverified'
+    ? fssaiBadge({ fssaiStatus: dish.fssaiStatus, eligibleFoscosRef: dish.eligibleFoscosRef })
+    : null;
+
   const inner = (
     <>
       <div className="relative">
         <FoodImage src={dish.photoUrl} alt={dish.title} className="aspect-[4/3] w-full" />
-        {dish.fssaiStatus === 'pending_application' && (
-          <Badge tone="amber" className="absolute left-2 top-2">
-            FSSAI Pending
-          </Badge>
-        )}
-        {dish.fssaiStatus === 'verified' && (
-          <Badge tone="green" className="absolute left-2 top-2">
-            FSSAI ✓
+        {badge && (
+          <Badge tone={badge.tone} className="absolute left-2 top-2">
+            {dish.fssaiStatus === 'verified' ? 'FSSAI ✓' : badge.label}
           </Badge>
         )}
         {dish.availableQty <= 3 && !dish.slotSoldOut && (

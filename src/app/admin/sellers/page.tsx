@@ -77,6 +77,7 @@ export default function AdminSellers() {
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {s.fssaiStatus === 'verified' && <Badge tone="green">FSSAI ✓ {s.fssaiNumber}</Badge>}
                 {s.fssaiStatus === 'pending_application' && <Badge tone="amber">FSSAI Pending</Badge>}
+                {s.fssaiStatus === 'awaiting_admin_check' && <Badge tone="amber">Verification in progress</Badge>}
                 {s.fssaiStatus === 'unverified' && <Badge tone="red">No FSSAI</Badge>}
                 {s.isApproved ? <Badge tone="green">Approved</Badge> : <Badge tone="neutral">Awaiting approval</Badge>}
                 {s.badgeTier && <Badge tone="neutral">🏅 {s.badgeTier}+ orders ({s.completedOrderCount})</Badge>}

@@ -154,11 +154,11 @@ export function FssaiSummaryView({ applicationId }: { applicationId: number }) {
             <>
               <div className="flex items-center gap-2">
                 <Badge tone="amber">Filed for you</Badge>
-                <span className="text-sm font-semibold">GharSe compliance team files this on FoSCoS</span>
+                <span className="text-sm font-semibold">GharSe's back office files this on FoSCoS</span>
               </div>
               <p className="mt-2 text-sm text-ink-soft">
-                Our team uses this exact summary and document bundle to file your application on
-                FoSCoS by hand within 48 hours, then tracks it through to grant on your{' '}
+                GharSe's back office uses this exact summary and document bundle to file your
+                application on FoSCoS by hand within 48 hours, then tracks it through to grant on your{' '}
                 <Link href="/seller/compliance" className="text-leaf underline">
                   compliance page
                 </Link>
@@ -220,9 +220,10 @@ export function FssaiSummaryView({ applicationId }: { applicationId: number }) {
         <p className="mt-6 border-t border-dashed border-rice-line pt-3 text-[11px] leading-relaxed text-ink-faint">
           This is a prefilled summary to speed up filing — {data.platform.name} does not submit
           applications to any government system on your behalf through an API; FoSCoS has no public
-          submission API for third parties. File this by hand yourself, or GharSe&apos;s compliance
-          team does so manually on your behalf. Confirm license category, required documents and fees
-          on FoSCoS or with your CA before relying on this document.
+          submission API for third parties. File this by hand yourself, or — for a small number of
+          legacy pilot applications — GharSe&apos;s back office does so manually on your behalf.
+          Confirm license category, required documents and fees on FoSCoS or with your CA before
+          relying on this document.
         </p>
       </Card>
     </div>

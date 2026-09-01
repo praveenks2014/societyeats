@@ -34,7 +34,14 @@ export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => 
   const timeline = [...(app.timelineJson ?? []), { at: new Date().toISOString(), event: `Filed on FoSCoS by you — ref ${ref}` }];
   await db
     .update(fssaiApplications)
-    .set({ status: 'filed_on_foscos', foscosRefNumber: ref, timelineJson: timeline, updatedAt: new Date() })
+    .set({
+      status: 'filed_on_foscos',
+      foscosRefNumber: ref,
+      // FSSAI hardening v3 (DECISIONS.md #119+) — see the admin 'file' action's own comment.
+      filedAt: new Date(),
+      timelineJson: timeline,
+      updatedAt: new Date(),
+    })
     .where(eq(fssaiApplications.id, id));
 
   const admins = await db.select().from(users).where(eq(users.role, 'admin'));

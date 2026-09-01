@@ -61,6 +61,7 @@ export default async function DishPage({ params }: { params: { id: string } }) {
         ratingCount: detail.profile.ratingCount,
         fssaiStatus: detail.profile.fssaiStatus,
         fssaiNumber: detail.profile.fssaiNumber,
+        eligibleFoscosRef: detail.eligibleFoscosRef,
         vegOnly: detail.profile.vegOnly,
         societyName: detail.society?.name ?? null,
         kitchenPhotos: detail.profile.kitchenPhotosJson ?? [],

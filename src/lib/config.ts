@@ -24,7 +24,6 @@ export const DEFAULTS = {
   commissionHomePct: 12, // home-cook orders
   commissionMallPct: 6, // mall restaurant orders
   platformFeePaise: 0, // buyer platform fee (₹0 at launch) — the brief's "buyerPlatformFeeInPaise"
-  fssaiPendingMaxDays: 30, // listings auto-pause after this many days on "FSSAI pending"
   deliveryProviderTimeoutMs: 8000,
   providerAutoDisableAfterFailures: 5,
   sellerProPricePaise: 29900, // ₹299/mo, billing is Phase 2
@@ -74,6 +73,12 @@ export const DEFAULTS = {
   // fixed decision — gated off by default, admin-flippable for a future demo
   // without a redeploy, exactly like platformDeliveryEnabled above.
   mallModeEnabled: false,
+  // FSSAI hardening v3 (DECISIONS.md #119+). Statutory "deemed commencement"
+  // windows — fixed constants, not admin-tunable, same treatment as gstPct/
+  // hygieneAutoPauseThreshold above (a regulatory rule, not a pricing/policy
+  // lever an admin should casually retune). See src/lib/fssai/gate.ts.
+  fssaiDeemedGrantDaysRegistration: 7, // Basic Registration
+  fssaiDeemedGrantDaysState: 60, // State License
 };
 
 export function isMockMode(): boolean {

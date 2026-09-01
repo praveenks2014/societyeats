@@ -9,7 +9,6 @@ const EDITABLE = new Set([
   'commissionHomePct',
   'commissionMallPct',
   'platformFeePaise',
-  'fssaiPendingMaxDays',
   'radiusKm',
   'platformDeliveryFeeInPaise',
   'platformDeliveryMinOrderPaise',

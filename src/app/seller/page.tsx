@@ -9,13 +9,19 @@ type Summary = {
   profile: {
     kitchenName: string;
     isApproved: boolean;
-    fssaiStatus: 'verified' | 'pending_application' | 'unverified';
+    fssaiStatus: 'verified' | 'pending_application' | 'unverified' | 'awaiting_admin_check';
     fssaiNumber: string | null;
     rating: number;
     ratingCount: number;
   };
   plan: 'free' | 'pro';
-  pendingDaysLeft: number | null;
+  /** FSSAI hardening v3 (DECISIONS.md #119+): see src/lib/fssai/gate.ts's fssaiDeemedGrantInfo(). */
+  fssaiDeemedGrant: {
+    thresholdDays: number;
+    daysElapsed: number;
+    daysRemaining: number | null;
+    eligible: boolean;
+  } | null;
   settings: { commissionHomePct: number };
   stats: {
     listings: number;
@@ -46,7 +52,13 @@ export default function SellerDashboard() {
   }
 
   const { profile, stats } = data;
-  const complianceOk = profile.isApproved && profile.fssaiStatus !== 'unverified';
+  // FSSAI hardening v3 (DECISIONS.md #119+): mirrors isFssaiEligibleToPublish
+  // (src/lib/fssai/gate.ts) — verified, or a FoSCoS filing old enough to be
+  // deemed-eligible under the regulation. 'awaiting_admin_check' doesn't get
+  // a free pass here on its own; it keeps whatever rights the eligibility
+  // check below already grants it (same "prior publishing rights" the
+  // compliance page shows in detail).
+  const complianceOk = profile.isApproved && (profile.fssaiStatus === 'verified' || !!data.fssaiDeemedGrant?.eligible);
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -55,6 +67,7 @@ export default function SellerDashboard() {
         {profile.rating > 0 && <span>★ {profile.rating.toFixed(1)} ({profile.ratingCount} ratings)</span>}
         {profile.fssaiStatus === 'verified' && <Badge tone="green">FSSAI Verified ✅</Badge>}
         {profile.fssaiStatus === 'pending_application' && <Badge tone="amber">FSSAI Pending</Badge>}
+        {profile.fssaiStatus === 'awaiting_admin_check' && <Badge tone="amber">Verification in progress</Badge>}
         {!profile.isApproved && <Badge tone="red">Awaiting approval</Badge>}
       </div>
 
@@ -62,29 +75,32 @@ export default function SellerDashboard() {
       {!complianceOk && (
         <Card className="mt-5 border-turmeric bg-turmeric-tint/50 p-4">
           <div className="font-semibold">
-            {profile.fssaiStatus === 'unverified'
-              ? '🪪 One step before you can publish dishes'
-              : '⏳ Your kitchen is awaiting GharSe approval'}
+            {profile.fssaiStatus === 'verified'
+              ? '⏳ Your kitchen is awaiting GharSe approval'
+              : '🪪 One step before you can publish dishes'}
           </div>
           <p className="mt-1 text-sm text-ink-soft">
-            {profile.fssaiStatus === 'unverified'
-              ? 'Food businesses in India need an FSSAI license. Verify yours in 30 seconds, or let us file the application for you.'
-              : 'Our team approves new kitchens within a few hours. Meanwhile, set up your dishes as drafts.'}
+            {profile.fssaiStatus === 'verified'
+              ? 'Our team approves new kitchens within a few hours. Meanwhile, set up your dishes as drafts.'
+              : "Food businesses in India need an FSSAI license. Enter one if you've already got it, or file an application yourself on FoSCoS — GharSe prefills everything and walks you through it."}
           </p>
-          {profile.fssaiStatus === 'unverified' && (
+          {profile.fssaiStatus !== 'verified' && (
             <Link href="/seller/compliance">
               <Button className="mt-3">Go to Compliance →</Button>
             </Link>
           )}
         </Card>
       )}
-      {data.pendingDaysLeft != null && (
+      {data.fssaiDeemedGrant && !data.fssaiDeemedGrant.eligible && (
         <Card className="mt-4 p-4 text-sm">
-          <Badge tone="amber">FSSAI Pending</Badge>
+          <Badge tone="amber">FSSAI applied</Badge>
           <p className="mt-2 text-ink-soft">
-            Your dishes show an amber “FSSAI Pending” badge. <strong>{data.pendingDaysLeft} days</strong>{' '}
-            remain in the grace window — after that, listings pause automatically until the license
-            is granted.
+            Your FoSCoS filing is with the department. <strong>{data.fssaiDeemedGrant.daysRemaining} days</strong>{' '}
+            until you may be able to go live under the regulation, even without a grant yet — see your{' '}
+            <Link href="/seller/compliance" className="font-semibold text-leaf underline">
+              Compliance page
+            </Link>{' '}
+            for details.
           </p>
         </Card>
       )}

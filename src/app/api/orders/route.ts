@@ -3,6 +3,7 @@ import { api, ApiError, ok, otp4, readJson } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import {
+  fssaiApplications,
   listings,
   malls,
   orderEvents,
@@ -18,6 +19,7 @@ import {
 import { DEFAULTS, isMockMode } from '@/lib/config';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { getBestQuote } from '@/lib/delivery/orchestrator';
+import { isFssaiEligibleToPublish } from '@/lib/fssai/gate';
 import { haversineKm, type GeoPoint } from '@/lib/geo';
 import { formatINR, pctOf } from '@/lib/money';
 import { createPaymentForOrder } from '@/lib/payments';
@@ -90,7 +92,20 @@ export const POST = api(async (req) => {
       .select()
       .from(sellerProfiles)
       .where(eq(sellerProfiles.userId, body.sellerId));
-    if (!profile?.isApproved || profile.fssaiStatus === 'unverified') {
+    // FSSAI hardening v3 (DECISIONS.md #119+): the same publishing-gate
+    // check assertCanPublish() uses (src/lib/seller.ts) — a defense-in-depth
+    // re-check at order time, same "never trust a client/already-active
+    // listing alone" posture this route already applies elsewhere (radius,
+    // slot caps).
+    const [latestApplication] = profile
+      ? await db
+          .select()
+          .from(fssaiApplications)
+          .where(eq(fssaiApplications.sellerId, body.sellerId))
+          .orderBy(desc(fssaiApplications.createdAt))
+          .limit(1)
+      : [];
+    if (!profile?.isApproved || !isFssaiEligibleToPublish(profile, latestApplication ?? null)) {
       throw new ApiError(400, 'This kitchen is not accepting orders right now');
     }
     if (fulfillmentType === 'self_pickup' && !profile.offersSelfPickup) {

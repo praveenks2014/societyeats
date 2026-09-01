@@ -11,7 +11,7 @@ const CUISINES = ['Biryani', 'Tiffins', 'North Indian', 'Jain Thali', 'Bengali S
 
 type Data = {
   kitchenName: string;
-  fssaiStatus: 'verified' | 'pending_application' | 'unverified';
+  fssaiStatus: 'verified' | 'pending_application' | 'unverified' | 'awaiting_admin_check';
   fssaiNumber: string | null;
   kitchenPhotosJson: string[];
   kitchenVideoUrl: string | null;
@@ -23,6 +23,7 @@ type Data = {
 const FSSAI_BADGE: Record<Data['fssaiStatus'], { label: string; tone: 'green' | 'amber' | 'red' }> = {
   verified: { label: 'FSSAI Verified ✅', tone: 'green' },
   pending_application: { label: 'FSSAI Pending', tone: 'amber' },
+  awaiting_admin_check: { label: 'Verification in progress', tone: 'amber' },
   unverified: { label: 'No FSSAI yet', tone: 'red' },
 };
 

@@ -9,10 +9,12 @@ export const dynamic = 'force-dynamic';
 
 /**
  * The wizard's actual "output" (DECISIONS.md #62+): a prefilled application
- * summary + document bundle that either GharSe's compliance team (facilitator
- * path) or the seller themselves (self-file path) uses to file on FoSCoS by
- * hand. There is no government submission API this calls — it only renders
- * what was already collected in the wizard.
+ * summary + document bundle that either the seller themselves (the only
+ * path the wizard UI offers as of DECISIONS.md #119+) or, for a small
+ * number of legacy applications, GharSe's back office (facilitator path,
+ * backend kept but no longer reachable from the wizard) uses to file on
+ * FoSCoS by hand. There is no government submission API this calls — it
+ * only renders what was already collected in the wizard.
  */
 export const GET = api<{ params: { id: string } }>(async (_req, { params }) => {
   const session = await requireSession();

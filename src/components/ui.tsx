@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef } from 'react';
+import { forwardRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 // ---------- Button ----------
@@ -263,15 +263,43 @@ export function Modal({
   onClose,
   title,
   children,
+  footer,
   sheet = false,
 }: {
   open: boolean;
   onClose: () => void;
   title?: string;
   children: React.ReactNode;
+  /**
+   * Optional actions bar (e.g. a wizard's Back/Continue pair) rendered
+   * OUTSIDE the scrollable body, in its own fixed-height flex row at the
+   * bottom of the dialog — so it stays reachable no matter how tall the
+   * body content is or how short the viewport is (a plain CSS
+   * `position: sticky` footer can still end up pushed past a very short
+   * viewport if the sticky element itself is taller than the remaining
+   * space; pinning it outside the scroll region entirely avoids that).
+   */
+  footer?: React.ReactNode;
   /** bottom-sheet on mobile */
   sheet?: boolean;
 }) {
+  // Lock background scroll while the dialog is open. The cleanup function
+  // below fires whenever `open` flips back to false (dependency change) —
+  // AND whenever this Modal component itself unmounts, since React always
+  // runs an effect's cleanup on unmount regardless of why the unmount
+  // happened. That matters here: if the parent tree unmounts abruptly
+  // (e.g. a route navigation while the dialog is open) framer-motion's own
+  // exit animation never runs, so an onExitComplete-only restore would
+  // leave body scroll locked forever — this cleanup restores it either way.
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
   return (
     <AnimatePresence>
       {open && (
@@ -294,12 +322,21 @@ export function Modal({
             transition={{ type: 'spring', damping: 30, stiffness: 380 }}
             className={
               sheet
-                ? 'absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-3xl bg-rice p-5 pb-8 shadow-lift sm:left-1/2 sm:right-auto sm:bottom-auto sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl'
-                : 'absolute left-1/2 top-1/2 max-h-[85vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl bg-rice p-5 shadow-lift'
+                ? 'absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col overflow-hidden rounded-t-3xl bg-rice shadow-lift sm:left-1/2 sm:right-auto sm:bottom-auto sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl'
+                : 'absolute left-1/2 top-1/2 flex max-h-[85vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl bg-rice shadow-lift'
             }
           >
-            {title && <h3 className="mb-4 text-lg font-bold">{title}</h3>}
-            {children}
+            {/* Scrollable body — overscroll-contain stops an over-scroll at
+                the top/bottom of this box from "leaking" into a rubber-band
+                scroll of the page behind it (mainly an iOS Safari behaviour;
+                the body-overflow lock above is the primary/cross-browser fix). */}
+            <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${sheet ? 'p-5 pb-8' : 'p-5'}`}>
+              {title && <h3 className="mb-4 text-lg font-bold">{title}</h3>}
+              {children}
+            </div>
+            {footer && (
+              <div className="sticky bottom-0 shrink-0 border-t border-rice-line bg-rice px-5 py-4">{footer}</div>
+            )}
           </motion.div>
         </div>
       )}

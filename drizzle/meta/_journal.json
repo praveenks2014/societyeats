@@ -57,6 +57,13 @@
       "when": 1788262444246,
       "tag": "0007_icy_susan_delgado",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788290545141,
+      "tag": "0008_careful_korg",
+      "breakpoints": true
     }
   ]
 }

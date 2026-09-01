@@ -38,6 +38,7 @@ export default async function KitchenPage({ params }: { params: { id: string } }
         ratingCount: kitchen.profile.ratingCount,
         fssaiStatus: kitchen.profile.fssaiStatus,
         fssaiNumber: kitchen.profile.fssaiNumber,
+        eligibleFoscosRef: kitchen.eligibleFoscosRef,
         vegOnly: kitchen.profile.vegOnly,
         societyName: kitchen.society?.name ?? null,
         kitchenPhotos: kitchen.profile.kitchenPhotosJson ?? [],

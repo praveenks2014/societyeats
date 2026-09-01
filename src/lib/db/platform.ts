@@ -7,7 +7,6 @@ export type PlatformSettings = {
   commissionHomePct: number;
   commissionMallPct: number;
   platformFeePaise: number;
-  fssaiPendingMaxDays: number;
   radiusKm: number;
   // Pilot Hardening v2 — fulfillment pivot (DECISIONS.md #37+).
   platformDeliveryEnabled: boolean;
@@ -51,7 +50,6 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
     commissionHomePct: num('commissionHomePct', DEFAULTS.commissionHomePct),
     commissionMallPct: num('commissionMallPct', DEFAULTS.commissionMallPct),
     platformFeePaise: num('platformFeePaise', DEFAULTS.platformFeePaise),
-    fssaiPendingMaxDays: num('fssaiPendingMaxDays', DEFAULTS.fssaiPendingMaxDays),
     radiusKm: num('radiusKm', DEFAULTS.radiusKm),
     platformDeliveryEnabled: bool('platformDeliveryEnabled', DEFAULTS.platformDeliveryEnabled),
     platformDeliveryFeeInPaise: num('platformDeliveryFeeInPaise', DEFAULTS.platformDeliveryFeeInPaise),

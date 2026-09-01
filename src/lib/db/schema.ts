@@ -19,21 +19,43 @@ import {
 
 export const roleEnum = pgEnum('role', ['buyer', 'seller', 'restaurant', 'admin']);
 
+// FSSAI hardening v3 (DECISIONS.md #119+): 'awaiting_admin_check' — a seller
+// entered a license number + certificate via the "enter it anytime" card
+// (see fssaiVerifiedByEnum below) that the verification adapter either
+// couldn't confirm or couldn't confidently match to this seller's own
+// identity, so it's queued for a human check on /admin/fssai instead of
+// auto-verifying.
 export const fssaiStatusEnum = pgEnum('fssai_status', [
   'verified',
   'pending_application',
   'unverified',
+  'awaiting_admin_check',
 ]);
 
+// FSSAI hardening v3 (DECISIONS.md #119+): 'inspection_ordered' and
+// 'inadequacy_notice' are the two ways FoSCoS can interrupt the regulatory
+// "deemed commencement" window (see src/lib/fssai/gate.ts) while an
+// application sits at 'filed_on_foscos' — an admin moves it here by hand
+// (there's no FoSCoS status API to detect this automatically) once they
+// learn FoSCoS actually responded during the waiting period, which stops
+// the deemed-eligible publishing gate from firing for that application.
 export const fssaiAppStatusEnum = pgEnum('fssai_app_status', [
   'draft',
   'submitted_to_backoffice',
   'filed_on_foscos',
   'granted',
   'rejected',
+  'inspection_ordered',
+  'inadequacy_notice',
 ]);
 
 export const licenseTypeEnum = pgEnum('license_type', ['registration', 'state']);
+
+// FSSAI hardening v3 (DECISIONS.md #119+): who confirmed a license entered
+// via the "enter it anytime" card — the verification adapter matched it to
+// the seller's own name/kitchen name automatically ('api'), or a human
+// admin confirmed it on the /admin/fssai "Verify licenses" queue ('admin').
+export const fssaiVerifiedByEnum = pgEnum('fssai_verified_by', ['api', 'admin']);
 
 // Pilot Hardening v2 — Phase 4 (Compliance center refinements, DECISIONS.md
 // #62+). Who actually files the application on FoSCoS: 'facilitator' = the
@@ -221,6 +243,26 @@ export const sellerProfiles = pgTable('seller_profiles', {
   kitchenVideoUrl: text('kitchen_video_url'),
   cookingSinceYear: integer('cooking_since_year'),
   cuisinesJson: jsonb('cuisines_json').$type<string[]>(),
+  // FSSAI hardening v3 (DECISIONS.md #119+) — the "enter it anytime" card on
+  // /seller/compliance (src/app/api/fssai/verify/route.ts). Certificate is
+  // required on every submission; the licensee name/address are whatever the
+  // verification adapter returned (null if the number didn't verify at all),
+  // shown side-by-side against the seller's own identity on the admin
+  // "Verify licenses" queue. fssaiVerifiedBy/fssaiVerifiedAt record who
+  // confirmed it and when — 'api' set automatically on an auto-match,
+  // 'admin' set by PATCH /api/admin/fssai/verify-queue/[userId].
+  fssaiCertificateUrl: text('fssai_certificate_url'),
+  fssaiVerifiedBy: fssaiVerifiedByEnum('fssai_verified_by'),
+  fssaiVerifiedAt: timestamp('fssai_verified_at'),
+  fssaiLicenseeName: varchar('fssai_licensee_name', { length: 160 }),
+  fssaiLicenseeAddress: text('fssai_licensee_address'),
+  // Timeline for the anytime-entry/admin-verification flow above, separate
+  // from fssaiApplications.timelineJson since this can happen for a seller
+  // with no application on file at all — same {at, event}[] shape as that
+  // column, appended to by every admin verify/reject action.
+  fssaiVerificationTimelineJson: jsonb('fssai_verification_timeline_json').$type<
+    { at: string; event: string }[]
+  >(),
 });
 
 export const fssaiApplications = pgTable('fssai_applications', {
@@ -238,6 +280,12 @@ export const fssaiApplications = pgTable('fssai_applications', {
   documentsJson: jsonb('documents_json').$type<{ label: string; url: string }[]>(),
   status: fssaiAppStatusEnum('status').notNull().default('draft'),
   foscosRefNumber: varchar('foscos_ref_number', { length: 60 }),
+  // FSSAI hardening v3 (DECISIONS.md #119+): set the moment status moves to
+  // 'filed_on_foscos' (facilitator's 'file' action, or the seller's own
+  // self-file report) — the anchor timestamp the regulatory publishing gate
+  // (src/lib/fssai/gate.ts) measures the 7/60-day deemed-commencement
+  // window from. Left null for every other status.
+  filedAt: timestamp('filed_at'),
   timelineJson: jsonb('timeline_json').$type<{ at: string; event: string }[]>(),
   // Pilot Hardening v2 — Phase 4 (DECISIONS.md #62+). See fssaiFilingModeEnum.
   filingMode: fssaiFilingModeEnum('filing_mode').notNull().default('facilitator'),
