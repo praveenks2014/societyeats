@@ -208,7 +208,7 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
         key: payment.keyId,
         amount: payment.amountInPaise,
         currency: 'INR',
-        name: 'GharSe',
+        name: 'PadosiPlate',
         description: `Order #${orderId}`,
         order_id: payment.razorpayOrderId,
         handler: async (resp: {
@@ -420,8 +420,8 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
         )}
         <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
           {isDelivery
-            ? "GST is collected by GharSe, the platform of record for home-food orders (deemed supplier under Sec 9(5) CGST) — the kitchen doesn't need its own GST registration for this. A seller-delivery fee goes entirely to the kitchen; a delivery-partner fee is passed through at cost. GharSe charges the kitchen a transparent commission on the food only — shown on their earnings page, never hidden in your bill."
-            : 'GharSe charges the counter a transparent commission — shown on their earnings page, never hidden in your bill.'}
+            ? "GST is collected by PadosiPlate, the platform of record for home-food orders (deemed supplier under Sec 9(5) CGST) — the kitchen doesn't need its own GST registration for this. A seller-delivery fee goes entirely to the kitchen; a delivery-partner fee is passed through at cost. PadosiPlate charges the kitchen a transparent commission on the food only — shown on their earnings page, never hidden in your bill."
+            : 'PadosiPlate charges the counter a transparent commission — shown on their earnings page, never hidden in your bill.'}
         </p>
       </Card>
 

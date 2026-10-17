@@ -40,7 +40,7 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     description: BRAND.shortPitch,
     manifest: '/manifest.webmanifest',
-    icons: { icon: '/icon.svg', apple: '/icon.svg' },
+    icons: { icon: '/icon.svg', apple: '/apple-touch-icon.png' },
     appleWebApp: { capable: true, title: BRAND.name, statusBarStyle: 'default' },
   };
 }

@@ -224,7 +224,7 @@ export default function AdminSettings() {
           <div className="eyebrow mb-2">COMPLIANCE — PLATFORM FSSAI LICENSE</div>
           <Field
             label="Platform FSSAI Central License No."
-            hint="GharSe's own 14-digit Central e-commerce FSSAI license — required before real (non-mock) orders can be placed."
+            hint="PadosiPlate's own 14-digit Central e-commerce FSSAI license — required before real (non-mock) orders can be placed."
           >
             <Input
               inputMode="numeric"

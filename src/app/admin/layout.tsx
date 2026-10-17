@@ -14,7 +14,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <>
       <RoleNav
-        title="GHARSE MISSION CONTROL"
+        title="PADOSIPLATE MISSION CONTROL"
         tabs={[
           { href: '/admin', label: 'Overview' },
           { href: '/admin/metrics', label: 'Pilot metrics' },

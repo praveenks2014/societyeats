@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * "Get me a license" wizard submits here. Two filing paths (DECISIONS.md
- * #62+): 'facilitator' opens a real back-office task for GharSe's compliance
+ * #62+): 'facilitator' opens a real back-office task for PadosiPlate's compliance
  * team (who file on FoSCoS by hand — there is no public submission API);
  * 'self' just records the application for the seller's own reference — no
  * back-office task, no facilitation cost — the wizard's prefilled summary +
@@ -66,7 +66,7 @@ export const POST = api(async (req) => {
       status: filingMode === 'facilitator' ? 'submitted_to_backoffice' : 'draft',
       timelineJson:
         filingMode === 'facilitator'
-          ? [{ at: now, event: "Application submitted to GharSe's back office" }]
+          ? [{ at: now, event: "Application submitted to PadosiPlate's back office" }]
           : [{ at: now, event: 'Application created — filing it yourself on FoSCoS' }],
     })
     .returning();

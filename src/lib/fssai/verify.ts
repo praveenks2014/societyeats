@@ -4,9 +4,9 @@ import { isMockMode } from '@/lib/config';
  * FSSAI license VERIFICATION adapter (Surepass/AuthBridge-style).
  *
  * Honest reality check: FSSAI's FoSCoS portal has NO public application-
- * submission API. Third parties only offer license *verification*. GharSe
+ * submission API. Third parties only offer license *verification*. PadosiPlate
  * therefore verifies existing licenses here — sellers file new applications
- * themselves on FoSCoS, using GharSe's prefilled summary as a walkthrough —
+ * themselves on FoSCoS, using PadosiPlate's prefilled summary as a walkthrough —
  * never a fake "submitted to government" API.
  */
 

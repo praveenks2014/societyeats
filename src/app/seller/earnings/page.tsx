@@ -71,7 +71,7 @@ export default function EarningsPage() {
         </Card>
         <Card className="p-3.5">
           <div className="text-lg font-bold text-chili">−{formatINR(totals.commissionPaise)}</div>
-          <div className="text-xs text-ink-faint">GharSe commission</div>
+          <div className="text-xs text-ink-faint">PadosiPlate commission</div>
         </Card>
         <Card className="p-3.5">
           <div className="text-lg font-bold">{formatINR(totals.deliveryCollectedPaise)}</div>
@@ -85,7 +85,7 @@ export default function EarningsPage() {
 
       <Card className="mt-4 bg-leaf-tint p-4 text-sm text-leaf-dark">
         💸 <strong>Payout schedule:</strong> Paid every day for orders completed 2 days earlier.
-        GharSe is the merchant of record — commission, an estimated payment-gateway fee, and (once
+        PadosiPlate is the merchant of record — commission, an estimated payment-gateway fee, and (once
         you cross ₹5,00,000 in a financial year) 0.1% TDS under Sec 194-O are shown on every payout
         before the net amount reaches your bank/UPI. This ledger and the payouts below are your
         source of truth; nothing is ever hidden.

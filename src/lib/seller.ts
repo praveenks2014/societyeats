@@ -48,6 +48,6 @@ export async function assertCanPublish(sellerId: number) {
     );
   }
   if (!profile.isApproved) {
-    throw new ApiError(403, 'Your kitchen is awaiting GharSe approval — you can save drafts meanwhile');
+    throw new ApiError(403, 'Your kitchen is awaiting PadosiPlate approval — you can save drafts meanwhile');
   }
 }

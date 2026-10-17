@@ -7,7 +7,7 @@ import { pctOf } from '@/lib/money';
 /**
  * Payouts — merchant-of-record settlement (DECISIONS.md #51+).
  *
- * The platform is the merchant of record: payments settle to GharSe, and
+ * The platform is the merchant of record: payments settle to PadosiPlate, and
  * cooks are paid out as disclosed suppliers on a manual T+2 cadence (no
  * automated bank rails yet — Razorpay Route stays a stub, see
  * src/lib/payments/settlements.ts). "T+2" here means: an order only becomes

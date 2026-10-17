@@ -52,7 +52,7 @@ export async function seedIfEmpty(db: Db): Promise<void> {
 }
 
 export async function runSeed(db: Db): Promise<void> {
-  console.log('Seeding GharSe demo data (Hyderabad)…');
+  console.log('Seeding PadosiPlate demo data (Hyderabad)…');
   const hash = bcrypt.hashSync('demo1234', 10);
 
   // ---- societies (~8.9 km apart) ----
@@ -310,7 +310,7 @@ export async function runSeed(db: Db): Promise<void> {
       facilitationCostInPaise: 200000,
       sponsoredByPlatform: true,
       timelineJson: [
-        { at: daysAgo(65).toISOString(), event: "Application submitted to GharSe's back office" },
+        { at: daysAgo(65).toISOString(), event: "Application submitted to PadosiPlate's back office" },
         { at: daysAgo(63).toISOString(), event: 'Documents verified by back-office' },
         { at: daysAgo(65).toISOString(), event: 'Filed on FoSCoS — ref FOSCOS-TS-2026-118842' },
       ],
@@ -333,7 +333,7 @@ export async function runSeed(db: Db): Promise<void> {
       facilitationCostInPaise: 200000,
       sponsoredByPlatform: true,
       timelineJson: [
-        { at: daysAgo(2).toISOString(), event: "Application submitted to GharSe's back office" },
+        { at: daysAgo(2).toISOString(), event: "Application submitted to PadosiPlate's back office" },
       ],
       createdAt: daysAgo(2),
       updatedAt: daysAgo(2),
@@ -840,7 +840,7 @@ export async function runSeed(db: Db): Promise<void> {
   // welcome notification for the demo buyer
   await db.insert(notifications).values({
     userId: buyer.id,
-    title: 'Welcome to GharSe 🎉',
+    title: 'Welcome to PadosiPlate 🎉',
     body: 'Home kitchens within 10 km of you are cooking today. Your order from Jain Rasoi is on the way!',
     href: '/orders',
   });

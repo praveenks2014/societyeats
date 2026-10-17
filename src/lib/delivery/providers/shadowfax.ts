@@ -55,7 +55,7 @@ export const ShadowfaxAdapter: DeliveryProvider = {
     const data = await sfxFetch('/api/v1/orders/', {
       method: 'POST',
       body: JSON.stringify({
-        order_details: { client_order_id: `gharse-${order.orderId}` },
+        order_details: { client_order_id: `pp-${order.orderId}` },
         pickup_details: {
           name: order.pickupName,
           contact_number: order.pickupPhone,

@@ -69,7 +69,7 @@ test('browseListings: SQL radius filter includes 9.9 km and excludes 10.1 km', a
   // Point the app's lazy DB singleton (src/lib/db/index.ts) at this isolated,
   // in-memory database before browseListings() — or anything it transitively
   // calls — ever invokes getDb() itself.
-  (globalThis as { __gharseDb?: unknown }).__gharseDb = Promise.resolve(db);
+  (globalThis as { __padosiDb?: unknown }).__padosiDb = Promise.resolve(db);
 
   const { browseListings } = await import('@/lib/browse');
 

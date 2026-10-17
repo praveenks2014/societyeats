@@ -100,7 +100,7 @@ export function KitchenProfile({ seller, listings, reviews }: Props) {
 
         <div className="mt-4">
           <ShareButton
-            text={`Check out ${seller.kitchenName} on GharSe — home-cooked food from our society 🍲`}
+            text={`Check out ${seller.kitchenName} on PadosiPlate — home-cooked food from our society 🍲`}
           />
         </div>
       </Card>

@@ -33,7 +33,7 @@ export function MockCheckoutSheet({
     <Modal open={open} onClose={() => !busy && onClose()} sheet>
       <div className="flex items-center justify-between">
         <div>
-          <div className="font-display text-lg font-bold">GharSe Pay</div>
+          <div className="font-display text-lg font-bold">PadosiPlate Pay</div>
           <div className="text-xs text-ink-faint">Order #{orderId} · UPI / Cards / Netbanking</div>
         </div>
         <Badge tone="amber">MOCK MODE</Badge>

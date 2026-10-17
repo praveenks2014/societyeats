@@ -105,12 +105,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [loc, setLocState] = useState<BuyerLoc | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   useEffect(() => {
-    setLocState(readLS<BuyerLoc>('gharse_loc'));
+    setLocState(readLS<BuyerLoc>('padosi_loc'));
   }, []);
   const setLoc = useCallback((next: BuyerLoc) => {
     setLocState(next);
     try {
-      localStorage.setItem('gharse_loc', JSON.stringify(next));
+      localStorage.setItem('padosi_loc', JSON.stringify(next));
     } catch {}
   }, []);
 
@@ -119,7 +119,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const hydrated = useRef(false);
   useEffect(() => {
-    const saved = readLS<{ vendor: CartVendor | null; items: CartItem[] }>('gharse_cart');
+    const saved = readLS<{ vendor: CartVendor | null; items: CartItem[] }>('padosi_cart');
     if (saved) {
       setVendor(saved.vendor);
       setItems(saved.items);
@@ -129,7 +129,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hydrated.current) return;
     try {
-      localStorage.setItem('gharse_cart', JSON.stringify({ vendor, items }));
+      localStorage.setItem('padosi_cart', JSON.stringify({ vendor, items }));
     } catch {}
   }, [vendor, items]);
 

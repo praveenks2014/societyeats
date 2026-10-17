@@ -19,7 +19,7 @@ export type Session = {
   phone: string;
 };
 
-const COOKIE_NAME = 'gharse_session';
+const COOKIE_NAME = 'padosi_session';
 const SESSION_DAYS = 30;
 
 function jwtSecret(): Uint8Array {

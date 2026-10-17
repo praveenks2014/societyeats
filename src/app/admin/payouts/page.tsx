@@ -95,7 +95,7 @@ export default function AdminPayouts() {
         <div>
           <h1 className="text-2xl font-bold">Seller payouts</h1>
           <p className="mt-1 text-sm text-ink-soft">
-            GharSe is the merchant of record — payments settle to the platform, and cooks are paid
+            PadosiPlate is the merchant of record — payments settle to the platform, and cooks are paid
             out as disclosed suppliers on a manual T+2 cadence (no live bank rails yet).
           </p>
         </div>

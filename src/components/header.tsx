@@ -1,5 +1,6 @@
 'use client';
 
+import { BRAND } from '@/config/brand';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -40,10 +41,10 @@ export function Header({ session }: { session: Session | null }) {
     <>
       <header className="sticky top-0 z-50 border-b border-rice-line bg-rice/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2 px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-1.5" aria-label="GharSe home">
+          <Link href="/" className="flex items-center gap-1.5" aria-label={`${BRAND.appName} home`}>
             <BowlMark />
             <span className="font-display text-xl font-bold tracking-tight text-leaf">
-              GharSe
+              {BRAND.appName}
             </span>
           </Link>
 

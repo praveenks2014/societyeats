@@ -1,5 +1,5 @@
 {
-  "name": "gharse",
+  "name": "padosiplate",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -14,7 +14,8 @@
     "prebuild": "node scripts/gen-sw.mjs",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
-    "verify": "npm run typecheck && npm run lint && npm test && npm run test:e2e"
+    "verify": "npm run typecheck && npm run lint && npm test && npm run test:e2e",
+    "icons": "node scripts/gen-icons.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.14",

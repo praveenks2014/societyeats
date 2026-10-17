@@ -69,7 +69,7 @@ export const POST = api(async (req) => {
   const db = await getDb();
   const settings = await getPlatformSettings();
 
-  // Pilot Hardening v2 — Phase 4 (DECISIONS.md #62+): GharSe itself needs a
+  // Pilot Hardening v2 — Phase 4 (DECISIONS.md #62+): PadosiPlate itself needs a
   // Central FSSAI e-commerce license before real (non-mock) orders can be
   // taken. MOCK_MODE keeps every integration — including this gate — dormant
   // in demo/dev; it only bites once someone actually flips MOCK_MODE=false.
@@ -202,7 +202,7 @@ export const POST = api(async (req) => {
     // Commission is on the item subtotal only — seller delivery fees are the
     // seller's own money, never platform revenue (DECISIONS.md founder spec).
     const commission = pctOf(subtotal, settings.commissionHomePct);
-    // GST 5% on home-food orders: GharSe is the deemed supplier under Sec
+    // GST 5% on home-food orders: PadosiPlate is the deemed supplier under Sec
     // 9(5) CGST, so this is collected and remitted by the platform, not the cook.
     const gstInPaise = pctOf(subtotal, DEFAULTS.gstPct);
     const totalBeforeCredit = subtotal + deliveryFeeInPaise + settings.platformFeePaise + gstInPaise;

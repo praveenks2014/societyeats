@@ -55,7 +55,7 @@ function RegisterForm() {
       toast(data.error || 'Could not register', 'err');
       return;
     }
-    toast('Welcome to GharSe!');
+    toast('Welcome to PadosiPlate!');
     // Sellers land on the kitchen-profile onboarding step (photos etc.)
     // before the dashboard — see DECISIONS.md #73+.
     router.push(role === 'seller' ? '/seller/onboarding' : '/');
@@ -66,7 +66,7 @@ function RegisterForm() {
 
   return (
     <div className="mx-auto mt-10 max-w-sm">
-      <h1 className="text-2xl font-bold">Join GharSe</h1>
+      <h1 className="text-2xl font-bold">Join PadosiPlate</h1>
       <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-rice-deep p-1.5">
         {(['buyer', 'seller'] as const).map((r) => (
           <button
@@ -104,7 +104,7 @@ function RegisterForm() {
         </Field>
         {referredByCode && (
           <p className="rounded-xl bg-leaf-tint px-3 py-2 text-xs font-medium text-leaf">
-            👋 You were invited by a neighbour — welcome to GharSe!
+            👋 You were invited by a neighbour — welcome to PadosiPlate!
           </p>
         )}
 
@@ -112,7 +112,7 @@ function RegisterForm() {
           label="Your society"
           hint={
             societyMode === 'select'
-              ? 'GharSe is live in one society right now — more coming soon.'
+              ? 'PadosiPlate is live in one society right now — more coming soon.'
               : 'Got a code from your society WhatsApp group? Enter it here.'
           }
         >

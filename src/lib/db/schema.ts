@@ -59,7 +59,7 @@ export const fssaiVerifiedByEnum = pgEnum('fssai_verified_by', ['api', 'admin'])
 
 // Pilot Hardening v2 — Phase 4 (Compliance center refinements, DECISIONS.md
 // #62+). Who actually files the application on FoSCoS: 'facilitator' = the
-// GharSe compliance back-office (a real back-office task is created);
+// PadosiPlate compliance back-office (a real back-office task is created);
 // 'self' = the seller files it themselves using the wizard's prefilled
 // summary + document bundle as a walkthrough aid — no back-office task, no
 // facilitation cost.
@@ -289,9 +289,9 @@ export const fssaiApplications = pgTable('fssai_applications', {
   timelineJson: jsonb('timeline_json').$type<{ at: string; event: string }[]>(),
   // Pilot Hardening v2 — Phase 4 (DECISIONS.md #62+). See fssaiFilingModeEnum.
   filingMode: fssaiFilingModeEnum('filing_mode').notNull().default('facilitator'),
-  // Recorded as GharSe's own acquisition cost when sponsoredByPlatform is
+  // Recorded as PadosiPlate's own acquisition cost when sponsoredByPlatform is
   // true — never billed back to the seller as a debt. 0 for self-filed
-  // applications (GharSe does no facilitation work on those).
+  // applications (PadosiPlate does no facilitation work on those).
   facilitationCostInPaise: integer('facilitation_cost_in_paise').notNull().default(200000),
   sponsoredByPlatform: boolean('sponsored_by_platform').notNull().default(true),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -377,7 +377,7 @@ export const orders = pgTable('orders', {
   deliveryFeeInPaise: integer('delivery_fee_in_paise').notNull().default(0),
   platformFeeInPaise: integer('platform_fee_in_paise').notNull().default(0),
   commissionInPaise: integer('commission_in_paise').notNull().default(0),
-  // GST 5% on the food subtotal — GharSe is the deemed supplier under Sec
+  // GST 5% on the food subtotal — PadosiPlate is the deemed supplier under Sec
   // 9(5) CGST for home-food orders, so the platform (not the cook) remits
   // this. 0 for mall/restaurant orders (out of scope for this pivot).
   gstInPaise: integer('gst_in_paise').notNull().default(0),
@@ -395,7 +395,7 @@ export const orders = pgTable('orders', {
   // #87+). Referral credit (src/lib/referrals.ts) redeemed against this
   // order's total at checkout — server-computed from the buyer's real
   // available balance, never trusted from the client. Comes entirely out of
-  // GharSe's own margin, same as buyerPlatformFeePaise being ₹0 by default:
+  // PadosiPlate's own margin, same as buyerPlatformFeePaise being ₹0 by default:
   // it never reduces subtotalInPaise/commissionInPaise, so seller payouts
   // (which key off those, not totalInPaise) are unaffected.
   referralCreditAppliedInPaise: integer('referral_credit_applied_in_paise').notNull().default(0),
@@ -452,7 +452,7 @@ export const payments = pgTable('payments', {
 
 // ---------- payouts (merchant-of-record, T+2 manual settlement) ----------
 // Pilot Hardening v2 (DECISIONS.md #51+): the platform is the merchant of
-// record (payments settle to GharSe, not the cook), so cooks are paid out as
+// record (payments settle to PadosiPlate, not the cook), so cooks are paid out as
 // disclosed suppliers on a manual T+2 cadence via an admin batch tool —
 // Razorpay Route stays a stub (src/lib/payments/settlements.ts) until volume
 // justifies automated settlement.

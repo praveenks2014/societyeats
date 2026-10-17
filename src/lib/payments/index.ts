@@ -49,7 +49,7 @@ export async function createPaymentForOrder(
   const rzpOrder = await client.orders.create({
     amount: amountInPaise,
     currency: 'INR',
-    receipt: `gharse_${orderId}`,
+    receipt: `pp_${orderId}`,
   });
   await db.insert(payments).values({
     orderId,

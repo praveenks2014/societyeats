@@ -62,11 +62,11 @@ export function Hero() {
 
       <div className="relative z-10 mx-auto flex max-w-5xl flex-col items-start gap-8 sm:flex-row sm:items-center">
         <div className="max-w-md">
-          <div className="eyebrow mb-3 !text-turmeric">GHAR KI RASOI · NEIGHBOURHOOD PRIDE</div>
+          <div className="eyebrow mb-3 !text-turmeric">HOME FOOD · FROM YOUR PADOSI</div>
           <h1 className="text-4xl font-bold leading-[1.05] sm:text-5xl">
-            Ghar ka khana,
+            Home food
             <br />
-            from <span className="text-turmeric">your society</span>
+            from <span className="text-turmeric">your neighbours</span>
           </h1>
           <p className="mt-4 text-sm leading-relaxed text-rice/80 sm:text-base">
             Verified home kitchens within 10 km — dum biryani from the 12th floor,

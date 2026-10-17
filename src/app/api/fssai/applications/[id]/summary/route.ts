@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
  * The wizard's actual "output" (DECISIONS.md #62+): a prefilled application
  * summary + document bundle that either the seller themselves (the only
  * path the wizard UI offers as of DECISIONS.md #119+) or, for a small
- * number of legacy applications, GharSe's back office (facilitator path,
+ * number of legacy applications, PadosiPlate's back office (facilitator path,
  * backend kept but no longer reachable from the wizard) uses to file on
  * FoSCoS by hand. There is no government submission API this calls — it
  * only renders what was already collected in the wizard.

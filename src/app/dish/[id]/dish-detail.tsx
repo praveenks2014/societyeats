@@ -154,7 +154,7 @@ export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, ot
             View kitchen profile →
           </Link>
           <ShareButton
-            text={`${listing.title} from ${seller.kitchenName} on GharSe 🍲`}
+            text={`${listing.title} from ${seller.kitchenName} on PadosiPlate 🍲`}
             className="ml-auto"
           />
         </div>

@@ -14,11 +14,11 @@ import * as schema from './schema';
 
 export type Db = ReturnType<typeof drizzlePostgres<typeof schema>>;
 
-const g = globalThis as unknown as { __gharseDb?: Promise<Db> };
+const g = globalThis as unknown as { __padosiDb?: Promise<Db> };
 
 export function getDb(): Promise<Db> {
-  if (!g.__gharseDb) g.__gharseDb = initDb();
-  return g.__gharseDb;
+  if (!g.__padosiDb) g.__padosiDb = initDb();
+  return g.__padosiDb;
 }
 
 async function initDb(): Promise<Db> {

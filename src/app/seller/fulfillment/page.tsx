@@ -68,7 +68,7 @@ export default function SellerFulfillment() {
     <div className="mx-auto max-w-lg">
       <h1 className="text-2xl font-bold">Fulfillment</h1>
       <p className="mt-1 text-sm text-ink-soft">
-        GharSe never subsidizes delivery — pick how buyers can get your food. Self-pickup is
+        PadosiPlate never subsidizes delivery — pick how buyers can get your food. Self-pickup is
         always free for you and the buyer.
       </p>
 
@@ -104,7 +104,7 @@ export default function SellerFulfillment() {
           Offer your own delivery
         </label>
         <p className="text-xs text-ink-faint">
-          You deliver, you set the fee, you keep every rupee of it — GharSe only takes its
+          You deliver, you set the fee, you keep every rupee of it — PadosiPlate only takes its
           commission on the food itself.
         </p>
         {sellerDelivery && (

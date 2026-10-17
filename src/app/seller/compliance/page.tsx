@@ -69,7 +69,7 @@ export default function CompliancePage() {
     <div className="mx-auto max-w-2xl">
       <h1 className="text-2xl font-bold">FSSAI & Compliance</h1>
       <p className="mt-1 text-sm text-ink-soft">
-        Every food business in India needs an FSSAI license. GharSe shows your license (or
+        Every food business in India needs an FSSAI license. PadosiPlate shows your license (or
         application status) on every dish — it&apos;s what makes neighbours trust home kitchens.
       </p>
 
@@ -133,8 +133,8 @@ export default function CompliancePage() {
               <div>
                 {APP_STEPS[application.status]} —{' '}
                 {application.filingMode === 'facilitator'
-                  ? "GharSe's back office files this on FoSCoS and tracks it to grant."
-                  : "you're filing this yourself — GharSe tracks it to grant once you share your FoSCoS reference."}
+                  ? "PadosiPlate's back office files this on FoSCoS and tracks it to grant."
+                  : "you're filing this yourself — PadosiPlate tracks it to grant once you share your FoSCoS reference."}
               </div>
             </div>
           </div>
@@ -160,8 +160,8 @@ export default function CompliancePage() {
           <div className="mt-2 font-display text-lg font-bold">License {profile.fssaiNumber} — under review</div>
           <p className="mt-1 text-sm text-ink-soft">
             {profile.fssaiLicenseeName
-              ? `We found a match for "${profile.fssaiLicenseeName}" but couldn't automatically confirm it's yours — a GharSe admin checks it by hand, usually within a day.`
-              : "We couldn't automatically verify this number — a GharSe admin checks it by hand, usually within a day."}
+              ? `We found a match for "${profile.fssaiLicenseeName}" but couldn't automatically confirm it's yours — a PadosiPlate admin checks it by hand, usually within a day.`
+              : "We couldn't automatically verify this number — a PadosiPlate admin checks it by hand, usually within a day."}
           </p>
           {profile.fssaiCertificateUrl && (
             <a
@@ -193,9 +193,9 @@ export default function CompliancePage() {
 
       <Card className="mt-6 p-4 text-xs leading-relaxed text-ink-faint">
         <strong>How this works (no shortcuts):</strong> FSSAI&apos;s FoSCoS portal has no public API
-        for submitting applications — anyone claiming instant government filing is bluffing. GharSe
+        for submitting applications — anyone claiming instant government filing is bluffing. PadosiPlate
         verifies existing licenses instantly via a verification partner. For a new application,
-        GharSe gives you a prefilled summary and document bundle to file yourself on FoSCoS. Most
+        PadosiPlate gives you a prefilled summary and document bundle to file yourself on FoSCoS. Most
         home kitchens qualify for <strong>Basic Registration</strong> (turnover up to ₹1.5 crore,
         effective 1 April 2026) — but some categories require a <strong>State License</strong>{' '}
         regardless of turnover. Confirm your exact Kind of Business on FoSCoS or with your CA before
@@ -268,7 +268,7 @@ function EnterLicenseCard({
     if (d.status === 'verified') {
       toast(`Verified! Holder: ${d.verification.holderName} ✅`);
     } else {
-      toast('Submitted — a GharSe admin will confirm it shortly.');
+      toast('Submitted — a PadosiPlate admin will confirm it shortly.');
     }
     setNumber('');
     setCertUrl('');
@@ -283,7 +283,7 @@ function EnterLicenseCard({
       <p className="mt-1 text-sm text-ink-soft">
         {profile.fssaiStatus === 'awaiting_admin_check'
           ? "Need to correct the number or certificate you already entered? Submit again — it replaces what's under review."
-          : 'Already have an FSSAI license — from an earlier application, or one you filed yourself on FoSCoS? Enter the number and upload your certificate. GharSe checks it automatically, or a GharSe admin confirms it by hand within a day.'}
+          : 'Already have an FSSAI license — from an earlier application, or one you filed yourself on FoSCoS? Enter the number and upload your certificate. PadosiPlate checks it automatically, or a PadosiPlate admin confirms it by hand within a day.'}
       </p>
       <div className="mt-3 space-y-2.5">
         <Input
@@ -485,9 +485,9 @@ function FssaiWizard({
             You&apos;ll file this on FoSCoS yourself — we prefill everything and walk you through it.
           </span>
           <p className="mt-1.5 text-xs text-ink-faint">
-            After you submit, GharSe generates a prefilled application summary, your document bundle,
+            After you submit, PadosiPlate generates a prefilled application summary, your document bundle,
             and a step-by-step FoSCoS walkthrough. You file at your own pace and enter the reference
-            number here once it's done — GharSe tracks it to grant from there.
+            number here once it's done — PadosiPlate tracks it to grant from there.
           </p>
         </div>
       ),

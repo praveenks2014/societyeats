@@ -40,7 +40,7 @@ export default async function HomePage() {
           <Link href="/register?as=seller" className="hover:text-ink">Become a home-chef</Link>
         </div>
         <p className="mt-4">
-          Platform FSSAI license: applied for. Every kitchen on GharSe shows its FSSAI number or a
+          Platform FSSAI license: applied for. Every kitchen on PadosiPlate shows its FSSAI number or a
           pending-application badge.
         </p>
       </footer>

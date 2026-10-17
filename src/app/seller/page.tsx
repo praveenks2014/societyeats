@@ -76,13 +76,13 @@ export default function SellerDashboard() {
         <Card className="mt-5 border-turmeric bg-turmeric-tint/50 p-4">
           <div className="font-semibold">
             {profile.fssaiStatus === 'verified'
-              ? '⏳ Your kitchen is awaiting GharSe approval'
+              ? '⏳ Your kitchen is awaiting PadosiPlate approval'
               : '🪪 One step before you can publish dishes'}
           </div>
           <p className="mt-1 text-sm text-ink-soft">
             {profile.fssaiStatus === 'verified'
               ? 'Our team approves new kitchens within a few hours. Meanwhile, set up your dishes as drafts.'
-              : "Food businesses in India need an FSSAI license. Enter one if you've already got it, or file an application yourself on FoSCoS — GharSe prefills everything and walks you through it."}
+              : "Food businesses in India need an FSSAI license. Enter one if you've already got it, or file an application yourself on FoSCoS — PadosiPlate prefills everything and walks you through it."}
           </p>
           {profile.fssaiStatus !== 'verified' && (
             <Link href="/seller/compliance">
@@ -117,7 +117,7 @@ export default function SellerDashboard() {
       {data.plan === 'free' ? (
         <Card className="mt-6 overflow-hidden">
           <div className="bg-leaf p-4 text-white">
-            <div className="eyebrow !text-turmeric">GHARSE PRO · ₹299/MO</div>
+            <div className="eyebrow !text-turmeric">PADOSIPLATE PRO · ₹299/MO</div>
             <div className="mt-1 font-display text-lg font-bold">Get the featured carousel slot</div>
             <ul className="mt-2 space-y-1 text-sm text-white/85">
               <li>⭐ Featured placement on the home screen</li>
@@ -133,7 +133,7 @@ export default function SellerDashboard() {
         <Card className="mt-6 p-4">
           <Badge tone="green">PRO KITCHEN ⭐</Badge>
           <p className="mt-2 text-sm text-ink-soft">
-            You&apos;re on GharSe Pro — featured placement and priority FSSAI support are active.
+            You&apos;re on PadosiPlate Pro — featured placement and priority FSSAI support are active.
           </p>
         </Card>
       )}

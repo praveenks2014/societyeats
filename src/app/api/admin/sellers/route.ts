@@ -70,7 +70,7 @@ export const PATCH = api(async (req) => {
     await notify(
       body.userId,
       'Your kitchen is approved! 🎉',
-      'You can publish dishes now (FSSAI step permitting). Welcome to GharSe.',
+      'You can publish dishes now (FSSAI step permitting). Welcome to PadosiPlate.',
       '/seller',
     );
   }

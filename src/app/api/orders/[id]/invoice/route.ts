@@ -16,7 +16,7 @@ import { BRAND } from '@/lib/config';
 export const dynamic = 'force-dynamic';
 
 /**
- * Per-order tax invoice — GharSe issues it, not the cook: the platform is the
+ * Per-order tax invoice — PadosiPlate issues it, not the cook: the platform is the
  * deemed supplier under Sec 9(5) CGST for home-food orders (DECISIONS.md
  * #58+). CGST/SGST assume an intra-state supply (the pilot is one Hyderabad
  * society) — guidance only, not a legal determination; verify with a CA
