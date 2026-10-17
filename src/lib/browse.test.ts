@@ -1,6 +1,5 @@
-import assert from 'node:assert/strict';
 import path from 'node:path';
-import test from 'node:test';
+import { expect, test } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
@@ -85,13 +84,10 @@ test('browseListings: SQL radius filter includes 9.9 km and excludes 10.1 km', a
   const result = await browseListings({ lat: originLat, lng: originLng });
   const titles = result.listings.map((l) => l.title);
 
-  assert.ok(titles.includes('Near dish (9.9km)'), '9.9 km seller should be inside the radius');
-  assert.ok(!titles.includes('Far dish (10.1km)'), '10.1 km seller should be outside the radius');
+  expect(titles).toContain('Near dish (9.9km)');
+  expect(titles).not.toContain('Far dish (10.1km)');
 
   const near = result.listings.find((l) => l.title === 'Near dish (9.9km)');
-  assert.ok(near, 'the 9.9 km listing should be present');
-  assert.ok(
-    near!.distanceKm != null && Math.abs(near!.distanceKm - 9.9) < 0.01,
-    `expected distanceKm ≈ 9.9, got ${near!.distanceKm}`,
-  );
+  expect(near).toBeDefined();
+  expect(Math.abs((near!.distanceKm ?? 0) - 9.9)).toBeLessThan(0.01);
 });

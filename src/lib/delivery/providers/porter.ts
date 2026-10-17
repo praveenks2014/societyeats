@@ -13,7 +13,7 @@ import type { DeliveryProvider, OrderInfo, ProviderOrder, Quote, TrackingState }
 
 const BASE_URL = process.env.PORTER_BASE_URL || 'https://pfe-apigw-uat.porter.in';
 
-function useLive(): boolean {
+function shouldUseLive(): boolean {
   return !isMockMode() && !!process.env.PORTER_API_KEY;
 }
 
@@ -34,7 +34,7 @@ export const PorterAdapter: DeliveryProvider = {
   name: 'porter',
 
   async getQuote(pickup: GeoPoint, drop: GeoPoint): Promise<Quote> {
-    if (!useLive()) return mockQuote('porter', pickup, drop);
+    if (!shouldUseLive()) return mockQuote('porter', pickup, drop);
     // VERIFY against partner docs when keys arrive
     const data = await porterFetch(
       `/v1/get_quote?pickup_details[lat]=${pickup.lat}&pickup_details[lng]=${pickup.lng}&drop_details[lat]=${drop.lat}&drop_details[lng]=${drop.lng}&customer[name]=GharSe&customer[mobile][number]=9999999999&customer[mobile][country_code]=+91`,
@@ -48,7 +48,7 @@ export const PorterAdapter: DeliveryProvider = {
   },
 
   async createDelivery(order: OrderInfo): Promise<ProviderOrder> {
-    if (!useLive()) return mockCreateDelivery('porter');
+    if (!shouldUseLive()) return mockCreateDelivery('porter');
     // VERIFY against partner docs when keys arrive
     const data = await porterFetch('/v1/orders/create', {
       method: 'POST',
@@ -85,7 +85,7 @@ export const PorterAdapter: DeliveryProvider = {
   },
 
   async track(providerOrderId: string): Promise<TrackingState> {
-    if (!useLive()) return mockTrack(providerOrderId);
+    if (!shouldUseLive()) return mockTrack(providerOrderId);
     // VERIFY against partner docs when keys arrive
     const data = await porterFetch(`/v1/orders/${providerOrderId}`);
     const map: Record<string, TrackingState['status']> = {
@@ -103,7 +103,7 @@ export const PorterAdapter: DeliveryProvider = {
   },
 
   async cancel(providerOrderId: string): Promise<void> {
-    if (!useLive()) {
+    if (!shouldUseLive()) {
       await simulateLatency();
       return;
     }
