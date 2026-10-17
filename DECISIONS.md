@@ -7,7 +7,7 @@ Every non-obvious call made while building PadosiPlate in one session, and why.
 ## Stack & infrastructure
 
 1. **PGlite dev fallback.** The spec mandates Postgres via `DATABASE_URL` (kept as the primary path, used on Replit). When the variable is unset, the app falls back to an embedded PGlite (WASM Postgres) at `./.data/pglite` with auto-migrate + auto-seed. Rationale: the build machine and fresh clones have no Postgres, and "fully clickable tonight" beats "install a database first". Same Drizzle API both ways; no native binaries either way.
-2. **No middleware.ts.** Role checks live in layouts (`/seller`, `/admin`, `/restaurant`) and in every API handler via `requireSession(roles)`. Simpler than edge middleware and avoids edge-runtime DB access.
+2. **(Superseded in Phase 1 Pilot — `src/middleware.ts` now exists, see below.)** Role checks live in layouts (`/seller`, `/admin`, `/restaurant`) and in every API handler via `requireSession(roles)`. Simpler than edge middleware and avoids edge-runtime DB access.
 3. **Hand-rolled service worker** instead of `@ducanh2912/next-pwa`: fewer build-time moving parts, and the spec explicitly allowed it. It precaches an offline shell, uses network-first for navigations, SWR for images, and never caches `/api/*`.
 4. **SVG PWA icons.** Chrome accepts SVG manifest icons; shipping raster PNGs would need an image toolchain. Swap in PNGs later if older Android install banners matter.
 5. **`.replit` committed** so "Import from GitHub" runs with zero changes (dev run + autoscale deployment config).
@@ -194,3 +194,54 @@ Founder-specified rework of the FSSAI flow: the wizard's facilitator ("File it f
 129. **Modal scroll fix — how it was verified.** This is a headless environment with no browser automation tool available (`package.json` has no Playwright/Puppeteer/similar, confirmed by reading it directly) — visual verification at 380×640 and 1280×700 was **not possible** and is not claimed. Verified structurally instead, by re-reading the finished code and confirming: the `useEffect` cleanup is unconditional on *why* the effect re-runs or the component unmounts (it's a plain returned closure, not gated on an animation-complete callback) — React's own effect-cleanup contract guarantees it fires on unmount regardless of how the unmount happened; `overscroll-contain` is applied to the actual scrolling element (the inner body div with `overflow-y-auto`), not a non-scrolling ancestor, where it would be a no-op; and the footer's placement is checked by tracing the box model directly — it's a flex sibling of the scrollable body inside a `max-h-[85vh] flex flex-col overflow-hidden` container, so it can never be scrolled out of view by body content regardless of viewport height, which is the actual requirement ("reachable at any viewport height") independent of any specific pixel dimensions.
 130. **Seed data** (item 7): Mishti Ghor (`seller3`) was changed from a plain `pending_application` kitchen to one demonstrating **both** new mechanisms on the same seller — exactly the founder's "including while an application is pending" case. Its `fssaiApplications` row (State License, `filed_on_foscos`) now has `filedAt` set 65 days ago — past the 60-day State License deemed-commencement window — so its dishes are visible in browse out of the box with an `"FSSAI applied · ref FOSCOS-TS-2026-118842"` badge (verified against the live seeded dev DB — see #131), demonstrating #120's gate and #124's badge priority working correctly together. Its `sellerProfiles` row separately carries `fssaiStatus: 'awaiting_admin_check'`, a candidate `fssaiNumber`, a certificate placeholder (`fssaiCertificateUrl: '/placeholder-doc.svg'`, the same committed placeholder asset the FSSAI document bundle already used — DECISIONS.md #20), and `fssaiLicenseeName: 'Ramesh Gupta'` — deliberately **not** matching "Anindita Sen"/"Mishti Ghor", so this is a real, out-of-the-box case for the `/admin/fssai` Verify licenses queue rather than one that would have auto-verified had it gone through the real endpoint. The `platformConfig` seed row for `fssaiPendingMaxDays` was removed (the setting no longer exists). One consequence worth flagging explicitly, not a bug: FitBowl by Ritu (`seller5`, `submitted_to_backoffice`, never `filed_on_foscos`) no longer appears in buyer browse results, since the new gate's application branch requires `filed_on_foscos` — under the *old* mechanism its listings stayed visible (with an amber "Pending" badge) until a fixed grace window elapsed; under the founder's new spec ("draft and submitted never allow publishing"), that was never supposed to be true in the first place. This is the new gate working as specified, not a regression.
 131. **Verified against a live locally-seeded dev PGlite DB, not just by reading the code** (same standard this codebase has held itself to since #57/#98/#109): a throwaway script confirmed `isFssaiEligibleToPublish`/`fssaiDeemedGrantInfo` compute correctly for Mishti Ghor's seeded 65-day-old filing (`eligible: true`, `daysElapsed: 65`, `daysRemaining: null`), that `browseListings()` correctly shows all 3 of its dishes with `eligibleFoscosRef` set to the FoSCoS reference, that FitBowl's dishes correctly disappear from browse (#130's flagged consequence) while Ammama's (verified) still appear, that `getKitchenProfile()` threads `eligibleFoscosRef` through correctly, that `maybeNotifyDeemedGrantWindow()` fires exactly once and correctly de-dupes on a second call, and that `fuzzyNameMatch()` correctly rejects "Ramesh Gupta" against Mishti Ghor's real identity while accepting an exact name match. The script was discarded afterward (not committed) — same "verify against the real dev DB, don't leave a one-off script behind" approach as #57. `npm run build` and `npm test` both pass unchanged (the existing `browse.test.ts` SQL-boundary test needed no changes — it seeds its own isolated sellers with no `fssaiApplications` rows, which the new `latestApplicationsBySeller()` batched fetch handles as an empty map, falling through correctly to the `fssaiStatus === 'verified'` branch). `DECISIONS.md` now runs through entry #131 — continue from #132 in any future phase.
+
+
+## Phase 1 Pilot
+
+Every ambiguous call made while turning the codebase into the PadosiPlate pilot. Earlier entries about payouts, merchant-of-record and platform delivery are superseded by this section.
+
+### Money model
+- **Platform never touches food money.** Buyers pay food directly to the kitchen (UPI VPA or at pickup); Razorpay carries only subscription payments and the buyer platform fee. The old merchant-of-record/payout flow is disabled. The `payouts` tables are retained (history/migrations) but unused; no bank account numbers or PAN are collected.
+- **Platform delivery disabled** for the pilot (`platform_delivery` is no longer offered at checkout); kitchen delivery and self-pickup remain.
+- **Two-part order money columns** on `orders`: `food_total`, `platform_fee`, fee GST, `fee_bps_snapshot`, `food_payment_mode`/`status`, etc. `online_charge` is kept as the amount actually paid online (= the platform fee after credit), so existing readers keep working.
+- **Integer paise / basis points** everywhere; fee = floor(food × bps) then floor/cap; GST is added only when a platform GSTIN is set; ECO-GST-on-food is a separate switch (off) pending CA advice.
+- **Referral credit applies to the fee only, before GST.** It is reserved when the order is placed, consumed on payment and released on expiry/cancel/refund (rows are split so partial use is exact).
+- **Razorpay ₹1 minimum:** a fee that falls below ₹1 after credit is rounded up to the ₹1 minimum top-up (or treated as paid if fully covered by credit).
+- **Rates are snapshotted** on each order and each subscription payment; changing a setting never rewrites history (e2e scenario 7).
+- **Subscriptions:** periods stack when renewing early; status is *derived* from dates (`active → grace → expired`) so a missed cron cannot leave a kitchen visible; grace length is a setting. A kitchen without an active/grace/waived subscription is hidden from buyers but nothing is deleted.
+- **Refunds reserve first:** the refundable amount is reserved atomically in the DB before Razorpay is called, so a double click or retried webhook cannot over-refund. Food refunds are the kitchen's liability and are tracked as "kitchen refunds due" (the platform does not move that money).
+
+### Payments correctness (audit S1/S2)
+- Verify route checks order ownership, amount and signature length; webhooks dedupe through `webhook_events`, never downgrade a captured payment and assert the amount; `markOrderPaid` is exactly-once via a conditional `UPDATE … RETURNING`.
+- Unpaid orders expire and release reserved stock and credit.
+
+### Auth, admin, sessions
+- **E-mail tokens are random and stored hashed** (not JWT-signed): they can be revoked, single-use and are not forgeable if `JWT_SECRET` leaks.
+- **Unverified users may still browse and order**, with a persistent banner to verify; only admin access requires a verified e-mail.
+- **Admin = `ADMIN_EMAILS` + verified e-mail only.** The allowlisted account is created with a one-time password and `must_change_password`; nobody else can be promoted through the app. `ADMIN_BOOTSTRAP_PASSWORD` exists only so e2e can log in deterministically.
+- **DB-backed sessions** (revocable, "log out everywhere") with a JWT cookie carrying the session id; a sliding refresh is done in `src/middleware.ts`.
+- **`src/middleware.ts` now exists** for two cross-cutting jobs only: CSRF `Origin` check on mutating `/api/*` requests and sliding session refresh. Role checks stay in layouts and handlers.
+- Postgres fixed-window **rate limiter** shared by all instances (login, register, reset, uploads, messaging). It is bypassed only when `E2E=true` and `NODE_ENV!=='production'`.
+
+### Kitchens, moderation, messaging
+- Kitchen state machine `draft → submitted → changes_requested | approved | rejected`, and `approved ↔ delisted`. A dish re-enters review when it is new, its name or photo changes, or its price moves by more than 30%.
+- Admin ↔ kitchen messaging is a per-kitchen thread with reusable templates; delisting notifies the kitchen and can be undone (relist).
+- Buyer ↔ kitchen threads are per order and anonymous (first names/handles, no phones); either side can block.
+- The **restaurant/Mall console** is behind `restaurantConsoleEnabled` and off for the pilot.
+- A **tower** column was added to kitchens for tower/block-level fulfilment grouping.
+- A **GeocodeAdapter** was created because none existed (mock by default; live when `GEOCODE_API_KEY` is set).
+
+### FSSAI assistant
+- Never asks for or stores FoSCoS credentials/OTPs and never claims to file for the seller. Aadhaar masking is done in the browser by blacking out pixels before upload (and the server requires the "masked" attestation). The gate also enforces licence expiry. Funnel events and walkthrough steps are stored in the DB so admin can edit wording without a deploy.
+
+### Infrastructure and ops
+- DB is **required in production** (no silent PGlite). `db:bootstrap` runs migrations and idempotent production data only.
+- Uploads go through a **StorageAdapter** (local / replit / s3) with magic-byte validation, EXIF stripping + resize, AES-GCM at rest for id/address proofs and a retention purge job.
+- Times are stored UTC and rendered/sliced in **IST** (`src/lib/time.ts`).
+- **Dev-only endpoints:** `/api/dev/outbox` (non-production) and `/api/dev/time-travel` (requires `E2E=true` and non-production; used by e2e scenario 9). Both 404 in production.
+- **Fonts are copied into the repo** (`src/fonts`, `next/font/local`) so the app makes no calls to Google Fonts.
+- Legal pages are drafts, clearly labelled, to be reviewed by a lawyer.
+
+### Tests
+- Vitest (PGlite) covers fee maths, subscriptions, state machine, auth, payments/webhooks, refunds, moderation, threads, CSRF, FSSAI and a repo-wide scan that fails on legacy brand names. Playwright runs the ten required journeys plus 390px mobile checks (no horizontal scroll, ≥36px targets, AA-checked palette).
+- Bug found by e2e and fixed: the cart was wiped on every full page load because the persist effect ran before hydration.

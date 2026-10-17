@@ -23,7 +23,7 @@ const config: Config = {
         turmeric: {
           DEFAULT: '#E8A020', // accent / CTA
           dark: '#C98712',
-          deep: '#B97C10',
+          deep: '#8A5A00',
           tint: '#FBEED3',
         },
         chili: {
@@ -34,7 +34,7 @@ const config: Config = {
         ink: {
           DEFAULT: '#22201C',
           soft: '#5C5648',
-          faint: '#8B8272',
+          faint: '#6E6657',
         },
       },
       fontFamily: {
