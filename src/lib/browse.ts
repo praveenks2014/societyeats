@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, ne, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import {
   fssaiApplications,
@@ -14,6 +14,7 @@ import { DEFAULTS } from '@/lib/config';
 import { haversineKm, type GeoPoint } from '@/lib/geo';
 import { fssaiFiledEligible, isFssaiEligibleToPublish } from '@/lib/fssai/gate';
 import { neighbourOrderCount, sellerBadgeTier, sellerCompletedOrderCount } from '@/lib/reputation';
+import { kitchenGate } from '@/lib/kitchen/gate';
 import { currentSlot, isSlotSoldOut, slotOrderCount } from '@/lib/slots';
 
 /**
@@ -115,10 +116,24 @@ export async function browseListings(opts: {
   // deemed-commencement date math against a joined application row cheaply,
   // and this file already reduces several other per-seller signals in JS —
   // see the slot/neighbour-count caches further down).
+  // Phase 1 Pilot: a dish is buyer-visible only when the admin approved the
+  // kitchen AND the dish, the kitchen's subscription is active/waived/in grace,
+  // the account isn't blocked and the society is active. (The FSSAI gate is
+  // applied per-row below, then re-checked when an order is placed.)
   const conditions = [
     eq(listings.isActive, true),
     gt(listings.availableQty, 0),
     eq(sellerProfiles.isApproved, true),
+    eq(listings.moderationStatus, 'approved'),
+    isNull(users.blockedAt),
+    sql`(${societies.id} is null or ${societies.isActive})`,
+    sql`exists (
+      select 1 from kitchen_subscriptions ks
+      where ks.seller_id = ${listings.sellerId}
+        and ks.status in ('active', 'grace', 'waived')
+        and ks.starts_at <= now()
+        and ks.ends_at + (${settings.subscriptionGraceDays} * interval '1 day') > now()
+    )`,
   ];
   if (distanceExpr) {
     // Hard 10 km rule, enforced in SQL against indexed lat/lng columns
@@ -272,6 +287,7 @@ export async function getListingDetail(id: number, loc?: GeoPoint | null) {
       and(
         eq(listings.sellerId, row.listing.sellerId),
         eq(listings.isActive, true),
+        eq(listings.moderationStatus, 'approved'),
         gt(listings.availableQty, 0),
         ne(listings.id, id),
       ),
@@ -290,8 +306,12 @@ export async function getListingDetail(id: number, loc?: GeoPoint | null) {
   // browseListings() uses (this function only ever looks at one seller).
   const latestApplication = (await latestApplicationsBySeller([row.listing.sellerId])).get(row.listing.sellerId) ?? null;
 
+  const gate = await kitchenGate(row.listing.sellerId);
+
   return {
     ...row,
+    /** False when the kitchen/dish is not currently orderable (shown as "unavailable"). */
+    listable: gate.ok && row.listing.moderationStatus === 'approved' && row.listing.isActive,
     distanceKm,
     sellerReviews,
     otherDishes,
@@ -328,7 +348,12 @@ export async function getKitchenProfile(sellerId: number) {
     .select()
     .from(listings)
     .where(
-      and(eq(listings.sellerId, sellerId), eq(listings.isActive, true), gt(listings.availableQty, 0)),
+      and(
+        eq(listings.sellerId, sellerId),
+        eq(listings.isActive, true),
+        eq(listings.moderationStatus, 'approved'),
+        gt(listings.availableQty, 0),
+      ),
     )
     .orderBy(desc(listings.id));
 
@@ -349,9 +374,13 @@ export async function getKitchenProfile(sellerId: number) {
   ]);
   const latestApplication = applicationBySeller.get(sellerId) ?? null;
 
+  const gate = await kitchenGate(sellerId);
+
   return {
     ...row,
-    activeListings,
+    kitchenLive: gate.ok,
+    activeListings: gate.ok ? activeListings : [],
+    activeListingsHidden: !gate.ok,
     sellerReviews,
     orderedByCount,
     completedOrderCount,

@@ -1,26 +1,19 @@
-import { api, ApiError, ok, readJson } from '@/lib/api';
+import { api, ok, readJson } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
-import { markOrderPaid, verifyCheckoutSignature } from '@/lib/payments';
+import { verifyAndMarkPaid } from '@/lib/payments/verify';
 
 export const dynamic = 'force-dynamic';
 
-/** Razorpay Checkout success handler → server-side signature verification. */
+/** Razorpay Checkout success handler → server-side verification (ownership, signature, live amount check). */
 export const POST = api(async (req) => {
-  await requireSession();
+  const session = await requireSession();
   const body = await readJson<{
-    orderId: number;
+    orderId?: number;
+    subscriptionId?: number;
     razorpay_order_id: string;
     razorpay_payment_id: string;
     razorpay_signature: string;
   }>(req);
-  if (
-    !verifyCheckoutSignature(body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature)
-  ) {
-    throw new ApiError(400, 'Payment signature verification failed');
-  }
-  await markOrderPaid(body.orderId, {
-    razorpayPaymentId: body.razorpay_payment_id,
-    method: 'razorpay',
-  });
-  return ok({ ok: true });
+  const r = await verifyAndMarkPaid({ userId: session.uid, ...body });
+  return ok({ ok: true, kind: r.kind });
 });

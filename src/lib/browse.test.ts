@@ -52,7 +52,14 @@ async function seedSeller(
     userId: user.id,
     kitchenName: `Kitchen ${phone}`,
     isApproved: true,
+    listingState: 'approved',
     fssaiStatus: 'verified',
+  });
+  await db.insert(schema.kitchenSubscriptions).values({
+    sellerId: user.id,
+    status: 'waived',
+    startsAt: new Date(Date.now() - 86_400_000),
+    endsAt: new Date(Date.now() + 30 * 86_400_000),
   });
   await db.insert(schema.listings).values({
     sellerId: user.id,

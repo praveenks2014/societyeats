@@ -24,8 +24,11 @@ export const GET = api(async () => {
       buyerPhone: r.buyer.phone,
       kitchenName: r.profile?.kitchenName ?? null,
       orderTotalInPaise: r.order.totalInPaise,
-      // What's left to refund after any prior partial refund on this order.
-      refundableInPaise: r.order.totalInPaise - r.order.refundInPaise,
+      foodTotalInPaise: r.order.foodTotalInPaise,
+      foodPaymentMode: r.order.foodPaymentMode,
+      foodPaymentStatus: r.order.foodPaymentStatus,
+      // Platform fee still refundable through Razorpay after any earlier refunds.
+      feeRefundableInPaise: Math.max(0, r.order.onlineChargeInPaise - r.order.refundInPaise),
     })),
   });
 });

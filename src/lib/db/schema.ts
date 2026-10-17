@@ -80,6 +80,10 @@ export const fulfillmentTypeEnum = pgEnum('fulfillment_type', [
 
 export const orderStatusEnum = pgEnum('order_status', [
   'placed',
+  // Phase 1 Pilot: the buyer's platform fee is paid; the kitchen now sees the order.
+  'fee_paid',
+  'awaiting_kitchen_payment_confirmation',
+  'expired',
   'paid',
   'accepted',
   'preparing',
@@ -151,7 +155,7 @@ export const complaintOutcomeEnum = pgEnum('complaint_outcome', [
 // Pilot Hardening v2 — Phase 6 (Society-first launch mechanics, DECISIONS.md
 // #87+). 'available' = granted, not yet spent; 'applied' = consumed against
 // one of the referrer's own orders (referralCredits.appliedToOrderId).
-export const referralCreditStatusEnum = pgEnum('referral_credit_status', ['available', 'applied']);
+export const referralCreditStatusEnum = pgEnum('referral_credit_status', ['available', 'reserved', 'applied']);
 
 // ---------- core tables ----------
 
@@ -239,6 +243,21 @@ export const sellerProfiles = pgTable('seller_profiles', {
   fssaiStatus: fssaiStatusEnum('fssai_status').notNull().default('unverified'),
   fssaiExpiry: date('fssai_expiry'),
   isApproved: boolean('is_approved').notNull().default(false),
+  // Phase 1 Pilot kitchen state machine (src/lib/kitchen/state.ts):
+  // draft -> submitted -> changes_requested | approved | rejected;
+  // approved <-> delisted. `isApproved` mirrors (listingState === 'approved').
+  listingState: varchar('listing_state', { length: 20 }).notNull().default('draft'),
+  listingSubmittedAt: timestamp('listing_submitted_at'),
+  listingReviewNote: text('listing_review_note'),
+  delistReasonCategory: varchar('delist_reason_category', { length: 30 }),
+  delistedAt: timestamp('delisted_at'),
+  // Food-payment details (buyer pays the kitchen directly; the platform never touches food money).
+  // Tower/block inside the society, shown to admin and (after acceptance) the buyer.
+  tower: varchar('tower', { length: 40 }),
+  upiVpa: varchar('upi_vpa', { length: 80 }),
+  upiName: varchar('upi_name', { length: 120 }),
+  acceptsUpiNow: boolean('accepts_upi_now').notNull().default(true),
+  acceptsPayAtPickup: boolean('accepts_pay_at_pickup').notNull().default(true),
   vegOnly: boolean('veg_only').notNull().default(false),
   rating: doublePrecision('rating').notNull().default(0),
   ratingCount: integer('rating_count').notNull().default(0),
@@ -330,6 +349,13 @@ export const listings = pgTable('listings', {
   availableQty: integer('available_qty').notNull().default(0),
   slotsJson: jsonb('slots_json').$type<{ days: string[]; slots: string[] }>(),
   isActive: boolean('is_active').notNull().default(true),
+  // Dish moderation: 'pending' | 'approved' | 'rejected' | 'hidden' (admin delist).
+  moderationStatus: varchar('moderation_status', { length: 12 }).notNull().default('approved'),
+  moderationReasonCategory: varchar('moderation_reason_category', { length: 30 }),
+  moderationNote: text('moderation_note'),
+  moderatedAt: timestamp('moderated_at'),
+  // What the admin last approved; a changed name/photo or a >30% price move re-queues the dish.
+  approvedSnapshotJson: jsonb('approved_snapshot_json').$type<{ title: string; photoUrl: string | null; priceInPaise: number }>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -408,6 +434,35 @@ export const orders = pgTable('orders', {
   // from a seller payout (src/lib/payouts.ts) so a later batch never double-deducts it.
   refundInPaise: integer('refund_in_paise').notNull().default(0),
   refundDeductedAt: timestamp('refund_deducted_at'),
+  // ---- Phase 1 Pilot money model ----
+  // The food (subtotal + seller delivery) is paid by the buyer DIRECTLY to the
+  // kitchen. Only `onlineChargeInPaise` (platform fee + GST + optional ECO GST,
+  // minus referral credit) ever goes through the platform's Razorpay account.
+  foodTotalInPaise: integer('food_total_in_paise').notNull().default(0),
+  onlineChargeInPaise: integer('online_charge_in_paise').notNull().default(0),
+  feeBeforeCreditInPaise: integer('fee_before_credit_in_paise').notNull().default(0),
+  platformFeeGstInPaise: integer('platform_fee_gst_in_paise').notNull().default(0),
+  // Rates in force when the order was placed (immutable snapshots).
+  feeBpsSnapshot: integer('fee_bps_snapshot').notNull().default(0),
+  feeMinSnapshot: integer('fee_min_snapshot').notNull().default(0),
+  feeMaxSnapshot: integer('fee_max_snapshot').notNull().default(0),
+  feeGstBpsSnapshot: integer('fee_gst_bps_snapshot').notNull().default(0),
+  ecoModeSnapshot: varchar('eco_mode_snapshot', { length: 30 }).notNull().default('off'),
+  ecoBpsSnapshot: integer('eco_bps_snapshot').notNull().default(0),
+  // 'upi_now' | 'pay_at_pickup'; status: pending | buyer_claimed | confirmed | not_received | at_handover
+  foodPaymentMode: varchar('food_payment_mode', { length: 16 }),
+  foodPaymentStatus: varchar('food_payment_status', { length: 20 }),
+  foodPaymentUtr: varchar('food_payment_utr', { length: 40 }),
+  foodPaymentClaimedAt: timestamp('food_payment_claimed_at'),
+  foodPaymentConfirmedAt: timestamp('food_payment_confirmed_at'),
+  kitchenPaymentRemindedAt: timestamp('kitchen_payment_reminded_at'),
+  feePaidAt: timestamp('fee_paid_at'),
+  // Unpaid-fee orders expire here; unaccepted orders auto-cancel after acceptBy.
+  expiresAt: timestamp('expires_at'),
+  acceptBy: timestamp('accept_by'),
+  completedAt: timestamp('completed_at'),
+  cancelReason: text('cancel_reason'),
+  stockReserved: boolean('stock_reserved').notNull().default(false),
   // Pilot Hardening v2 — Phase 6 (Society-first launch mechanics, DECISIONS.md
   // #87+). Referral credit (src/lib/referrals.ts) redeemed against this
   // order's total at checkout — server-computed from the buyer's real
@@ -456,6 +511,10 @@ export const payments = pgTable('payments', {
   status: paymentStatusEnum('status').notNull().default('created'),
   method: varchar('method', { length: 40 }),
   capturedAt: timestamp('captured_at'),
+  // Phase 1 Pilot: the amount Razorpay was asked to collect, compared with
+  // what is captured/verified. kind: 'order_fee' (home) | 'order_full' (mall).
+  amountInPaise: integer('amount_in_paise').notNull().default(0),
+  kind: varchar('kind', { length: 12 }).notNull().default('order_fee'),
   webhookPayloadJson: jsonb('webhook_payload_json'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   // Pilot Hardening v2 — Phase 5 (Trust & hygiene, DECISIONS.md #73+). Amount
@@ -618,6 +677,11 @@ export const complaints = pgTable('complaints', {
   resolutionNote: text('resolution_note'),
   resolvedByAdminId: integer('resolved_by_admin_id').references(() => users.id),
   resolvedAt: timestamp('resolved_at'),
+  // Phase 1 Pilot: who raised it ('buyer' | 'seller' for a not-received UPI payment | 'system')
+  // and the platform-fee refund (Razorpay) vs the food refund the KITCHEN owes.
+  raisedBy: varchar('raised_by', { length: 10 }).notNull().default('buyer'),
+  platformFeeRefundInPaise: integer('platform_fee_refund_in_paise').notNull().default(0),
+  foodRefundDueInPaise: integer('food_refund_due_in_paise').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -766,4 +830,145 @@ export const emailOutbox = pgTable('email_outbox', {
   providerId: varchar('provider_id', { length: 80 }),
   error: text('error'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// ---------- Phase 1 Pilot: subscriptions (the platform's own revenue) ----------
+
+export const subscriptionPlans = pgTable('subscription_plans', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 80 }).notNull(),
+  durationMonths: integer('duration_months').notNull(),
+  pricePaise: integer('price_paise').notNull(),
+  active: boolean('active').notNull().default(true),
+  sort: integer('sort').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// 'pending_payment' | 'active' | 'grace' | 'expired' | 'waived' | 'cancelled'.
+// starts_at/ends_at are set when the row becomes active/waived. Fee rates in
+// force are snapshotted and never rewritten.
+export const kitchenSubscriptions = pgTable(
+  'kitchen_subscriptions',
+  {
+    id: serial('id').primaryKey(),
+    sellerId: integer('seller_id')
+      .notNull()
+      .references(() => users.id),
+    planId: integer('plan_id').references(() => subscriptionPlans.id),
+    planNameSnapshot: varchar('plan_name_snapshot', { length: 80 }),
+    durationMonthsSnapshot: integer('duration_months_snapshot').notNull().default(0),
+    pricePaiseSnapshot: integer('price_paise_snapshot').notNull().default(0),
+    gstPaise: integer('gst_paise').notNull().default(0),
+    gstBpsSnapshot: integer('gst_bps_snapshot').notNull().default(0),
+    startsAt: timestamp('starts_at'),
+    endsAt: timestamp('ends_at'),
+    status: varchar('status', { length: 20 }).notNull().default('pending_payment'),
+    razorpayOrderId: varchar('razorpay_order_id', { length: 80 }),
+    razorpayPaymentId: varchar('razorpay_payment_id', { length: 80 }),
+    paidAt: timestamp('paid_at'),
+    refundedPaise: integer('refunded_paise').notNull().default(0),
+    grantedByAdminId: integer('granted_by_admin_id').references(() => users.id),
+    notes: text('notes'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('kitchen_subs_seller_idx').on(t.sellerId), index('kitchen_subs_rzp_idx').on(t.razorpayOrderId)],
+);
+
+// ---------- Phase 1 Pilot: admin <-> kitchen messaging ----------
+
+export const adminKitchenThreads = pgTable(
+  'admin_kitchen_threads',
+  {
+    id: serial('id').primaryKey(),
+    sellerId: integer('seller_id')
+      .notNull()
+      .references(() => users.id),
+    subject: varchar('subject', { length: 200 }).notNull(),
+    createdByAdminId: integer('created_by_admin_id').references(() => users.id),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    lastMessageAt: timestamp('last_message_at').notNull().defaultNow(),
+  },
+  (t) => [index('akt_seller_idx').on(t.sellerId)],
+);
+
+export const adminKitchenMessages = pgTable(
+  'admin_kitchen_messages',
+  {
+    id: serial('id').primaryKey(),
+    threadId: integer('thread_id')
+      .notNull()
+      .references(() => adminKitchenThreads.id),
+    senderId: integer('sender_id')
+      .notNull()
+      .references(() => users.id),
+    senderRole: varchar('sender_role', { length: 10 }).notNull(), // 'admin' | 'seller'
+    body: text('body').notNull(),
+    attachmentsJson: jsonb('attachments_json').$type<{ url: string; name: string }[]>(),
+    // Set when the recipient (the other side) opens the thread.
+    readAt: timestamp('read_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('akm_thread_idx').on(t.threadId)],
+);
+
+export const messageTemplates = pgTable('message_templates', {
+  id: serial('id').primaryKey(),
+  title: varchar('title', { length: 120 }).notNull(),
+  body: text('body').notNull(),
+  sort: integer('sort').notNull().default(0),
+});
+
+// ---------- Phase 1 Pilot: money tables ----------
+
+// Platform-fee and subscription refunds issued through Razorpay. The food
+// amount is never refunded by the platform (see kitchenRefundsDue).
+export const refunds = pgTable(
+  'refunds',
+  {
+    id: serial('id').primaryKey(),
+    kind: varchar('kind', { length: 16 }).notNull(), // 'platform_fee' | 'subscription' | 'order_full'
+    orderId: integer('order_id').references(() => orders.id),
+    subscriptionId: integer('subscription_id').references(() => kitchenSubscriptions.id),
+    razorpayPaymentId: varchar('razorpay_payment_id', { length: 80 }),
+    razorpayRefundId: varchar('razorpay_refund_id', { length: 80 }),
+    amountInPaise: integer('amount_in_paise').notNull(),
+    status: varchar('status', { length: 12 }).notNull().default('pending'), // pending | processed | failed
+    reason: text('reason'),
+    initiatedBy: varchar('initiated_by', { length: 16 }).notNull().default('system'), // system | admin:<id>
+    error: text('error'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    processedAt: timestamp('processed_at'),
+  },
+  (t) => [index('refunds_order_idx').on(t.orderId), index('refunds_rzp_idx').on(t.razorpayRefundId)],
+);
+
+// Food money the KITCHEN owes a buyer (rejected/cancelled after a UPI food
+// payment, or an upheld complaint). The platform only tracks and chases it.
+export const kitchenRefundsDue = pgTable(
+  'kitchen_refunds_due',
+  {
+    id: serial('id').primaryKey(),
+    orderId: integer('order_id')
+      .notNull()
+      .references(() => orders.id),
+    sellerId: integer('seller_id')
+      .notNull()
+      .references(() => users.id),
+    amountInPaise: integer('amount_in_paise').notNull(),
+    reason: varchar('reason', { length: 40 }).notNull(), // rejected | not_accepted | complaint
+    status: varchar('status', { length: 12 }).notNull().default('due'), // due | refunded
+    refundUtr: varchar('refund_utr', { length: 40 }),
+    refundedAt: timestamp('refunded_at'),
+    lastChasedAt: timestamp('last_chased_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('krd_seller_idx').on(t.sellerId, t.status)],
+);
+
+// Razorpay webhook deliveries, deduplicated on the event id.
+export const webhookEvents = pgTable('webhook_events', {
+  id: varchar('id', { length: 120 }).primaryKey(),
+  type: varchar('type', { length: 60 }).notNull(),
+  outcome: varchar('outcome', { length: 40 }),
+  receivedAt: timestamp('received_at').notNull().defaultNow(),
 });

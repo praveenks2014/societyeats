@@ -13,9 +13,8 @@ export const dynamic = 'force-dynamic';
  * Buyer complaint intake (DECISIONS.md #73+): quality / wrong item / hygiene
  * / not received, with an optional photo, raised within
  * DEFAULTS.complaintWindowHours of delivery/pickup — matches getListingDetail's
- * review gate (only from delivered/picked_up orders) and reuses
- * orders.updatedAt as the "delivered at" timestamp, same as payouts.ts's T+2
- * hold does. One complaint per order (mirrors the review route's "already
+ * review gate (only from delivered/picked_up orders) and uses
+ * orders.completedAt as the "delivered at" timestamp. One complaint per order (mirrors the review route's "already
  * rated" 409 pattern) — a buyer with more than one issue describes them all
  * in the single free-text field rather than filing several.
  */
@@ -35,7 +34,7 @@ export const POST = api<{ params: { id: string } }>(async (req, { params }) => {
   if (!['delivered', 'picked_up'].includes(order.status)) {
     throw new ApiError(409, 'You can only report an issue after the order is delivered/collected');
   }
-  const hoursSince = (Date.now() - order.updatedAt.getTime()) / (60 * 60 * 1000);
+  const hoursSince = (Date.now() - (order.completedAt ?? order.updatedAt).getTime()) / (60 * 60 * 1000);
   if (hoursSince > DEFAULTS.complaintWindowHours) {
     throw new ApiError(409, `The ${DEFAULTS.complaintWindowHours}h window to report an issue on this order has passed`);
   }
@@ -77,7 +76,7 @@ export const GET = api<{ params: { id: string } }>(async (_req, { params }) => {
   const eligible =
     !complaint &&
     ['delivered', 'picked_up'].includes(order.status) &&
-    (Date.now() - order.updatedAt.getTime()) / (60 * 60 * 1000) <= DEFAULTS.complaintWindowHours;
+    (Date.now() - (order.completedAt ?? order.updatedAt).getTime()) / (60 * 60 * 1000) <= DEFAULTS.complaintWindowHours;
 
   return ok({ complaint: complaint ?? null, eligible, windowHours: DEFAULTS.complaintWindowHours });
 });

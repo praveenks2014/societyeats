@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
-import { getDb } from '@/lib/db';
+import { getDb, type Db } from '@/lib/db';
 import { orders, referralCredits, users } from '@/lib/db/schema';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { notify } from '@/lib/db/notify';
@@ -32,39 +32,70 @@ export async function availableCreditPaise(buyerId: number): Promise<number> {
   return rows.reduce((sum, r) => sum + r.amountInPaise, 0);
 }
 
+/** A db handle or an open transaction — credit helpers work inside either. */
+export type DbLike = Pick<Db, 'select' | 'insert' | 'update' | 'delete'>;
+
 /**
- * Marks a buyer's oldest available credit rows as spent against `orderId`,
- * up to `amountPaise` — whole rows only (every grant is a fixed amount, and
- * the caller already caps `amountPaise` at the buyer's real balance), so
- * there's never a partial-row remainder to track. Returns the amount
- * actually applied (== amountPaise as long as the caller passed a value the
- * buyer can actually cover).
+ * Reserves up to `amountPaise` of the buyer's available credit for `orderId`,
+ * oldest rows first. A row larger than what is needed is SPLIT: the needed
+ * part becomes a 'reserved' row attached to the order and the remainder stays
+ * 'available' — so partial use never discards the rest. Reserved credit is
+ * consumed when the platform fee is paid and released if the order fails or
+ * expires. Returns the amount actually reserved.
  */
-export async function applyCredit(buyerId: number, orderId: number, amountPaise: number): Promise<number> {
+export async function reserveCredit(tx: DbLike, buyerId: number, orderId: number, amountPaise: number): Promise<number> {
   if (amountPaise <= 0) return 0;
-  const db = await getDb();
-  const rows = await db
+  const rows = await tx
     .select()
     .from(referralCredits)
     .where(and(eq(referralCredits.buyerId, buyerId), eq(referralCredits.status, 'available')))
-    .orderBy(asc(referralCredits.createdAt));
+    .orderBy(asc(referralCredits.createdAt), asc(referralCredits.id));
 
   let remaining = amountPaise;
-  let applied = 0;
-  const idsToApply: number[] = [];
+  let reserved = 0;
   for (const row of rows) {
     if (remaining <= 0) break;
-    idsToApply.push(row.id);
-    remaining -= row.amountInPaise;
-    applied += row.amountInPaise;
+    if (row.amountInPaise <= remaining) {
+      await tx.update(referralCredits).set({ status: 'reserved', appliedToOrderId: orderId }).where(eq(referralCredits.id, row.id));
+      remaining -= row.amountInPaise;
+      reserved += row.amountInPaise;
+    } else {
+      await tx.update(referralCredits).set({ amountInPaise: row.amountInPaise - remaining }).where(eq(referralCredits.id, row.id));
+      await tx.insert(referralCredits).values({
+        buyerId,
+        referredUserId: row.referredUserId,
+        referredOrderId: row.referredOrderId,
+        amountInPaise: remaining,
+        status: 'reserved',
+        appliedToOrderId: orderId,
+        createdAt: row.createdAt,
+      });
+      reserved += remaining;
+      remaining = 0;
+    }
   }
-  if (idsToApply.length > 0) {
-    await db
-      .update(referralCredits)
-      .set({ status: 'applied', appliedToOrderId: orderId, appliedAt: new Date() })
-      .where(inArray(referralCredits.id, idsToApply));
-  }
-  return applied;
+  return reserved;
+}
+
+/** Reserved → applied (the platform fee was paid). */
+export async function consumeReservedCredit(tx: DbLike, orderId: number): Promise<void> {
+  await tx
+    .update(referralCredits)
+    .set({ status: 'applied', appliedAt: new Date() })
+    .where(and(eq(referralCredits.appliedToOrderId, orderId), eq(referralCredits.status, 'reserved')));
+}
+
+/**
+ * Reserved/applied → available again (payment failed, order expired or was
+ * cancelled with a full platform-fee refund). Idempotent.
+ */
+export async function releaseCredit(tx: DbLike, orderId: number): Promise<number> {
+  const rows = await tx
+    .update(referralCredits)
+    .set({ status: 'available', appliedToOrderId: null, appliedAt: null })
+    .where(and(eq(referralCredits.appliedToOrderId, orderId), inArray(referralCredits.status, ['reserved', 'applied'])))
+    .returning({ amount: referralCredits.amountInPaise });
+  return rows.reduce((s, r) => s + r.amount, 0);
 }
 
 /**
@@ -95,8 +126,9 @@ export async function maybeGrantReferralCredit(order: { id: number; buyerId: num
   if (already.length > 0) return; // already granted for this referred neighbour
 
   const settings = await getPlatformSettings();
+  // Count distinct referred neighbours, not rows — split rows are one grant.
   const grantedSoFar = await db
-    .select({ id: referralCredits.id })
+    .selectDistinct({ referredUserId: referralCredits.referredUserId })
     .from(referralCredits)
     .where(eq(referralCredits.buyerId, buyer.referredByUserId));
   if (grantedSoFar.length >= settings.referralCreditCapPerUser) return;
