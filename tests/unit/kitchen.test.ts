@@ -4,9 +4,10 @@ import { nextKitchenState } from '@/lib/kitchen/state';
 import { moderationAfterEdit, moderationOnCreate, needsReReview } from '@/lib/dishes/moderation';
 import { isFssaiEligibleToPublish } from '@/lib/fssai/gate';
 
-const okProfile = { listingState: 'approved', fssaiStatus: 'verified' as const, fssaiExpiry: null, upiVpa: 'cook@okhdfc', acceptsUpiNow: true, acceptsPayAtPickup: true };
-const gate = (over: Partial<Parameters<typeof evaluateGate>[0]> & { profile?: Partial<typeof okProfile> } = {}) =>
-  evaluateGate({ profile: { ...okProfile, ...(over.profile ?? {}) }, application: null, subscribed: true, userBlocked: false, ...over, ...(over.profile ? { profile: { ...okProfile, ...over.profile } } : {}) });
+type Prof = Parameters<typeof evaluateGate>[0]['profile'];
+const okProfile: Prof = { listingState: 'approved', fssaiStatus: 'verified', fssaiExpiry: null, upiVpa: 'cook@okhdfc', acceptsUpiNow: true, acceptsPayAtPickup: true };
+const gate = (over: { profile?: Partial<Prof>; subscribed?: boolean; userBlocked?: boolean } = {}) =>
+  evaluateGate({ profile: { ...okProfile, ...(over.profile ?? {}) }, application: null, subscribed: over.subscribed ?? true, userBlocked: over.userBlocked ?? false });
 
 describe('listing gate (approved + subscribed + FSSAI + payment details)', () => {
   test('all four satisfied → ok', () => expect(gate().ok).toBe(true));
