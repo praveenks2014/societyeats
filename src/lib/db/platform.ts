@@ -88,3 +88,15 @@ export async function setPlatformSetting(key: string, value: string): Promise<vo
     await db.insert(platformConfig).values({ key, value });
   }
 }
+
+/** Idempotently writes every default into platform_config without overwriting admin edits. */
+export async function seedPlatformDefaults(): Promise<void> {
+  const db = await getDb();
+  const defaults: Record<string, string> = {
+    radiusKm: String(DEFAULTS.radiusKm),
+    mallModeEnabled: 'false',
+  };
+  for (const [key, value] of Object.entries(defaults)) {
+    await db.insert(platformConfig).values({ key, value }).onConflictDoNothing();
+  }
+}

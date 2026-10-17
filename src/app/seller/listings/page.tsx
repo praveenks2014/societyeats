@@ -141,6 +141,7 @@ function ListingForm({
     setUploading(true);
     const fd = new FormData();
     fd.append('file', file);
+    fd.append('purpose', 'dish');
     const res = await fetch('/api/uploads', { method: 'POST', body: fd });
     const d = await res.json();
     setUploading(false);

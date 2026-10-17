@@ -657,3 +657,44 @@ export const notifications = pgTable('notifications', {
   readAt: timestamp('read_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+// ---------- Phase 1 Pilot: foundations ----------
+
+// Fixed-window rate limiter shared by every instance (Autoscale-safe).
+export const rateLimits = pgTable('rate_limits', {
+  key: varchar('key', { length: 200 }).primaryKey(),
+  windowStart: timestamp('window_start').notNull().defaultNow(),
+  count: integer('count').notNull().default(0),
+});
+
+// Metadata for every object in the StorageAdapter, so /api/files/[key] can
+// enforce visibility. `visibility='private'` objects (FSSAI documents, ID
+// proofs, complaint photos, thread attachments) are only served to the owner,
+// admins and (for thread attachments) thread participants.
+export const files = pgTable('files', {
+  key: varchar('key', { length: 80 }).primaryKey(),
+  ownerId: integer('owner_id').references(() => users.id),
+  purpose: varchar('purpose', { length: 30 }).notNull(),
+  visibility: varchar('visibility', { length: 10 }).notNull().default('public'),
+  contentType: varchar('content_type', { length: 80 }).notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  // AES-256-GCM at rest for ID/address documents (Step 8). iv/tag are base64.
+  encrypted: boolean('encrypted').notNull().default(false),
+  deleteAfter: timestamp('delete_after'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Every sensitive admin action and every admin view of identity documents.
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id: serial('id').primaryKey(),
+    actorId: integer('actor_id').references(() => users.id),
+    action: varchar('action', { length: 60 }).notNull(),
+    targetType: varchar('target_type', { length: 40 }),
+    targetId: varchar('target_id', { length: 80 }),
+    meta: jsonb('meta'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('audit_log_target_idx').on(t.targetType, t.targetId), index('audit_log_action_idx').on(t.action)],
+);

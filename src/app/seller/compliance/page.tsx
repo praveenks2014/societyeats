@@ -241,6 +241,7 @@ function EnterLicenseCard({
     setUploading(true);
     const fd = new FormData();
     fd.append('file', file);
+    fd.append('purpose', 'fssai_doc');
     const res = await fetch('/api/uploads', { method: 'POST', body: fd });
     const d = await res.json();
     setUploading(false);
@@ -346,6 +347,7 @@ function FssaiWizard({
     setUploadingDoc(label);
     const fd = new FormData();
     fd.append('file', file);
+    fd.append('purpose', 'fssai_doc');
     const res = await fetch('/api/uploads', { method: 'POST', body: fd });
     const d = await res.json();
     setUploadingDoc(null);

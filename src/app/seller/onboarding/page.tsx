@@ -56,6 +56,7 @@ export default function SellerOnboarding() {
     setUploadingPhoto(true);
     const fd = new FormData();
     fd.append('file', file);
+    fd.append('purpose', 'kitchen');
     const res = await fetch('/api/uploads', { method: 'POST', body: fd });
     const d = await res.json();
     setUploadingPhoto(false);
@@ -70,6 +71,7 @@ export default function SellerOnboarding() {
     setUploadingVideo(true);
     const fd = new FormData();
     fd.append('file', file);
+    fd.append('purpose', 'kitchen_video');
     const res = await fetch('/api/uploads', { method: 'POST', body: fd });
     const d = await res.json();
     setUploadingVideo(false);

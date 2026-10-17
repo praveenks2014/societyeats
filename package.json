@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 0.0.0.0",
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
     "db:push": "node scripts/db-push.mjs",
@@ -15,7 +15,10 @@
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
     "verify": "npm run typecheck && npm run lint && npm test && npm run test:e2e",
-    "icons": "node scripts/gen-icons.mjs"
+    "icons": "node scripts/gen-icons.mjs",
+    "db:bootstrap": "tsx scripts/bootstrap.ts",
+    "uploads:migrate": "tsx scripts/migrate-uploads.ts",
+    "cron": "tsx scripts/cron.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.14",

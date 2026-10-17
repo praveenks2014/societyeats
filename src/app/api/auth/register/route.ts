@@ -25,7 +25,7 @@ type Body = {
 
 export const POST = api(async (req) => {
   // pre-auth: keyed by IP, throttles automated account-farming
-  rateLimit(`register:${clientIp(req)}`, { limit: 5, windowMs: 10 * 60 * 1000 });
+  await rateLimit(`register:${clientIp(req)}`, { limit: 5, windowMs: 10 * 60 * 1000 });
   const body = await readJson<Body>(req);
   const phone = (body.phone || '').replace(/\D/g, '');
   if (!/^[6-9]\d{9}$/.test(phone)) throw new ApiError(400, 'Enter a valid 10-digit Indian mobile number');

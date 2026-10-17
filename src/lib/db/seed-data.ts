@@ -52,6 +52,11 @@ export async function seedIfEmpty(db: Db): Promise<void> {
 }
 
 export async function runSeed(db: Db): Promise<void> {
+  // Demo data includes accounts with a well-known password (demo1234). It must
+  // never reach a production database by accident.
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEMO_SEED !== 'true') {
+    throw new Error('Refusing to seed demo data when NODE_ENV=production (set ALLOW_DEMO_SEED=true to override).');
+  }
   console.log('Seeding PadosiPlate demo data (Hyderabad)…');
   const hash = bcrypt.hashSync('demo1234', 10);
 

@@ -1,4 +1,5 @@
 import { desc, eq } from 'drizzle-orm';
+import { istStartOfDay } from '@/lib/time';
 import { api, ApiError, ok } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
@@ -30,8 +31,7 @@ export const GET = api(async () => {
   const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.sellerId, session.uid));
   const settings = await getPlatformSettings();
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = istStartOfDay();
   const active = myOrders.filter((o) =>
     ['paid', 'accepted', 'preparing', 'ready', 'out_for_delivery', 'delivery_unassigned'].includes(o.status),
   );

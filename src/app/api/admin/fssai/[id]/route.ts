@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { addMonthsIST } from '@/lib/time';
 import { api, ApiError, ok, readJson } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
@@ -57,8 +58,7 @@ export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => 
       .update(fssaiApplications)
       .set({ status: 'granted', timelineJson: timeline, updatedAt: new Date() })
       .where(eq(fssaiApplications.id, id));
-    const expiry = new Date();
-    expiry.setFullYear(expiry.getFullYear() + 1);
+    const expiry = addMonthsIST(new Date(), 12);
     await db
       .update(sellerProfiles)
       .set({
