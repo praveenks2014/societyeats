@@ -35,7 +35,7 @@ export const GET = api<{ params: { id: string } }>(async (_req, { params }) => {
   return ok({
     id: app.id,
     generatedAt: new Date().toISOString(),
-    platform: { name: BRAND.name },
+    platform: { name: BRAND.appName },
     applicant: {
       name: app.applicantName,
       phone: seller?.phone ?? '',

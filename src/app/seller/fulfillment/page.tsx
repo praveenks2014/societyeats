@@ -10,6 +10,7 @@ type Fulfillment = {
   sellerDeliveryFeeInPaise: number;
   sellerDeliveryRadiusKm: number;
   pickupInstructions: string | null;
+  tower: string | null;
   maxOrdersPerSlot: number;
 };
 
@@ -20,6 +21,7 @@ export default function SellerFulfillment() {
   const [feeRupees, setFeeRupees] = useState('0');
   const [radiusKm, setRadiusKm] = useState('5');
   const [pickupInstructions, setPickupInstructions] = useState('');
+  const [tower, setTower] = useState('');
   const [maxOrdersPerSlot, setMaxOrdersPerSlot] = useState('8');
   const [busy, setBusy] = useState(false);
   const toast = useToast();
@@ -34,6 +36,7 @@ export default function SellerFulfillment() {
         setFeeRupees(String(d.sellerDeliveryFeeInPaise / 100));
         setRadiusKm(String(d.sellerDeliveryRadiusKm));
         setPickupInstructions(d.pickupInstructions ?? '');
+        setTower(d.tower ?? '');
         setMaxOrdersPerSlot(String(d.maxOrdersPerSlot));
       })
       .catch(() => {});
@@ -50,6 +53,7 @@ export default function SellerFulfillment() {
         sellerDeliveryFeeRupees: Number(feeRupees),
         sellerDeliveryRadiusKm: Number(radiusKm),
         pickupInstructions,
+        tower,
         maxOrdersPerSlot: Number(maxOrdersPerSlot),
       }),
     });
@@ -83,6 +87,9 @@ export default function SellerFulfillment() {
           Offer self-pickup
         </label>
         <p className="text-xs text-ink-faint">Buyers collect from you — ₹0, no commission on delivery (there isn't any).</p>
+        <Field label="Tower / block" hint="Your tower inside the society. Buyers see it only after you accept their order.">
+          <Input value={tower} onChange={(e) => setTower(e.target.value)} placeholder="e.g. Tower B" maxLength={40} />
+        </Field>
         <Field label="Pickup instructions" hint="Shown to the buyer at checkout, e.g. building, flat and a collection window.">
           <Textarea
             rows={2}

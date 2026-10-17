@@ -50,7 +50,7 @@ export default async function DishPage({ params }: { params: { id: string } }) {
         photoUrl: detail.listing.photoUrl,
         prepTimeMins: detail.listing.prepTimeMins,
         availableQty: detail.listing.availableQty,
-        isActive: detail.listing.isActive,
+        isActive: detail.listable,
         slotsJson: detail.listing.slotsJson,
       }}
       seller={{

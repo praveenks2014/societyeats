@@ -1,4 +1,5 @@
 import { and, eq } from 'drizzle-orm';
+import { assertRestaurantConsoleEnabled } from '@/lib/kitchen/gate';
 import { api, ApiError, ok, readJson } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
@@ -7,6 +8,7 @@ import { restaurantItems, restaurants } from '@/lib/db/schema';
 export const dynamic = 'force-dynamic';
 
 export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => {
+  await assertRestaurantConsoleEnabled();
   const session = await requireSession(['restaurant']);
   const db = await getDb();
   const [restaurant] = await db

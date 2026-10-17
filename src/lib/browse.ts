@@ -15,6 +15,7 @@ import { haversineKm, type GeoPoint } from '@/lib/geo';
 import { fssaiFiledEligible, isFssaiEligibleToPublish } from '@/lib/fssai/gate';
 import { neighbourOrderCount, sellerBadgeTier, sellerCompletedOrderCount } from '@/lib/reputation';
 import { kitchenGate } from '@/lib/kitchen/gate';
+import { buyerHandle } from '@/lib/handles';
 import { currentSlot, isSlotSoldOut, slotOrderCount } from '@/lib/slots';
 
 /**
@@ -96,6 +97,8 @@ export async function browseListings(opts: {
   veg?: boolean;
   cuisine?: string;
   q?: string;
+  /** Restrict to kitchens inside this society ("My society"); omit for "Nearby" (radius). */
+  societyId?: number;
 }): Promise<{ listings: ListingCard[]; cuisines: string[]; radiusKm: number }> {
   const db = await getDb();
   const settings = await getPlatformSettings();
@@ -135,7 +138,8 @@ export async function browseListings(opts: {
         and ks.ends_at + (${settings.subscriptionGraceDays} * interval '1 day') > now()
     )`,
   ];
-  if (distanceExpr) {
+  if (opts.societyId) conditions.push(eq(users.societyId, opts.societyId));
+  if (distanceExpr && !opts.societyId) {
     // Hard 10 km rule, enforced in SQL against indexed lat/lng columns
     // (users_lat_lng_idx / societies_lat_lng_idx). Sellers with no
     // coordinates at all (no direct lat/lng and no society) can't be
@@ -271,7 +275,7 @@ export async function getListingDetail(id: number, loc?: GeoPoint | null) {
   const distanceKm =
     loc && sellerPoint ? haversineKm(loc, sellerPoint) : null;
 
-  const sellerReviews = await db
+  const sellerReviewRows = await db
     .select({ review: reviews, buyer: users })
     .from(reviews)
     .innerJoin(orders, eq(reviews.orderId, orders.id))
@@ -279,6 +283,8 @@ export async function getListingDetail(id: number, loc?: GeoPoint | null) {
     .where(eq(orders.sellerId, row.listing.sellerId))
     .orderBy(desc(reviews.createdAt))
     .limit(5);
+  // Appreciation notes are shown anonymised ("Buyer #A7") — never a real name.
+  const sellerReviews = sellerReviewRows.map((r) => ({ ...r, buyer: { ...r.buyer, name: buyerHandle(r.review.orderId, r.review.buyerId), phone: '' } }));
 
   const otherDishes = await db
     .select()
@@ -357,7 +363,7 @@ export async function getKitchenProfile(sellerId: number) {
     )
     .orderBy(desc(listings.id));
 
-  const sellerReviews = await db
+  const sellerReviewRows = await db
     .select({ review: reviews, buyer: users })
     .from(reviews)
     .innerJoin(orders, eq(reviews.orderId, orders.id))
@@ -365,6 +371,7 @@ export async function getKitchenProfile(sellerId: number) {
     .where(eq(orders.sellerId, sellerId))
     .orderBy(desc(reviews.createdAt))
     .limit(10);
+  const sellerReviews = sellerReviewRows.map((r) => ({ ...r, buyer: { ...r.buyer, name: buyerHandle(r.review.orderId, r.review.buyerId), phone: '' } }));
 
   const [orderedByCount, completedOrderCount, settings, applicationBySeller] = await Promise.all([
     neighbourOrderCount(sellerId),

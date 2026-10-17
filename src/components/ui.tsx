@@ -123,12 +123,14 @@ export function Chip({
 export function Card({
   className = '',
   children,
-}: {
+  ...rest
+}: React.HTMLAttributes<HTMLDivElement> & {
   className?: string;
   children: React.ReactNode;
+  'data-testid'?: string;
 }) {
   return (
-    <div className={`rounded-card border border-rice-line bg-white shadow-card ${className}`}>
+    <div className={`rounded-card border border-rice-line bg-white shadow-card ${className}`} {...rest}>
       {children}
     </div>
   );

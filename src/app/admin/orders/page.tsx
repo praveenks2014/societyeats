@@ -11,7 +11,10 @@ type Row = {
   type: string;
   status: string;
   totalInPaise: number;
-  commissionInPaise: number;
+  foodTotalInPaise: number;
+  onlineChargeInPaise: number;
+  foodPaymentMode: string | null;
+  foodPaymentStatus: string | null;
   createdAt: string;
   buyerName: string;
   vendorName: string;
@@ -63,8 +66,9 @@ export default function AdminOrders() {
               <th className="px-3 py-2.5">Status</th>
               <th className="px-3 py-2.5">Payment</th>
               <th className="px-3 py-2.5">Delivery</th>
-              <th className="px-3 py-2.5 text-right">Total</th>
-              <th className="px-3 py-2.5 text-right">Commission</th>
+              <th className="px-3 py-2.5">Food payment</th>
+              <th className="px-3 py-2.5 text-right">Food (to kitchen)</th>
+              <th className="px-3 py-2.5 text-right">Platform fee</th>
             </tr>
           </thead>
           <tbody>
@@ -102,8 +106,16 @@ export default function AdminOrders() {
                     '—'
                   )}
                 </td>
-                <td className="px-3 py-2.5 text-right">{formatINR(o.totalInPaise)}</td>
-                <td className="px-3 py-2.5 text-right text-leaf">{formatINR(o.commissionInPaise)}</td>
+                <td className="px-3 py-2.5 text-xs">
+                  {o.foodPaymentMode ? (
+                    <>
+                      <div>{o.foodPaymentMode === 'upi_now' ? 'UPI now' : 'At pickup'}</div>
+                      <div className={o.foodPaymentStatus === 'not_received' || o.status === 'awaiting_kitchen_payment_confirmation' ? 'font-semibold text-chili' : 'text-ink-faint'}>{o.foodPaymentStatus?.replace('_', ' ')}</div>
+                    </>
+                  ) : '—'}
+                </td>
+                <td className="px-3 py-2.5 text-right">{formatINR(o.foodTotalInPaise || o.totalInPaise)}</td>
+                <td className="px-3 py-2.5 text-right text-leaf">{formatINR(o.onlineChargeInPaise)}</td>
               </tr>
             ))}
           </tbody>

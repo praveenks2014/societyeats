@@ -22,8 +22,6 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.14",
-    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
-    "@fontsource-variable/inter": "^5.3.0",
     "@replit/object-storage": "^1.0.0",
     "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.36.4",

@@ -5,7 +5,7 @@ import { requireSession } from '@/lib/auth';
 import { recordAudit } from '@/lib/audit';
 import { getDb } from '@/lib/db';
 import { societies } from '@/lib/db/schema';
-import { newInviteCode, societyInput } from '../route';
+import { newInviteCode, societyInput } from '@/lib/societies';
 
 export const dynamic = 'force-dynamic';
 

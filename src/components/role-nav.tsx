@@ -8,7 +8,7 @@ export function RoleNav({
   tabs,
 }: {
   title: string;
-  tabs: { href: string; label: string }[];
+  tabs: { href: string; label: string; badge?: number }[];
 }) {
   const pathname = usePathname();
   return (
@@ -16,7 +16,7 @@ export function RoleNav({
       <div className="eyebrow">{title}</div>
       <nav className="no-scrollbar -mb-px mt-2 flex gap-1 overflow-x-auto">
         {tabs.map((t) => {
-          const active = pathname === t.href;
+          const active = pathname === t.href || (t.href !== '/seller' && t.href !== '/admin' && pathname.startsWith(t.href + '/'));
           return (
             <Link
               key={t.href}
@@ -28,6 +28,11 @@ export function RoleNav({
               }`}
             >
               {t.label}
+              {t.badge ? (
+                <span className="ml-1.5 inline-flex min-w-5 items-center justify-center rounded-pill bg-chili px-1.5 text-[11px] font-bold text-white" aria-label={`${t.badge} unread`}>
+                  {t.badge}
+                </span>
+              ) : null}
             </Link>
           );
         })}

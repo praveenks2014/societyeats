@@ -28,6 +28,7 @@ export default async function HomePage() {
       <footer className="mt-16 border-t border-rice-line pt-8 pb-4 text-xs text-ink-faint">
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           <Link href="/legal/terms" className="hover:text-ink">Terms</Link>
+          <Link href="/legal/kitchen-terms" className="hover:text-ink">Kitchen terms</Link>
           <Link href="/legal/food-safety" className="hover:text-ink">Food safety</Link>
           <Link href="/legal/privacy" className="hover:text-ink">Privacy</Link>
           <Link href="/legal/refunds" className="hover:text-ink">Refunds</Link>

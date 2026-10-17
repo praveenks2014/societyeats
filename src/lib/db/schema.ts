@@ -972,3 +972,39 @@ export const webhookEvents = pgTable('webhook_events', {
   outcome: varchar('outcome', { length: 40 }),
   receivedAt: timestamp('received_at').notNull().defaultNow(),
 });
+
+// ---------- Phase 1 Pilot: anonymous buyer <-> kitchen threads ----------
+
+export const orderMessages = pgTable(
+  'order_messages',
+  {
+    id: serial('id').primaryKey(),
+    orderId: integer('order_id')
+      .notNull()
+      .references(() => orders.id),
+    senderId: integer('sender_id').references(() => users.id),
+    senderRole: varchar('sender_role', { length: 10 }).notNull(), // buyer | seller | system
+    body: text('body').notNull(),
+    quickReplyKey: varchar('quick_reply_key', { length: 30 }),
+    reportedAt: timestamp('reported_at'),
+    reportedById: integer('reported_by_id').references(() => users.id),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('order_messages_order_idx').on(t.orderId)],
+);
+
+// "Block user": the blocked user can no longer message the blocker.
+export const userBlocks = pgTable(
+  'user_blocks',
+  {
+    id: serial('id').primaryKey(),
+    blockerId: integer('blocker_id')
+      .notNull()
+      .references(() => users.id),
+    blockedId: integer('blocked_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('user_blocks_pair_idx').on(t.blockerId, t.blockedId)],
+);

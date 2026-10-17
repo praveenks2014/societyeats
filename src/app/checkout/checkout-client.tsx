@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button, Card, EmptyState, Field, Input, Skeleton } from '@/components/ui';
 import { MockCheckoutSheet } from '@/components/mock-checkout';
+import '@/components/razorpay';
 import { useCart, useLocation, useToast } from '@/components/providers';
-import { formatINR } from '@/lib/money';
+import { formatINR, quoteOrder, type FeeConfig } from '@/lib/money';
 import { formatDistance } from '@/lib/geo';
 
 type FulfillmentType = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
@@ -19,24 +20,15 @@ type QuoteResp = {
   offersSellerDelivery: boolean;
   sellerDeliveryFeeInPaise: number;
   sellerDeliveryRadiusKm: number;
-  platformDeliveryEnabled: boolean;
-  platformDeliveryMinOrderPaise: number;
-  buyerPlatformFeePaise: number;
-  commissionHomePct: number;
-  gstPct: number;
+  feeConfig: FeeConfig;
+  acceptsUpiNow: boolean;
+  acceptsPayAtPickup: boolean;
+  availableCreditPaise: number;
   radiusKm: number;
   distanceKm: number | null;
   withinRange: boolean | null;
   sellerDeliveryAvailable: boolean | null;
-  platformDeliveryFeeInPaise: number | null;
-  platformDeliveryEtaMins: number | null;
 };
-
-declare global {
-  interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
-  }
-}
 
 export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
   const { vendor, items, subtotalPaise, clear } = useCart();
@@ -51,18 +43,10 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
   const [fulfillment, setFulfillment] = useState<FulfillmentType>('self_pickup');
   const [placing, setPlacing] = useState(false);
   const [mockSheet, setMockSheet] = useState<{ orderId: number; amount: number } | null>(null);
-  // Pilot Hardening v2 — Phase 6 (DECISIONS.md #87+): referral credit,
-  // opt-out toggle — default to applying it, matching how most wallet/credit
-  // balances behave elsewhere (Amazon Pay, Swiggy Money).
-  const [availableCreditPaise, setAvailableCreditPaise] = useState(0);
+  // Referral credit only ever reduces the platform fee. Default on.
   const [useCredit, setUseCredit] = useState(true);
-
-  useEffect(() => {
-    fetch('/api/referrals')
-      .then((r) => r.json())
-      .then((d) => setAvailableCreditPaise(d.availablePaise ?? 0))
-      .catch(() => {});
-  }, []);
+  // How the buyer pays the KITCHEN for the food.
+  const [foodMode, setFoodMode] = useState<'upi_now' | 'pay_at_pickup'>('upi_now');
 
   useEffect(() => {
     if (loc && !addressText) setAddressText(loc.label);
@@ -87,24 +71,15 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
       .catch(() => {});
   }, [isDelivery, vendor, loc]);
 
-  // keep the selection valid as the offer loads/changes — only force a
-  // switch when the current pick isn't OFFERED at all, never just because
-  // it's temporarily out of range (that's shown inline, not auto-corrected)
+  // keep the selections valid as the kitchen's offer loads
   useEffect(() => {
     if (!quote) return;
-    const isOffered = (t: FulfillmentType) =>
-      t === 'self_pickup'
-        ? quote.offersSelfPickup
-        : t === 'seller_delivery'
-          ? quote.offersSellerDelivery
-          : quote.platformDeliveryEnabled;
     setFulfillment((prev) => {
-      if (isOffered(prev)) return prev;
-      if (quote.offersSelfPickup) return 'self_pickup';
-      if (quote.offersSellerDelivery) return 'seller_delivery';
-      if (quote.platformDeliveryEnabled) return 'platform_delivery';
-      return prev;
+      if (prev === 'self_pickup' && quote.offersSelfPickup) return prev;
+      if (prev === 'seller_delivery' && quote.offersSellerDelivery) return prev;
+      return quote.offersSelfPickup ? 'self_pickup' : quote.offersSellerDelivery ? 'seller_delivery' : prev;
     });
+    setFoodMode((prev) => (prev === 'upi_now' && !quote.acceptsUpiNow ? 'pay_at_pickup' : prev === 'pay_at_pickup' && !quote.acceptsPayAtPickup ? 'upi_now' : prev));
   }, [quote]);
 
   if (items.length === 0 && !mockSheet) {
@@ -121,25 +96,16 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
     );
   }
 
-  const needsAddress = isDelivery && fulfillment !== 'self_pickup';
-  const platformEligibleBySubtotal = quote ? subtotalPaise >= quote.platformDeliveryMinOrderPaise : false;
+  const needsAddress = isDelivery && fulfillment === 'seller_delivery';
   const outOfRange = needsAddress && quote?.withinRange === false;
 
-  const deliveryFee =
-    !isDelivery || fulfillment === 'self_pickup'
-      ? 0
-      : fulfillment === 'seller_delivery'
-        ? (quote?.sellerDeliveryFeeInPaise ?? 0)
-        : (quote?.platformDeliveryFeeInPaise ?? 0);
-  const buyerPlatformFee = quote?.buyerPlatformFeePaise ?? 0;
-  const gstPct = quote?.gstPct ?? 5;
-  const gstInPaise = isDelivery ? Math.round((subtotalPaise * gstPct) / 100) : 0;
-  const totalBeforeCredit = subtotalPaise + (isDelivery ? deliveryFee + buyerPlatformFee + gstInPaise : 0);
-  // Mirrors the server's own cap (POST /api/orders) so the displayed total
-  // matches what will actually be charged — the server recomputes and
-  // enforces this independently, this is display-only.
-  const creditApplied = useCredit ? Math.min(availableCreditPaise, Math.max(0, totalBeforeCredit - 100)) : 0;
-  const total = totalBeforeCredit - creditApplied;
+  const deliveryFee = !isDelivery || fulfillment === 'self_pickup' ? 0 : (quote?.sellerDeliveryFeeInPaise ?? 0);
+  // The SAME function the server uses (src/lib/money/fees.ts) — display and charge cannot drift apart.
+  const bill = quote
+    ? quoteOrder({ foodSubtotalPaise: subtotalPaise, sellerDeliveryFeePaise: deliveryFee, availableCreditPaise: useCredit ? quote.availableCreditPaise : 0 }, quote.feeConfig)
+    : null;
+  const feePct = quote ? quote.feeConfig.feeBps / 100 : 10;
+  const total = isDelivery ? (bill?.onlineChargePaise ?? 0) : subtotalPaise;
 
   async function placeOrder() {
     if (!vendor) return;
@@ -159,6 +125,7 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
                 type: 'home_delivery',
                 sellerId: vendor.id,
                 fulfillmentType: fulfillment,
+                foodPaymentMode: foodMode,
                 items: items.map((i) => ({ id: i.id, qty: i.qty })),
                 useCredit,
                 ...(needsAddress
@@ -188,8 +155,11 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
         setPlacing(false);
         return;
       }
-      if (data.payment.mode === 'mock') {
-        setMockSheet({ orderId: data.orderId, amount: data.totalInPaise });
+      if (data.payment.mode === 'none') {
+        clear();
+        router.push(`/orders/${data.orderId}`);
+      } else if (data.payment.mode === 'mock') {
+        setMockSheet({ orderId: data.orderId, amount: data.onlineChargeInPaise ?? data.totalInPaise });
       } else {
         openRazorpay(data.orderId, data.payment);
       }
@@ -209,7 +179,7 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
         amount: payment.amountInPaise,
         currency: 'INR',
         name: 'PadosiPlate',
-        description: `Order #${orderId}`,
+        description: `Platform fee · order #${orderId}`,
         order_id: payment.razorpayOrderId,
         handler: async (resp: {
           razorpay_order_id: string;
@@ -256,7 +226,7 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
     });
     if (outcome === 'success' && res.ok) {
       clear();
-      toast('Payment successful 🎉');
+      toast(isDelivery ? 'Platform fee paid 🎉 — now pay the kitchen' : 'Payment successful 🎉');
       router.push(`/orders/${mockSheet.orderId}`);
     } else {
       setMockSheet(null);
@@ -302,22 +272,6 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
                   feeLabel={formatINR(quote.sellerDeliveryFeeInPaise)}
                 />
               )}
-              {quote.platformDeliveryEnabled && (
-                <FulfillmentOption
-                  active={fulfillment === 'platform_delivery'}
-                  onClick={() => setFulfillment('platform_delivery')}
-                  disabled={quote.withinRange === false || !platformEligibleBySubtotal}
-                  title="Delivery partner"
-                  sub={
-                    quote.withinRange === false
-                      ? `Outside the ${quote.radiusKm} km delivery radius`
-                      : !platformEligibleBySubtotal
-                        ? `Needs an order of ${formatINR(quote.platformDeliveryMinOrderPaise)}+`
-                        : `Porter/Shadowfax/Borzo · ~${quote.platformDeliveryEtaMins ?? 30} min after pickup`
-                  }
-                  feeLabel={quote.platformDeliveryFeeInPaise != null ? formatINR(quote.platformDeliveryFeeInPaise) : '—'}
-                />
-              )}
             </div>
           )}
         </Card>
@@ -355,75 +309,108 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
         </div>
       )}
 
-      {/* bill breakup — transparent, invoice style */}
-      <Card className="mt-5 p-4">
-        <div className="eyebrow mb-3">BILL DETAILS</div>
-        <div className="space-y-2 text-sm">
-          {items.map((i) => (
-            <div key={i.id} className="flex justify-between">
-              <span className="text-ink-soft">
-                {i.title} × {i.qty}
-              </span>
-              <span>{formatINR(i.qty * i.pricePaise)}</span>
-            </div>
-          ))}
-          <div className="border-t border-dashed border-rice-line pt-2" />
-          <div className="flex justify-between">
-            <span>Item total</span>
-            <span>{formatINR(subtotalPaise)}</span>
-          </div>
-          {isDelivery && (
-            <div className="flex justify-between">
-              <span>
-                {fulfillment === 'self_pickup'
-                  ? 'Delivery (self pickup)'
-                  : fulfillment === 'seller_delivery'
-                    ? 'Delivery fee (kept by the kitchen)'
-                    : 'Delivery fee (via delivery partner)'}
-              </span>
-              <span>{fulfillment === 'self_pickup' ? 'FREE' : quote ? formatINR(deliveryFee) : <Skeleton className="inline-block h-4 w-10" />}</span>
-            </div>
+      {isDelivery && quote && (quote.acceptsUpiNow || quote.acceptsPayAtPickup) && (
+        <Card className="mt-4 space-y-2.5 p-4">
+          <div className="eyebrow">HOW WILL YOU PAY {quote.kitchenName.toUpperCase()}?</div>
+          {quote.acceptsUpiNow && (
+            <FulfillmentOption active={foodMode === 'upi_now'} onClick={() => setFoodMode('upi_now')} title="Pay by UPI now" sub="Right after the platform fee you’ll get a UPI button / QR for the kitchen" feeLabel={formatINR(bill?.foodTotalPaise ?? 0)} />
           )}
-          {isDelivery && (
-            <div className="flex justify-between">
-              <span>Platform fee</span>
-              <span>{buyerPlatformFee === 0 ? 'FREE' : formatINR(buyerPlatformFee)}</span>
-            </div>
+          {quote.acceptsPayAtPickup && (
+            <FulfillmentOption active={foodMode === 'pay_at_pickup'} onClick={() => setFoodMode('pay_at_pickup')} title="Pay at pickup" sub="UPI or cash to the kitchen when you collect" feeLabel={formatINR(bill?.foodTotalPaise ?? 0)} />
           )}
-          {isDelivery && (
-            <div className="flex justify-between">
-              <span>GST {gstPct}% on food</span>
-              <span>{formatINR(gstInPaise)}</span>
+        </Card>
+      )}
+
+      {/* bill — two clearly separate parts */}
+      {isDelivery ? (
+        <div className="mt-5 space-y-3" data-testid="bill">
+          <Card className="p-4">
+            <div className="flex items-baseline justify-between">
+              <div className="eyebrow">FOOD · PAID TO {(vendor?.name ?? 'KITCHEN').toUpperCase()}</div>
+              <span className="text-[11px] text-ink-faint">not collected by PadosiPlate</span>
             </div>
-          )}
-          {creditApplied > 0 && (
-            <div className="flex justify-between text-leaf">
-              <span>Referral credit applied</span>
-              <span>−{formatINR(creditApplied)}</span>
+            <div className="mt-3 space-y-2 text-sm">
+              {items.map((i) => (
+                <div key={i.id} className="flex justify-between">
+                  <span className="text-ink-soft">{i.title} × {i.qty}</span>
+                  <span>{formatINR(i.qty * i.pricePaise)}</span>
+                </div>
+              ))}
+              {fulfillment === 'seller_delivery' && (
+                <div className="flex justify-between">
+                  <span className="text-ink-soft">Delivery (kept by the kitchen)</span>
+                  <span>{formatINR(deliveryFee)}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-rice-line pt-2 font-bold" data-testid="food-total">
+                <span>Food, paid to {vendor?.name}</span>
+                <span>{formatINR(bill?.foodTotalPaise ?? subtotalPaise)}</span>
+              </div>
             </div>
-          )}
-          <div className="flex justify-between border-t border-rice-line pt-2 text-base font-bold">
-            <span>To pay</span>
-            <span>{formatINR(total)}</span>
-          </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="eyebrow">PLATFORM FEE · PAID NOW VIA RAZORPAY</div>
+            {!bill ? (
+              <Skeleton className="mt-3 h-16 w-full" />
+            ) : (
+              <div className="mt-3 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Platform fee ({feePct}% of food)</span>
+                  <span>{formatINR(bill.feeBeforeCreditPaise)}</span>
+                </div>
+                {bill.creditAppliedPaise > 0 && (
+                  <div className="flex justify-between text-leaf">
+                    <span>Referral credit</span>
+                    <span>−{formatINR(bill.creditAppliedPaise)}</span>
+                  </div>
+                )}
+                {bill.feeGstPaise > 0 && (
+                  <div className="flex justify-between">
+                    <span>GST on platform fee</span>
+                    <span>{formatINR(bill.feeGstPaise)}</span>
+                  </div>
+                )}
+                {bill.ecoGstPaise > 0 && (
+                  <div className="flex justify-between">
+                    <span>GST on food (collected as e-commerce operator)</span>
+                    <span>{formatINR(bill.ecoGstPaise)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-rice-line pt-2 text-base font-bold" data-testid="platform-fee-total">
+                  <span>Platform fee to pay now</span>
+                  <span>{formatINR(bill.onlineChargePaise)}</span>
+                </div>
+              </div>
+            )}
+            {quote && quote.availableCreditPaise > 0 && (
+              <label className="mt-3 flex min-h-[44px] items-center gap-2 rounded-xl bg-leaf-tint px-3 py-2 text-sm text-leaf">
+                <input type="checkbox" checked={useCredit} onChange={(e) => setUseCredit(e.target.checked)} className="h-4 w-4 accent-leaf" />
+                Use my {formatINR(quote.availableCreditPaise)} referral credit (platform fee only)
+              </label>
+            )}
+          </Card>
+          <p className="px-1 text-[11px] leading-relaxed text-ink-faint">
+            You pay <strong>{vendor?.name}</strong> directly for the food — by UPI or at pickup. PadosiPlate never holds your food money; the platform fee is its only charge. If the kitchen declines, the platform fee is refunded automatically.
+          </p>
         </div>
-        {availableCreditPaise > 0 && (
-          <label className="mt-3 flex items-center gap-2 rounded-xl bg-leaf-tint px-3 py-2 text-sm text-leaf">
-            <input
-              type="checkbox"
-              checked={useCredit}
-              onChange={(e) => setUseCredit(e.target.checked)}
-              className="h-4 w-4 accent-leaf"
-            />
-            Apply your {formatINR(availableCreditPaise)} referral credit
-          </label>
-        )}
-        <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
-          {isDelivery
-            ? "GST is collected by PadosiPlate, the platform of record for home-food orders (deemed supplier under Sec 9(5) CGST) — the kitchen doesn't need its own GST registration for this. A seller-delivery fee goes entirely to the kitchen; a delivery-partner fee is passed through at cost. PadosiPlate charges the kitchen a transparent commission on the food only — shown on their earnings page, never hidden in your bill."
-            : 'PadosiPlate charges the counter a transparent commission — shown on their earnings page, never hidden in your bill.'}
-        </p>
-      </Card>
+      ) : (
+        <Card className="mt-5 p-4">
+          <div className="eyebrow mb-3">BILL DETAILS</div>
+          <div className="space-y-2 text-sm">
+            {items.map((i) => (
+              <div key={i.id} className="flex justify-between">
+                <span className="text-ink-soft">{i.title} × {i.qty}</span>
+                <span>{formatINR(i.qty * i.pricePaise)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between border-t border-rice-line pt-2 text-base font-bold">
+              <span>Item total</span>
+              <span>{formatINR(subtotalPaise)}</span>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <Button
         size="lg"
@@ -432,7 +419,11 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
         disabled={outOfRange || (isDelivery && quote == null)}
         onClick={placeOrder}
       >
-        {mockMode ? `Pay ${formatINR(total)} (test mode)` : `Pay ${formatINR(total)}`}
+        {isDelivery
+          ? total === 0
+            ? 'Place order'
+            : `Pay platform fee ${formatINR(total)}${mockMode ? ' (test mode)' : ''}`
+          : `Pay ${formatINR(total)}${mockMode ? ' (test mode)' : ''}`}
       </Button>
 
       <MockCheckoutSheet

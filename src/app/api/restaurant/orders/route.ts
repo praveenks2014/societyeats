@@ -1,4 +1,5 @@
 import { desc, eq, inArray } from 'drizzle-orm';
+import { assertRestaurantConsoleEnabled } from '@/lib/kitchen/gate';
 import { api, ApiError, ok } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
@@ -7,6 +8,7 @@ import { orderItems, orders, restaurants, users } from '@/lib/db/schema';
 export const dynamic = 'force-dynamic';
 
 export const GET = api(async () => {
+  await assertRestaurantConsoleEnabled();
   const session = await requireSession(['restaurant']);
   const db = await getDb();
   const [restaurant] = await db

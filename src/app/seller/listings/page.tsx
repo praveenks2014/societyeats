@@ -18,6 +18,8 @@ type Listing = {
   availableQty: number;
   slotsJson: { days: string[]; slots: string[] } | null;
   isActive: boolean;
+  moderationStatus: 'pending' | 'approved' | 'rejected' | 'hidden';
+  moderationNote: string | null;
 };
 
 const CUISINES = ['Biryani', 'Tiffins', 'North Indian', 'Jain Thali', 'Bengali Sweets', 'Keto Bowls', 'Desserts', 'Snacks', 'Other'];
@@ -80,7 +82,15 @@ export default function SellerListings() {
                 <div className="mt-0.5 text-sm text-ink-soft">
                   {formatINR(row.priceInPaise)} · {row.availableQty} portions · {row.cuisine}
                 </div>
-                {!row.isActive && <Badge tone="neutral" className="mt-1">Paused</Badge>}
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {!row.isActive && <Badge tone="neutral">Paused</Badge>}
+                  {row.moderationStatus === 'pending' && <Badge tone="amber">In review</Badge>}
+                  {row.moderationStatus === 'rejected' && <Badge tone="red">Needs changes</Badge>}
+                  {row.moderationStatus === 'hidden' && <Badge tone="red">Hidden by PadosiPlate</Badge>}
+                </div>
+                {row.moderationNote && ['rejected', 'hidden'].includes(row.moderationStatus) && (
+                  <p className="mt-1 text-xs text-chili-dark">{row.moderationNote}</p>
+                )}
               </div>
               <div className="flex shrink-0 flex-col gap-1.5">
                 <Button size="sm" variant="secondary" onClick={() => setEditing(row)}>

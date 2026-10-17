@@ -10,7 +10,7 @@ type Stats = {
   activeOrders: number;
   unassigned: number;
   gmvPaise: number;
-  commissionPaise: number;
+  platformFeePaise: number;
   sellersAwaitingApproval: number;
   fssaiQueue: number;
   providersDown: number;
@@ -30,13 +30,11 @@ export default function AdminOverview() {
 
   const tiles: { label: string; value: string; href: string; alert?: boolean }[] = [
     { label: 'Active orders', value: String(stats.activeOrders), href: '/admin/orders' },
-    { label: 'Riderless orders', value: String(stats.unassigned), href: '/admin/orders', alert: stats.unassigned > 0 },
-    { label: 'GMV (completed)', value: formatINR(stats.gmvPaise), href: '/admin/orders' },
-    { label: 'Commission earned', value: formatINR(stats.commissionPaise), href: '/admin/orders' },
-    { label: 'Sellers to approve', value: String(stats.sellersAwaitingApproval), href: '/admin/sellers', alert: stats.sellersAwaitingApproval > 0 },
+    { label: 'Food sold (paid to kitchens)', value: formatINR(stats.gmvPaise), href: '/admin/orders' },
+    { label: 'Platform fees (completed)', value: formatINR(stats.platformFeePaise), href: '/admin/revenue' },
+    { label: 'Listing requests', value: String(stats.sellersAwaitingApproval), href: '/admin/kitchens/requests', alert: stats.sellersAwaitingApproval > 0 },
     { label: 'FSSAI queue', value: String(stats.fssaiQueue), href: '/admin/fssai', alert: stats.fssaiQueue > 0 },
     { label: 'Open complaints', value: String(stats.openComplaints), href: '/admin/complaints', alert: stats.openComplaints > 0 },
-    { label: 'Providers disabled', value: String(stats.providersDown), href: '/admin/providers', alert: stats.providersDown > 0 },
     { label: 'All-time orders', value: String(stats.totalOrders), href: '/admin/orders' },
   ];
 

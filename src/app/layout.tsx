@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
-import { Bricolage_Grotesque, Inter } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
-import { BRAND } from '@/lib/config';
+import { BRAND } from '@/config/brand';
 import { getSession } from '@/lib/auth';
 import { siteOrigin } from '@/lib/site-url';
 import { Providers } from '@/components/providers';
@@ -9,16 +9,19 @@ import { Header } from '@/components/header';
 import { VerifyBanner } from '@/components/verify-banner';
 import { SwRegister } from '@/components/sw-register';
 
-const display = Bricolage_Grotesque({
-  subsets: ['latin'],
+// Self-hosted variable fonts (no Google Fonts request at build or run time).
+const display = localFont({
+  src: '../fonts/bricolage-grotesque-latin-wght-normal.woff2',
   variable: '--font-display',
   display: 'swap',
+  weight: '200 800',
 });
 
-const body = Inter({
-  subsets: ['latin'],
+const body = localFont({
+  src: '../fonts/inter-latin-wght-normal.woff2',
   variable: '--font-body',
   display: 'swap',
+  weight: '100 900',
 });
 
 // A function (not a static object) so metadataBase can be derived from the
@@ -36,13 +39,13 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase,
     title: {
-      default: `${BRAND.name} — ${BRAND.tagline}`,
-      template: `%s · ${BRAND.name}`,
+      default: `${BRAND.appName} — ${BRAND.tagline}`,
+      template: `%s · ${BRAND.appName}`,
     },
     description: BRAND.shortPitch,
     manifest: '/manifest.webmanifest',
     icons: { icon: '/icon.svg', apple: '/apple-touch-icon.png' },
-    appleWebApp: { capable: true, title: BRAND.name, statusBarStyle: 'default' },
+    appleWebApp: { capable: true, title: BRAND.appName, statusBarStyle: 'default' },
   };
 }
 

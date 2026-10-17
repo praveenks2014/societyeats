@@ -3,6 +3,7 @@ import { api, ok } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { orders, reviews, users } from '@/lib/db/schema';
+import { buyerHandle } from '@/lib/handles';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +20,6 @@ export const GET = api(async () => {
     .orderBy(desc(reviews.createdAt));
 
   return ok({
-    reviews: rows.map((r) => ({ ...r.review, buyerName: r.buyer.name })),
+    reviews: rows.map((r) => ({ ...r.review, buyerName: buyerHandle(r.review.orderId, r.review.buyerId) })),
   });
 });

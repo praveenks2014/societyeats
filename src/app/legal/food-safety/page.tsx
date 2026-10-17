@@ -1,4 +1,4 @@
-import { BRAND } from '@/lib/config';
+import { BRAND } from '@/config/brand';
 import { getPlatformSettings } from '@/lib/db/platform';
 
 export default async function FoodSafetyPage() {
@@ -7,7 +7,7 @@ export default async function FoodSafetyPage() {
     <>
       <h1>Food Safety</h1>
       <p>
-        Every kitchen on {BRAND.name} displays its FSSAI license number, or a clearly-marked amber
+        Every kitchen on {BRAND.appName} displays its FSSAI license number, or a clearly-marked amber
         "FSSAI Pending" badge while its application — filed on FoSCoS by the seller themselves using
         a PadosiPlate-prefilled summary — is under process. FoSCoS has no public status API, so PadosiPlate
         tracks each filing by its reference number: once a filing has gone unanswered past the
@@ -18,7 +18,7 @@ export default async function FoodSafetyPage() {
       <h2>What we check</h2>
       <ul>
         <li>FSSAI license verification against FoSCoS records before the green badge appears.</li>
-        <li>Manual kitchen approval by the {BRAND.name} team before a Seller can go live.</li>
+        <li>Manual kitchen approval by the {BRAND.appName} team before a Seller can go live.</li>
         <li>Buyer ratings and reports — kitchens that fall below safety expectations are delisted.</li>
       </ul>
       <h2>What buyers should know</h2>
@@ -37,7 +37,7 @@ export default async function FoodSafetyPage() {
         {settings.platformFssaiCentralLicenseNo
           ? `Central License ${settings.platformFssaiCentralLicenseNo}.`
           : 'applied for.'}{' '}
-        {BRAND.name} itself requires a Central FSSAI e-commerce license before commercial (live,
+        {BRAND.appName} itself requires a Central FSSAI e-commerce license before commercial (live,
         non-mock) operations begin.
       </p>
     </>

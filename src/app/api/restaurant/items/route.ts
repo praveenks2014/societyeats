@@ -1,4 +1,5 @@
 import { desc, eq } from 'drizzle-orm';
+import { assertRestaurantConsoleEnabled } from '@/lib/kitchen/gate';
 import { api, ApiError, ok, readJson } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
@@ -17,6 +18,7 @@ async function myRestaurant(uid: number) {
 }
 
 export const GET = api(async () => {
+  await assertRestaurantConsoleEnabled();
   const session = await requireSession(['restaurant']);
   const restaurant = await myRestaurant(session.uid);
   const db = await getDb();
@@ -29,6 +31,7 @@ export const GET = api(async () => {
 });
 
 export const POST = api(async (req) => {
+  await assertRestaurantConsoleEnabled();
   const session = await requireSession(['restaurant']);
   const restaurant = await myRestaurant(session.uid);
   const body = await readJson<{ title: string; priceRupees: number; isVeg: boolean; photoUrl?: string; stockQty: number }>(req);

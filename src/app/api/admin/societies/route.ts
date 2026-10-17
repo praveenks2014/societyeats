@@ -1,18 +1,12 @@
 import { sql } from 'drizzle-orm';
-import crypto from 'node:crypto';
-import { z } from 'zod';
 import { api, ApiError, ok, readJson } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { recordAudit } from '@/lib/audit';
 import { getDb } from '@/lib/db';
 import { societies } from '@/lib/db/schema';
+import { newInviteCode, societyInput } from '@/lib/societies';
 
 export const dynamic = 'force-dynamic';
-
-export function newInviteCode(name: string): string {
-  const base = name.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8) || 'PADOSI';
-  return `${base}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
-}
 
 /** Societies with resident / kitchen counts. */
 export const GET = api(async () => {
@@ -32,18 +26,6 @@ export const GET = api(async () => {
       return { ...s, residents: Number(c?.residents ?? 0), kitchens: Number(c?.kitchens ?? 0), pending: Number(c?.pending ?? 0) };
     }),
   });
-});
-
-export const societyInput = z.object({
-  name: z.string().trim().min(2, 'Name is required').max(160),
-  city: z.string().trim().min(2, 'City is required').max(80),
-  addressText: z.string().trim().min(3, 'Address is required').max(500),
-  pincode: z.string().trim().regex(/^\d{6}$/, 'Pincode must be 6 digits').optional().or(z.literal('')),
-  lat: z.number().min(-90).max(90),
-  lng: z.number().min(-180).max(180),
-  isLive: z.boolean().optional(),
-  requireApproval: z.boolean().optional(),
-  targetHouseholds: z.number().int().min(1).max(100000).optional(),
 });
 
 export const POST = api(async (req) => {

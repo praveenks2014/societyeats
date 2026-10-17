@@ -66,3 +66,11 @@ export async function kitchenGate(sellerId: number, now: Date = new Date()): Pro
   const result = evaluateGate({ profile: row.profile, application: application ?? null, subscribed, userBlocked: !!row.blockedAt, now });
   return { ...result, profile: row.profile };
 }
+
+/** The restaurant (Mall) console is feature-flagged off for the pilot. */
+export async function assertRestaurantConsoleEnabled(): Promise<void> {
+  const { getPlatformSettings } = await import('@/lib/db/platform');
+  const { ApiError } = await import('@/lib/api');
+  const s = await getPlatformSettings();
+  if (!s.restaurantConsoleEnabled) throw new ApiError(404, 'The restaurant console is not enabled');
+}
