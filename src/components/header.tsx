@@ -30,6 +30,13 @@ export function Header({ session }: { session: Session | null }) {
     return () => document.removeEventListener('click', close);
   }, []);
 
+  async function logoutAll() {
+    await fetch('/api/auth/logout-all', { method: 'POST' });
+    setMenuOpen(false);
+    router.push('/');
+    router.refresh();
+  }
+
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     setMenuOpen(false);
@@ -112,11 +119,24 @@ export function Header({ session }: { session: Session | null }) {
                     >
                       🎁 Invite neighbours
                     </Link>
+                    <Link
+                      href="/change-password"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2.5 text-sm hover:bg-rice"
+                    >
+                      Change password
+                    </Link>
                     <button
                       onClick={logout}
                       className="block w-full px-4 py-2.5 text-left text-sm text-chili hover:bg-rice"
                     >
                       Log out
+                    </button>
+                    <button
+                      onClick={logoutAll}
+                      className="block w-full px-4 py-2.5 text-left text-sm text-ink-soft hover:bg-rice"
+                    >
+                      Log out of all devices
                     </button>
                   </div>
                 )}

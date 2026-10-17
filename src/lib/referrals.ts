@@ -19,7 +19,7 @@ import { notify } from '@/lib/db/notify';
  * already-unique key" approach as src/lib/payouts.ts's fyLabel().
  */
 export function referralCodeFor(userId: number): string {
-  return `GS${userId.toString(36).toUpperCase()}`;
+  return `PP${userId.toString(36).toUpperCase()}`;
 }
 
 /** Sum of a buyer's still-unspent referral credit, in paise. */

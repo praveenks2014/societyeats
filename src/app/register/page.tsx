@@ -14,14 +14,15 @@ function RegisterForm() {
   const [societies, setSocieties] = useState<{ id: number; name: string }[]>([]);
   // Pilot Hardening v2 — Phase 6 (DECISIONS.md #87+): pick from the pilot's
   // live society/societies, or switch to an invite code for a not-yet-public one.
-  const [societyMode, setSocietyMode] = useState<'select' | 'code'>('select');
+  const [societyMode, setSocietyMode] = useState<'select' | 'code'>(params.get('code') ? 'code' : 'select');
   const referredByCode = params.get('ref') ?? '';
   const [form, setForm] = useState({
     name: '',
     phone: '',
+    email: '',
     password: '',
     societyId: '',
-    inviteCode: '',
+    inviteCode: params.get('code') ?? '',
     kitchenName: '',
     bio: '',
     vegOnly: false,
@@ -55,7 +56,7 @@ function RegisterForm() {
       toast(data.error || 'Could not register', 'err');
       return;
     }
-    toast('Welcome to PadosiPlate!');
+    toast('Welcome to PadosiPlate! Check your email to verify your address.');
     // Sellers land on the kitchen-profile onboarding step (photos etc.)
     // before the dashboard — see DECISIONS.md #73+.
     router.push(role === 'seller' ? '/seller/onboarding' : '/');
@@ -94,7 +95,16 @@ function RegisterForm() {
             required
           />
         </Field>
-        <Field label="Password" hint="At least 6 characters">
+        <Field label="Email" hint="We'll send a verification link — also used to reset your password.">
+          <Input
+            type="email"
+            autoComplete="email"
+            value={form.email}
+            onChange={(e) => set('email', e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Password" hint="At least 8 characters">
           <Input
             type="password"
             value={form.password}

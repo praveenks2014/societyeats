@@ -6,6 +6,7 @@ import { getSession } from '@/lib/auth';
 import { siteOrigin } from '@/lib/site-url';
 import { Providers } from '@/components/providers';
 import { Header } from '@/components/header';
+import { VerifyBanner } from '@/components/verify-banner';
 import { SwRegister } from '@/components/sw-register';
 
 const display = Bricolage_Grotesque({
@@ -60,6 +61,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-screen">
         <Providers>
           <Header session={session} />
+          {session && !session.emailVerified && !session.mustChangePassword && <VerifyBanner />}
           <main className="mx-auto w-full max-w-5xl px-4 pb-28 sm:px-6">{children}</main>
           <SwRegister />
         </Providers>

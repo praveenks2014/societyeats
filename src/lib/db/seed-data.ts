@@ -1,3 +1,4 @@
+import { DEMO_ADMIN_EMAIL } from '@/lib/auth/admins';
 import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import type { Db } from './index';
@@ -110,7 +111,18 @@ export async function runSeed(db: Db): Promise<void> {
     societyId: number | null,
     lat: number,
     lng: number,
-  ) => ({ phone, name, passwordHash: hash, role, societyId, lat, lng });
+  ) => ({
+    phone,
+    name,
+    passwordHash: hash,
+    role,
+    societyId,
+    lat,
+    lng,
+    // Demo accounts get verified demo emails; the demo admin's is allowlisted in non-production only.
+    email: phone === '9999999904' ? DEMO_ADMIN_EMAIL : `u${phone}@demo.padosiplate.example`,
+    emailVerifiedAt: new Date(),
+  });
 
   const [
     buyer,

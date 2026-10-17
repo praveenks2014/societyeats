@@ -56,8 +56,8 @@ const envSchema = z
     const liveMode = env.MOCK_MODE === 'false';
     if (!liveMode) return;
     const required = ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'] as const;
-    if (env.EMAIL_ADAPTER === 'resend' && !env.RESEND_API_KEY) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['RESEND_API_KEY'], message: 'RESEND_API_KEY is required when EMAIL_ADAPTER=resend' });
+    if ((env.EMAIL_ADAPTER ?? 'resend') === 'resend' && !env.RESEND_API_KEY) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['RESEND_API_KEY'], message: 'RESEND_API_KEY is required when MOCK_MODE=false (or set EMAIL_ADAPTER=mock)' });
     }
     for (const key of required) {
       if (!env[key]) {

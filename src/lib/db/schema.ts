@@ -181,6 +181,13 @@ export const societies = pgTable(
     // a platform-wide setting — editable inline on the metrics page itself
     // via PATCH /api/admin/metrics rather than /admin/settings.
     targetHouseholds: integer('target_households').notNull().default(300),
+    // Phase 1 Pilot (admin /admin/societies).
+    pincode: varchar('pincode', { length: 10 }),
+    // Deactivated societies cannot be joined and their kitchens are hidden.
+    isActive: boolean('is_active').notNull().default(true),
+    // When true, new residents wait in 'pending' until an admin approves them.
+    requireApproval: boolean('require_approval').notNull().default(false),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (table) => [index('societies_lat_lng_idx').on(table.lat, table.lng)],
 );
@@ -190,8 +197,18 @@ export const users = pgTable(
   {
     id: serial('id').primaryKey(),
     phone: varchar('phone', { length: 15 }).notNull().unique(),
+    // Lowercased. Nullable for pre-Phase-1 users; required for new registrations.
+    email: varchar('email', { length: 254 }).unique(),
+    emailVerifiedAt: timestamp('email_verified_at'),
     name: varchar('name', { length: 120 }).notNull(),
     passwordHash: text('password_hash').notNull(),
+    // Set for bootstrap-created admins; cleared by the forced change-password screen.
+    mustChangePassword: boolean('must_change_password').notNull().default(false),
+    // Admin block: kills every session and refuses login.
+    blockedAt: timestamp('blocked_at'),
+    // 'pending' residents wait for admin approval when their society has requireApproval.
+    approvalStatus: varchar('approval_status', { length: 12 }).notNull().default('approved'),
+    lastLoginAt: timestamp('last_login_at'),
     role: roleEnum('role').notNull().default('buyer'),
     societyId: integer('society_id').references(() => societies.id),
     lat: doublePrecision('lat'),
@@ -698,3 +715,55 @@ export const auditLog = pgTable(
   },
   (t) => [index('audit_log_target_idx').on(t.targetType, t.targetId), index('audit_log_action_idx').on(t.action)],
 );
+
+// ---------- Phase 1 Pilot: auth ----------
+
+// DB-backed sessions: the JWT cookie carries only `sid`; role/blocked state is
+// read from the user row on every request, so demotion, blocking and logout
+// take effect immediately.
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(),
+    expiresAt: timestamp('expires_at').notNull(),
+    userAgent: varchar('user_agent', { length: 200 }),
+  },
+  (t) => [index('sessions_user_idx').on(t.userId)],
+);
+
+// Single-use email tokens (verification 24h, password reset 30min). Only a
+// SHA-256 of the token is stored.
+export const emailTokens = pgTable(
+  'email_tokens',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 12 }).notNull(), // 'verify' | 'reset'
+    tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
+    expiresAt: timestamp('expires_at').notNull(),
+    usedAt: timestamp('used_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('email_tokens_user_idx').on(t.userId, t.kind)],
+);
+
+// Every email the platform sends (or, in mock mode, would send).
+export const emailOutbox = pgTable('email_outbox', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+  toEmail: varchar('to_email', { length: 254 }).notNull(),
+  subject: varchar('subject', { length: 300 }).notNull(),
+  bodyText: text('body_text').notNull(),
+  kind: varchar('kind', { length: 40 }).notNull().default('generic'),
+  status: varchar('status', { length: 12 }).notNull().default('mock'), // mock | sent | failed
+  providerId: varchar('provider_id', { length: 80 }),
+  error: text('error'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
