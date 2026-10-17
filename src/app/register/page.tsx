@@ -146,7 +146,7 @@ function RegisterForm() {
           <button
             type="button"
             onClick={() => setSocietyMode((m) => (m === 'select' ? 'code' : 'select'))}
-            className="mt-1.5 text-xs font-semibold text-leaf underline"
+            className="mt-1 inline-flex min-h-[44px] items-center text-xs font-semibold text-leaf underline"
           >
             {societyMode === 'select' ? 'Have an invite code instead?' : '← Choose from the list instead'}
           </button>
@@ -186,7 +186,7 @@ function RegisterForm() {
       </form>
       <p className="mt-4 text-sm text-ink-soft">
         Already have an account?{' '}
-        <Link href="/login" className="font-semibold text-leaf underline">
+        <Link href="/login" className="inline-flex min-h-[44px] items-center font-semibold text-leaf underline">
           Log in
         </Link>
       </p>

@@ -48,7 +48,7 @@ export function Header({ session }: { session: Session | null }) {
     <>
       <header className="sticky top-0 z-50 border-b border-rice-line bg-rice/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2 px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-1.5" aria-label={`${BRAND.appName} home`}>
+          <Link href="/" className="flex min-h-[44px] items-center gap-1.5" aria-label={`${BRAND.appName} home`}>
             <BowlMark />
             <span className="font-display text-xl font-bold tracking-tight text-leaf">
               {BRAND.appName}
@@ -57,7 +57,7 @@ export function Header({ session }: { session: Session | null }) {
 
           <button
             onClick={openPicker}
-            className="ml-1 flex min-w-0 max-w-[46vw] items-center gap-1 rounded-pill border border-rice-line bg-white px-3 py-1.5 text-xs font-medium text-ink-soft transition-colors hover:border-leaf/40 sm:max-w-xs sm:text-sm"
+            className="ml-1 flex min-h-[44px] min-w-0 max-w-[46vw] items-center gap-1 rounded-pill border border-rice-line bg-white px-3 text-xs font-medium text-ink-soft transition-colors hover:border-leaf/40 sm:max-w-xs sm:text-sm"
           >
             <span aria-hidden>📍</span>
             <span className="truncate">{loc ? loc.label : 'Set location'}</span>

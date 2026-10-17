@@ -31,6 +31,8 @@ export function clientIp(req: NextRequest): string {
 
 /** Throws ApiError(429) once `key` has exceeded `limit` requests per `windowMs`. */
 export async function rateLimit(key: string, { limit, windowMs }: RateLimitOptions): Promise<void> {
+  // E2E runs share one IP and log in dozens of times; never active in production.
+  if (process.env.E2E === 'true' && process.env.NODE_ENV !== 'production') return;
   const db = await getDb();
   const windowSec = windowMs / 1000;
   const res = await db.execute(sql`

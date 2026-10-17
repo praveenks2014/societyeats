@@ -47,7 +47,7 @@ export default function ForgotPasswordPage() {
         </form>
       )}
       <p className="mt-4 text-sm">
-        <Link href="/login" className="font-semibold text-leaf underline">
+        <Link href="/login" className="inline-flex min-h-[44px] items-center font-semibold text-leaf underline">
           Back to log in
         </Link>
       </p>

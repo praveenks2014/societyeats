@@ -26,19 +26,19 @@ export default async function HomePage() {
       )}
       <Browse />
       <footer className="mt-16 border-t border-rice-line pt-8 pb-4 text-xs text-ink-faint">
-        <div className="flex flex-wrap gap-x-5 gap-y-2">
-          <Link href="/legal/terms" className="hover:text-ink">Terms</Link>
-          <Link href="/legal/kitchen-terms" className="hover:text-ink">Kitchen terms</Link>
-          <Link href="/legal/food-safety" className="hover:text-ink">Food safety</Link>
-          <Link href="/legal/privacy" className="hover:text-ink">Privacy</Link>
-          <Link href="/legal/refunds" className="hover:text-ink">Refunds</Link>
+        <div className="flex flex-wrap gap-x-5">
+          <Link href="/legal/terms" className="inline-flex min-h-[44px] items-center hover:text-ink">Terms</Link>
+          <Link href="/legal/kitchen-terms" className="inline-flex min-h-[44px] items-center hover:text-ink">Kitchen terms</Link>
+          <Link href="/legal/food-safety" className="inline-flex min-h-[44px] items-center hover:text-ink">Food safety</Link>
+          <Link href="/legal/privacy" className="inline-flex min-h-[44px] items-center hover:text-ink">Privacy</Link>
+          <Link href="/legal/refunds" className="inline-flex min-h-[44px] items-center hover:text-ink">Refunds</Link>
           {/* Pilot Hardening v2 — Phase 8 (DECISIONS.md #112+): Mall Mode is
               deferred this pilot (FEATURE_MALL_MODE off by default) — the code
               at /m/[mallSlug] still works, it's just not promoted here. */}
           {settings.mallModeEnabled && (
-            <Link href="/m/gvk-one" className="hover:text-ink">Mall Mode (GVK One)</Link>
+            <Link href="/m/gvk-one" className="inline-flex min-h-[44px] items-center hover:text-ink">Mall Mode (GVK One)</Link>
           )}
-          <Link href="/register?as=seller" className="hover:text-ink">Become a home-chef</Link>
+          <Link href="/register?as=seller" className="inline-flex min-h-[44px] items-center hover:text-ink">Become a home-chef</Link>
         </div>
         <p className="mt-4">
           Platform FSSAI license: applied for. Every kitchen on PadosiPlate shows its FSSAI number or a

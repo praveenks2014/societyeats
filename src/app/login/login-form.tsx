@@ -72,13 +72,13 @@ export function LoginForm({ showDemo }: { showDemo: boolean }) {
         </Button>
       </form>
       <p className="mt-3 text-sm">
-        <Link href="/forgot-password" className="font-semibold text-leaf underline">
+        <Link href="/forgot-password" className="inline-flex min-h-[44px] items-center font-semibold text-leaf underline">
           Forgot password?
         </Link>
       </p>
       <p className="mt-4 text-sm text-ink-soft">
         New here?{' '}
-        <Link href="/register" className="font-semibold text-leaf underline">
+        <Link href="/register" className="inline-flex min-h-[44px] items-center font-semibold text-leaf underline">
           Create an account
         </Link>
       </p>
@@ -90,7 +90,7 @@ export function LoginForm({ showDemo }: { showDemo: boolean }) {
             <span>🛒 Buyer</span><span className="font-mono">9999999901</span>
             <span>👩‍🍳 Seller</span><span className="font-mono">9999999902</span>
             <span>🍽️ Restaurant</span><span className="font-mono">9999999903</span>
-            <span>🛠️ Admin</span><span className="font-mono">admin@demo.padosiplate.example</span>
+            <span>🛠️ Admin</span><span className="break-all font-mono">admin@demo.padosiplate.example</span>
           </div>
         </Card>
       )}

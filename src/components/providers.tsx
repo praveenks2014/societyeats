@@ -117,21 +117,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // cart
   const [vendor, setVendor] = useState<CartVendor | null>(null);
   const [items, setItems] = useState<CartItem[]>([]);
-  const hydrated = useRef(false);
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     const saved = readLS<{ vendor: CartVendor | null; items: CartItem[] }>('padosi_cart');
     if (saved) {
       setVendor(saved.vendor);
       setItems(saved.items);
     }
-    hydrated.current = true;
+    setHydrated(true);
   }, []);
   useEffect(() => {
-    if (!hydrated.current) return;
+    if (!hydrated) return;
     try {
       localStorage.setItem('padosi_cart', JSON.stringify({ vendor, items }));
     } catch {}
-  }, [vendor, items]);
+  }, [vendor, items, hydrated]);
 
   const sameVendor = (a: CartVendor | null, b: CartVendor) =>
     !!a && a.kind === b.kind && a.id === b.id;

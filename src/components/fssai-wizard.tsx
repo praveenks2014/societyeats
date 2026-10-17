@@ -109,8 +109,8 @@ export function FssaiWizard({
       <legend className="px-1 text-sm font-semibold">{label}</legend>
       <div className="mt-1 flex gap-2">
         {[true, false].map((v) => (
-          <label key={String(v)} className={`flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-xl border text-sm font-medium ${value === v ? 'border-leaf bg-leaf-tint/50' : 'border-rice-line'}`}>
-            <input type="radio" className="sr-only" name={test} checked={value === v} onChange={() => set(v)} data-testid={`${test}-${v ? 'yes' : 'no'}`} />
+          <label key={String(v)} className={`relative flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-xl border text-sm font-medium focus-within:ring-2 focus-within:ring-leaf/40 ${value === v ? 'border-leaf bg-leaf-tint/50' : 'border-rice-line'}`}>
+            <input type="radio" className="absolute inset-0 h-full w-full cursor-pointer opacity-0" name={test} checked={value === v} onChange={() => set(v)} data-testid={`${test}-${v ? 'yes' : 'no'}`} />
             {v ? 'Yes' : 'No'}
           </label>
         ))}

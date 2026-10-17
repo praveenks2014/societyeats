@@ -33,7 +33,7 @@ export default async function JoinPage({ params }: { params: { code: string } })
         <Link href={`/register?code=${code}&as=seller`} className="flex min-h-[52px] items-center justify-center rounded-xl border-2 border-leaf px-6 text-base font-bold text-leaf" data-testid="join-kitchen">
           List your kitchen
         </Link>
-        <Link href="/login" className="text-sm font-semibold text-leaf underline">Already have an account? Log in</Link>
+        <Link href="/login" className="inline-flex min-h-[44px] items-center text-sm font-semibold text-leaf underline">Already have an account? Log in</Link>
       </div>
       <p className="mt-8 text-xs text-ink-faint">You pay kitchens directly (UPI or at pickup). {BRAND.appName} charges only a small platform fee.</p>
     </div>

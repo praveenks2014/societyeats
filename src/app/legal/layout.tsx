@@ -7,7 +7,7 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
         Draft – to be reviewed by a lawyer.
       </p>
       {children}
-      <nav className="mt-8 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-leaf" aria-label="Legal pages">
+      <nav className="mt-8 flex flex-wrap gap-x-4 text-xs font-semibold text-leaf [&_a]:inline-flex [&_a]:min-h-[44px] [&_a]:items-center" aria-label="Legal pages">
         <a href="/legal/terms">Terms</a>
         <a href="/legal/kitchen-terms">Kitchen terms</a>
         <a href="/legal/refunds">Refund policy</a>
