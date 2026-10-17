@@ -107,7 +107,7 @@ export function Chip({
   return (
     <button
       onClick={onClick}
-      className={`shrink-0 whitespace-nowrap rounded-pill border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+      className={`shrink-0 whitespace-nowrap rounded-pill border min-h-[44px] px-3.5 text-sm font-medium transition-colors ${
         active
           ? 'border-leaf bg-leaf text-white'
           : 'border-rice-line bg-white text-ink-soft hover:border-leaf/40'
