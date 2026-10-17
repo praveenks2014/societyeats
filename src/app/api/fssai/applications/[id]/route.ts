@@ -4,6 +4,7 @@ import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { fssaiApplications, users } from '@/lib/db/schema';
 import { notify } from '@/lib/db/notify';
+import { recordFunnel } from '@/lib/fssai/funnel';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +45,7 @@ export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => 
     })
     .where(eq(fssaiApplications.id, id));
 
+  await recordFunnel(session.uid, 'reference_entered');
   const admins = await db.select().from(users).where(eq(users.role, 'admin'));
   await Promise.all(
     admins.map((a) =>

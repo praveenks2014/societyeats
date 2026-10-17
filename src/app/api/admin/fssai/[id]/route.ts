@@ -1,5 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { addMonthsIST } from '@/lib/time';
+import { recordFunnel } from '@/lib/fssai/funnel';
+import { scheduleDocumentDeletion } from '@/lib/fssai/jobs';
 import { api, ApiError, ok, readJson } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
@@ -58,7 +60,7 @@ export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => 
       .update(fssaiApplications)
       .set({ status: 'granted', timelineJson: timeline, updatedAt: new Date() })
       .where(eq(fssaiApplications.id, id));
-    const expiry = addMonthsIST(new Date(), 12);
+    const expiry = addMonthsIST(new Date(), 12 * (app.formAJson?.years ?? 1));
     await db
       .update(sellerProfiles)
       .set({
@@ -67,6 +69,8 @@ export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => 
         fssaiExpiry: expiry.toISOString().slice(0, 10),
       })
       .where(eq(sellerProfiles.userId, app.sellerId));
+    await scheduleDocumentDeletion(app.sellerId);
+    await recordFunnel(app.sellerId, 'verified');
     await notify(
       app.sellerId,
       'FSSAI license granted! ✅',

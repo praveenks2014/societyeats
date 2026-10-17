@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { Badge, Button, Card, Field, Input, Modal, Skeleton, Textarea } from '@/components/ui';
+import { Badge, Button, Card, Field, Input, Skeleton } from '@/components/ui';
+import { FssaiWizard } from '@/components/fssai-wizard';
+import { PERSISTENT_NOTICE } from '@/lib/fssai/assistant';
 import { useToast } from '@/components/providers';
 
 type Summary = {
@@ -28,6 +30,7 @@ type Summary = {
   } | null;
   // FSSAI hardening v3 (DECISIONS.md #119+): replaces the deleted
   // fssaiPendingMaxDays grace-window countdown — see src/lib/fssai/gate.ts.
+  feePerYearRupees: number;
   fssaiDeemedGrant: {
     thresholdDays: number;
     daysElapsed: number;
@@ -73,19 +76,25 @@ export default function CompliancePage() {
         application status) on every dish — it&apos;s what makes neighbours trust home kitchens.
       </p>
 
+      <p className="mt-3 rounded-xl bg-turmeric-tint px-3 py-2 text-xs text-ink-soft" role="note" data-testid="fssai-notice">{PERSISTENT_NOTICE}</p>
+
       {profile.fssaiStatus === 'verified' && (
         <Card className="mt-5 border-leaf bg-leaf-tint/60 p-5">
           <Badge tone="green">FSSAI Verified ✅</Badge>
           <div className="mt-2 font-display text-lg font-bold">License {profile.fssaiNumber}</div>
           {profile.fssaiExpiry && (
-            <p className="text-sm text-ink-soft">Valid till {profile.fssaiExpiry}. We&apos;ll nudge you 60 days before renewal.</p>
+            <p className="text-sm text-ink-soft">Valid till {profile.fssaiExpiry}. We&apos;ll remind you 30 days before it expires — an expired licence automatically unpublishes your dishes.</p>
           )}
         </Card>
       )}
 
       {/* FSSAI hardening v3 (DECISIONS.md #119+) — item 2: persistent whenever
           fssaiStatus != 'verified', including while an application is pending. */}
-      {profile.fssaiStatus !== 'verified' && <EnterLicenseCard profile={profile} onDone={load} />}
+      {profile.fssaiStatus !== 'verified' && (
+        <div id="enter-licence">
+          <EnterLicenseCard profile={profile} onDone={load} />
+        </div>
+      )}
 
       {profile.fssaiStatus === 'pending_application' && application && (
         <Card className="mt-5 p-5">
@@ -205,6 +214,8 @@ export default function CompliancePage() {
       <FssaiWizard
         open={wizardOpen}
         kitchenName={profile.kitchenName}
+        feePerYearRupees={data.feePerYearRupees}
+        onManualLicence={() => document.getElementById('enter-licence')?.scrollIntoView({ behavior: 'smooth' })}
         onClose={() => setWizardOpen(false)}
         onDone={(applicationId) => {
           setWizardOpen(false);
@@ -314,253 +325,5 @@ function EnterLicenseCard({
         Submit for verification
       </Button>
     </Card>
-  );
-}
-
-const DOCS = ['Photo ID (Aadhaar/PAN)', 'Address proof', 'Photo of your kitchen', 'Signed declaration'];
-
-function FssaiWizard({
-  open,
-  kitchenName,
-  onClose,
-  onDone,
-}: {
-  open: boolean;
-  kitchenName: string;
-  onClose: () => void;
-  onDone: (applicationId: number) => void;
-}) {
-  const [step, setStep] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [applicantName, setApplicantName] = useState('');
-  const [kitchenAddress, setKitchenAddress] = useState('');
-  // FSSAI Basic Registration is the recommended default (turnover <= 1.5cr,
-  // rule effective 1 Apr 2026) — never asserted as definitive, see the note
-  // in step 3 below (DECISIONS.md #62+).
-  const [licenseType, setLicenseType] = useState<'state' | 'registration'>('registration');
-  const [docs, setDocs] = useState<Record<string, string>>({});
-  const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
-  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
-  const toast = useToast();
-
-  async function uploadDoc(label: string, file: File) {
-    setUploadingDoc(label);
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('purpose', 'fssai_doc');
-    const res = await fetch('/api/uploads', { method: 'POST', body: fd });
-    const d = await res.json();
-    setUploadingDoc(null);
-    if (!res.ok) {
-      toast(d.error || 'Upload failed', 'err');
-      return;
-    }
-    setDocs((prev) => ({ ...prev, [label]: d.url }));
-  }
-
-  async function submit() {
-    setBusy(true);
-    const res = await fetch('/api/fssai/applications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        applicantName,
-        kitchenAddress,
-        licenseType,
-        // FSSAI hardening v3 (DECISIONS.md #119+) — item 1: the wizard no
-        // longer offers a facilitator choice; every new application is
-        // self-filed. The backend still fully supports 'facilitator' (an
-        // existing back-office task can still be actioned on /admin/fssai)
-        // — that code is kept, just no longer reachable from this UI.
-        filingMode: 'self',
-        documents: Object.entries(docs).map(([label, url]) => ({ label, url })),
-      }),
-    });
-    const d = await res.json();
-    setBusy(false);
-    if (!res.ok) {
-      toast(d.error || 'Could not submit', 'err');
-      return;
-    }
-    // Reset for next time this modal opens.
-    setStep(0);
-    setApplicantName('');
-    setKitchenAddress('');
-    setLicenseType('registration');
-    setDocs({});
-    onDone(d.application.id);
-  }
-
-  const steps = [
-    {
-      title: '1 · Who is applying?',
-      valid: applicantName.trim().length > 1,
-      body: (
-        <Field label="Applicant's full legal name" hint="As on your Aadhaar/PAN">
-          <Input value={applicantName} onChange={(e) => setApplicantName(e.target.value)} />
-        </Field>
-      ),
-    },
-    {
-      title: '2 · Where is the kitchen?',
-      valid: kitchenAddress.trim().length > 8,
-      body: (
-        <Field label={`Full address of ${kitchenName}`} hint="Flat, society, area, city, PIN">
-          <Textarea rows={3} value={kitchenAddress} onChange={(e) => setKitchenAddress(e.target.value)} />
-        </Field>
-      ),
-    },
-    {
-      title: '3 · License type',
-      valid: true,
-      body: (
-        <div className="space-y-3">
-          <p className="rounded-xl bg-leaf-tint px-3 py-2.5 text-sm text-leaf-dark">
-            💡 <strong>Our default recommendation: Basic Registration.</strong> Most home kitchens
-            with turnover up to ₹1.5 crore qualify, under the rule effective 1 April 2026. Some
-            categories require a State License regardless of turnover — confirm your exact Kind of
-            Business on FoSCoS. Neither tier is definitive here — it&apos;s guidance, not a filed
-            determination.
-          </p>
-          {(
-            [
-              ['registration', 'Basic Registration (recommended)', 'Turnover up to ₹1.5 crore — most home kitchens'],
-              ['state', 'State License', 'Some categories require this regardless of turnover — check FoSCoS'],
-            ] as const
-          ).map(([value, label, hint]) => (
-            <label key={value} className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3 ${licenseType === value ? 'border-leaf bg-leaf-tint/40' : 'border-rice-line'}`}>
-              <input
-                type="radio"
-                checked={licenseType === value}
-                onChange={() => setLicenseType(value)}
-                className="mt-1 accent-leaf"
-              />
-              <span>
-                <span className="block text-sm font-semibold">{label}</span>
-                <span className="block text-xs text-ink-faint">{hint}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      ),
-    },
-    {
-      title: '4 · Documents',
-      valid: DOCS.every((d) => docs[d]),
-      body: (
-        <div className="space-y-2.5">
-          {DOCS.map((label) => (
-            <div key={label} className="flex items-center justify-between gap-3 rounded-2xl border border-rice-line bg-white px-3 py-2.5">
-              <span className="text-sm">
-                {docs[label] ? '✅' : '📄'} {label}
-              </span>
-              <input
-                ref={(el) => {
-                  fileRefs.current[label] = el;
-                }}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && uploadDoc(label, e.target.files[0])}
-              />
-              <Button
-                size="sm"
-                variant="secondary"
-                loading={uploadingDoc === label}
-                onClick={() => fileRefs.current[label]?.click()}
-              >
-                {docs[label] ? 'Replace' : 'Upload'}
-              </Button>
-            </div>
-          ))}
-        </div>
-      ),
-    },
-    {
-      // FSSAI hardening v3 (DECISIONS.md #119+) — item 1: no more "File it
-      // for me" choice here, just a confirmation of what happens next.
-      title: '5 · You file this yourself',
-      valid: true,
-      body: (
-        <div className="rounded-2xl border border-leaf bg-leaf-tint/40 p-4">
-          <span className="block text-sm font-semibold">
-            You&apos;ll file this on FoSCoS yourself — we prefill everything and walk you through it.
-          </span>
-          <p className="mt-1.5 text-xs text-ink-faint">
-            After you submit, PadosiPlate generates a prefilled application summary, your document bundle,
-            and a step-by-step FoSCoS walkthrough. You file at your own pace and enter the reference
-            number here once it's done — PadosiPlate tracks it to grant from there.
-          </p>
-        </div>
-      ),
-    },
-    {
-      title: '6 · Review & submit',
-      valid: true,
-      body: (
-        <div className="space-y-2 text-sm">
-          <Row k="Applicant" v={applicantName} />
-          <Row k="Kitchen" v={kitchenAddress} />
-          <Row k="License type" v={licenseType === 'state' ? 'State License' : 'Basic Registration'} />
-          <Row k="Documents" v={`${Object.keys(docs).length}/${DOCS.length} uploaded`} />
-          <Row k="Filing" v="You (self-filed)" />
-          <p className="mt-3 rounded-xl bg-turmeric-tint px-3 py-2.5 text-xs text-ink-soft">
-            You&apos;ll get a prefilled summary and a step-by-step FoSCoS walkthrough to file this
-            yourself. Meanwhile your dishes can go live with an amber "FSSAI Pending" badge.
-          </p>
-        </div>
-      ),
-    },
-  ];
-
-  const current = steps[step];
-
-  // Modal scroll fix (DECISIONS.md #119+): Back/Continue are passed as
-  // Modal's `footer` prop so they're pinned outside the scrollable step
-  // body — reachable at any viewport height, not just tall ones — instead
-  // of scrolling away with the (sometimes long, e.g. the documents step)
-  // step content.
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      sheet
-      title="FSSAI application"
-      footer={
-        <div className="flex gap-3">
-          {step > 0 && (
-            <Button variant="ghost" onClick={() => setStep((s) => s - 1)}>
-              ← Back
-            </Button>
-          )}
-          {step < steps.length - 1 ? (
-            <Button className="flex-1" disabled={!current.valid} onClick={() => setStep((s) => s + 1)}>
-              Continue
-            </Button>
-          ) : (
-            <Button className="flex-1" loading={busy} onClick={submit}>
-              Submit application
-            </Button>
-          )}
-        </div>
-      }
-    >
-      <div className="mb-4 flex gap-1.5">
-        {steps.map((_, i) => (
-          <span key={i} className={`h-1.5 flex-1 rounded-pill ${i <= step ? 'bg-leaf' : 'bg-rice-line'}`} />
-        ))}
-      </div>
-      <h4 className="mb-3 font-display text-base font-bold">{current.title}</h4>
-      {current.body}
-    </Modal>
-  );
-}
-
-function Row({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="flex justify-between gap-4">
-      <span className="shrink-0 text-ink-faint">{k}</span>
-      <span className="text-right font-medium">{v}</span>
-    </div>
   );
 }

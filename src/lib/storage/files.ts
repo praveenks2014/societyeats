@@ -11,8 +11,10 @@ export type UploadPurpose =
   | 'kitchen_video'
   | 'fssai_doc'
   | 'id_proof'
+  | 'address_proof'
   | 'complaint'
-  | 'attachment';
+  | 'attachment'
+  | 'fssai_content';
 
 export type Detected = { mime: string; ext: string; kind: 'image' | 'video' | 'pdf' };
 

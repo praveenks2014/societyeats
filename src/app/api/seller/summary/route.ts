@@ -43,6 +43,7 @@ export const GET = api(async () => {
     profile,
     application: application ?? null,
     fssaiDeemedGrant,
+    feePerYearRupees: settings.fssaiBasicFeePerYear,
     subscription: { status, daysLeft: daysLeft(subs, now), inGrace: status === 'grace', endsAt: current?.s.endsAt ?? null, graceDays: settings.subscriptionGraceDays },
     inboxUnread: unread,
     refundsDue: { count: dueRows.length, totalPaise: dueRows.reduce((s, r) => s + r.amountInPaise, 0) },

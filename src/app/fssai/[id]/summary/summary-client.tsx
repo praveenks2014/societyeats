@@ -5,7 +5,12 @@ import { useEffect, useState } from 'react';
 import { Badge, Button, Card, Input, Skeleton } from '@/components/ui';
 import { useToast } from '@/components/providers';
 
+type Step = { id: number; title: string; body: string; tip: string | null; screenshotUrl: string | null };
 type Summary = {
+  persistentNotice: string;
+  formA: { title: string; rows: string[][] }[] | null;
+  feeInPaise: number | null;
+  years: number | null;
   id: number;
   generatedAt: string;
   platform: { name: string };
@@ -28,7 +33,19 @@ export function FssaiSummaryView({ applicationId }: { applicationId: number }) {
   const [error, setError] = useState<string | null>(null);
   const [ref, setRef] = useState('');
   const [busy, setBusy] = useState(false);
+  const [lang, setLang] = useState('en');
+  const [steps, setSteps] = useState<Step[]>([]);
+  const [languages, setLanguages] = useState<{ code: string; label: string }[]>([]);
   const toast = useToast();
+
+  useEffect(() => {
+    fetch(`/api/fssai/walkthrough?lang=${lang}`).then((r) => r.json()).then((d) => { setSteps(d.steps ?? []); setLanguages(d.languages ?? []); }).catch(() => {});
+  }, [lang]);
+
+  function printPack() {
+    fetch('/api/fssai/funnel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'pack_downloaded' }) }).catch(() => {});
+    window.print();
+  }
 
   function load() {
     fetch(`/api/fssai/applications/${applicationId}/summary`)
@@ -86,7 +103,7 @@ export function FssaiSummaryView({ applicationId }: { applicationId: number }) {
         <Link href="/seller/compliance" className="text-sm font-semibold text-leaf underline">
           ← Back to compliance
         </Link>
-        <Button size="sm" onClick={() => window.print()}>
+        <Button size="sm" onClick={printPack} data-testid="print-pack">
           🖨 Print / Save as PDF
         </Button>
       </div>
@@ -119,14 +136,27 @@ export function FssaiSummaryView({ applicationId }: { applicationId: number }) {
           </div>
         </div>
 
-        <div className="mt-4 rounded-xl bg-leaf-tint px-3 py-2.5 text-sm text-leaf-dark">
-          <strong>Recommended: FSSAI Basic Registration</strong> for kitchens with turnover up to ₹1.5
-          crore (rule effective 1 April 2026). This application is set to{' '}
-          <strong>{data.licenseType === 'state' ? 'State License' : 'Basic Registration'}</strong>.
-          Some categories or Kinds of Business require a State License regardless of turnover —
-          confirm your exact Kind of Business on FoSCoS before filing. Neither tier is asserted here
-          as definitive for your kitchen.
-        </div>
+        <p className="mt-4 rounded-xl bg-turmeric-tint px-3 py-2.5 text-sm text-ink-soft" data-testid="pack-notice">{data.persistentNotice}</p>
+
+        {data.formA ? (
+          <div className="mt-4 space-y-3" data-testid="form-a">
+            <div className="eyebrow">FSSAI BASIC REGISTRATION · FORM A</div>
+            {data.formA.map((sec) => (
+              <div key={sec.title}>
+                <div className="text-sm font-bold">{sec.title}</div>
+                <dl className="mt-1 space-y-0.5 text-sm">
+                  {sec.rows.map(([k, v], i) => (
+                    <div key={i} className="flex justify-between gap-4"><dt className="shrink-0 text-ink-faint">{k}</dt><dd className="text-right">{v}</dd></div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-xl bg-leaf-tint px-3 py-2.5 text-sm text-leaf-dark">
+            This is a legacy application set to <strong>{data.licenseType === 'state' ? 'State License' : 'Basic Registration'}</strong>. Confirm category, documents and fees on FoSCoS.
+          </div>
+        )}
 
         <div className="mt-4">
           <div className="eyebrow mb-1.5">DOCUMENT BUNDLE</div>
@@ -176,25 +206,22 @@ export function FssaiSummaryView({ applicationId }: { applicationId: number }) {
                 <Badge tone="neutral">Filing it yourself</Badge>
                 <span className="text-sm font-semibold">Step-by-step FoSCoS walkthrough</span>
               </div>
-              <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm text-ink-soft">
-                <li>
-                  Open{' '}
-                  <a href={FOSCOS_URL} target="_blank" rel="noreferrer" className="text-leaf underline">
-                    foscos.fssai.gov.in
-                  </a>{' '}
-                  and sign up / log in as a Food Business Operator.
-                </li>
-                <li>
-                  Start a new application and choose the Kind(s) of Business that match your kitchen —
-                  confirm there whether Basic Registration or a State License applies to you.
-                </li>
-                <li>Fill the form using the applicant and kitchen details shown above.</li>
-                <li>Upload the same documents listed in your bundle above.</li>
-                <li>Pay the government fee shown on FoSCoS and submit.</li>
-                <li>
-                  Come back here and enter the FoSCoS reference number you receive, so PadosiPlate can
-                  track your application to grant.
-                </li>
+              {languages.length > 1 && (
+                <div className="mt-2 flex gap-1.5 print:hidden" role="tablist" aria-label="Language">
+                  {languages.map((l) => (
+                    <button key={l.code} role="tab" aria-selected={lang === l.code} onClick={() => setLang(l.code)} className={`min-h-[36px] rounded-pill px-3 text-xs font-semibold ${lang === l.code ? 'bg-leaf text-white' : 'bg-rice-deep text-ink-soft'}`}>{l.label}</button>
+                  ))}
+                </div>
+              )}
+              <ol className="mt-3 list-decimal space-y-3 pl-5 text-sm text-ink-soft" data-testid="walkthrough">
+                {steps.map((st) => (
+                  <li key={st.id}>
+                    <div className="font-semibold text-ink">{st.title}</div>
+                    <p>{st.body}</p>
+                    {st.tip && <p className="mt-0.5 text-xs text-ink-faint">💡 {st.tip}</p>}
+                    {st.screenshotUrl && <img src={st.screenshotUrl} alt={`Screenshot: ${st.title}`} className="mt-1 max-h-48 rounded-lg border border-rice-line" />}
+                  </li>
+                ))}
               </ol>
               {data.canSelfFile && (
                 <div className="mt-4 flex gap-2 print:hidden">

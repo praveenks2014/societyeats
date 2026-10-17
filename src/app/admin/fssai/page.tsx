@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, EmptyState, Input, Skeleton } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { FssaiFunnel } from '@/components/fssai-funnel';
 import { formatINR } from '@/lib/money';
 
 type AppRow = {
@@ -37,7 +38,11 @@ export default function AdminFssai() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="text-2xl font-bold">FSSAI</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">FSSAI</h1>
+        <Link href="/admin/fssai/content" className="text-sm font-semibold text-leaf underline">Edit walkthrough content →</Link>
+      </div>
+      <FssaiFunnel />
       <div className="mt-3 flex gap-1.5 rounded-2xl bg-rice-deep p-1">
         <TabButton active={tab === 'queue'} onClick={() => setTab('queue')}>
           Applications queue

@@ -325,6 +325,16 @@ export const fssaiApplications = pgTable('fssai_applications', {
   timelineJson: jsonb('timeline_json').$type<{ at: string; event: string }[]>(),
   // Pilot Hardening v2 — Phase 4 (DECISIONS.md #62+). See fssaiFilingModeEnum.
   filingMode: fssaiFilingModeEnum('filing_mode').notNull().default('facilitator'),
+  // Phase 1 Pilot: the Form A (Basic Registration) answers collected by the assistant.
+  formAJson: jsonb('form_a_json').$type<{
+    eligibility: { sales: 'under_12l' | '12l_to_20cr' | 'above_20cr'; homeKitchen: boolean; onlyTelangana: boolean };
+    foodCategories: string[];
+    years: number;
+    feeInPaise: number;
+    waterSource: string;
+    idType: 'aadhaar' | 'pan' | 'voter' | 'driving_licence';
+    declarations: string[];
+  }>(),
   // Recorded as PadosiPlate's own acquisition cost when sponsoredByPlatform is
   // true — never billed back to the seller as a debt. 0 for self-filed
   // applications (PadosiPlate does no facilitation work on those).
@@ -1007,4 +1017,36 @@ export const userBlocks = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (t) => [uniqueIndex('user_blocks_pair_idx').on(t.blockerId, t.blockedId)],
+);
+
+// ---------- Phase 1 Pilot: FSSAI assistant ----------
+
+// Editable FoSCoS walkthrough (admin: /admin/fssai/content). One row per step per language.
+export const fssaiWalkthroughSteps = pgTable(
+  'fssai_walkthrough_steps',
+  {
+    id: serial('id').primaryKey(),
+    lang: varchar('lang', { length: 4 }).notNull().default('en'), // en | te | hi
+    sort: integer('sort').notNull().default(0),
+    title: varchar('title', { length: 160 }).notNull(),
+    body: text('body').notNull(),
+    tip: text('tip'),
+    screenshotUrl: text('screenshot_url'),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('fssai_steps_lang_idx').on(t.lang, t.sort)],
+);
+
+// One row per (seller, stage) the first time they reach it — powers the funnel on /admin/fssai.
+export const fssaiFunnelEvents = pgTable(
+  'fssai_funnel_events',
+  {
+    id: serial('id').primaryKey(),
+    sellerId: integer('seller_id')
+      .notNull()
+      .references(() => users.id),
+    stage: varchar('stage', { length: 30 }).notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('fssai_funnel_seller_stage_idx').on(t.sellerId, t.stage)],
 );
