@@ -45,7 +45,16 @@ export async function newUserContext(browser: Browser): Promise<{ ctx: BrowserCo
 }
 
 export async function api(request: APIRequestContext, method: 'get' | 'post' | 'patch' | 'put', url: string, data?: unknown) {
-  const res = await request[method](url, data === undefined ? undefined : { data });
+  // the dev server occasionally resets a connection while compiling a route; only idempotent GETs are retried
+  let res;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await request[method](url, data === undefined ? undefined : { data });
+      break;
+    } catch (e) {
+      if (method !== 'get' || attempt >= 2) throw e;
+    }
+  }
   let json: any = null;
   try {
     json = await res.json();
