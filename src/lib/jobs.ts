@@ -1,3 +1,4 @@
+import { recordCronRun } from '@/lib/cron-status';
 import { autoCancelUnaccepted, expireUnpaidOrders, remindUnconfirmedPayments } from '@/lib/orders/lifecycle';
 import { pruneRateLimits } from '@/lib/rate-limit';
 import { syncSubscriptions } from '@/lib/subscriptions/service';
@@ -11,5 +12,6 @@ export async function runScheduledJobs(now: Date = new Date()) {
   const { runFssaiJobs } = await import('@/lib/fssai/jobs');
   const fssai = await runFssaiJobs(now);
   await pruneRateLimits();
+  await recordCronRun(now);
   return { expiredOrders, autoCancelled, paymentReminders: reminders, subscriptions: subs, fssai };
 }

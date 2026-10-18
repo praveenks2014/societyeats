@@ -6,8 +6,8 @@ import { runScheduledJobs } from '@/lib/jobs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Scheduled maintenance. Call every few minutes from any scheduler (Replit
- * Scheduled Deployment, cron-job.org, GitHub Actions) with
+ * Scheduled maintenance. Call hourly (or more often) from an external scheduler — Autoscale has no cron (cron-job.org,
+ * GitHub Actions, a Replit Scheduled Deployment) with
  *   Authorization: Bearer $CRON_SECRET
  * Every job is idempotent, and the same work also happens lazily on reads, so
  * a missed run delays emails/cleanups but never breaks correctness.

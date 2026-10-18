@@ -56,7 +56,7 @@ Demo accounts (development only, password `demo1234`): buyer `9999999901`, selle
 | `ADMIN_EMAILS` | yes | comma-separated. Only these addresses **with a verified e-mail** can become admin |
 | `SITE_URL` | yes | public URL, used in e-mails, QR codes and OG images |
 | `MOCK_MODE` | yes | `true` until go-live, then `false` |
-| `CRON_SECRET` | yes | bearer token for `POST /api/cron/run` (Replit Scheduled Deployment or any pinger, e.g. hourly) |
+| `CRON_SECRET` | yes | bearer token for `POST /api/cron/run`; schedule it hourly, see [Scheduled jobs on Autoscale](#scheduled-jobs-on-autoscale-required) |
 | `STORAGE_ADAPTER` + `REPLIT_OBJECT_STORAGE_BUCKET` | yes on Autoscale | alternatives: `s3` (+ `S3_*`), `local` (dev only) |
 | `EMAIL_ADAPTER` + `RESEND_API_KEY` + `EMAIL_FROM` | for real e-mail | `mock` writes to the outbox only. Verification and reset links need real e-mail in the pilot |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | when `MOCK_MODE=false` | platform fees only |
@@ -66,10 +66,32 @@ Demo accounts (development only, password `demo1234`): buyer `9999999901`, selle
 
 The platform's own FSSAI central licence number is entered in `/admin/settings` (`platformFssaiCentralLicenseNo`).
 
+### Scheduled jobs on Autoscale (required)
+
+Replit Autoscale has no built-in cron, so `POST /api/cron/run` never runs on its own. Schedule it hourly with an external scheduler. These steps use cron-job.org (free):
+
+1. Sign up at [cron-job.org](https://cron-job.org) and click **Create cronjob**.
+2. **Title:** `PadosiPlate scheduled jobs`. **URL:** `https://<SITE_URL>/api/cron/run` (your deployed domain, e.g. `https://padosiplate.replit.app/api/cron/run`).
+3. **Execution schedule:** every hour (e.g. "Every 1 hour", minute 0). Hourly is enough; every 15–30 minutes gives faster unpaid-order expiry.
+4. Open the **Advanced** tab:
+   - **Request method:** `POST`
+   - **Headers → Add:** name `Authorization`, value `Bearer <CRON_SECRET>` (the exact value you stored in Replit Secrets, after the word `Bearer` and one space)
+5. Save, then press **Test run**. A healthy response is HTTP `200` with `{"ok":true, ...}`. `401` means the secret is wrong or `CRON_SECRET` is not set on the deployment.
+6. In cron-job.org enable **notifications on failure**, so you hear about it if the endpoint starts failing.
+7. Open `/admin`: the red "Scheduled jobs have not run" banner disappears once a run has been recorded. It comes back whenever there has been no successful run for **3 hours**.
+
+**What stops working if this is not scheduled** (Autoscale has no built-in cron, so nothing calls the route by itself):
+- **Subscription expiry and grace:** status is still derived from dates on read, but reminder emails and the expiry sweep do not run.
+- **Reminders:** kitchen reminders to confirm UPI payments and subscription/FSSAI renewal reminders.
+- **Unpaid-order expiry:** orders waiting for the platform fee are not expired, so the stock and referral credit reserved for them are not released.
+- **Document retention:** id/address proofs are not purged on schedule, and old rate-limit rows are not pruned.
+
+You can also run `npm run cron` once from the Replit shell to run the same jobs manually.
+
 ### Going live with Razorpay (platform fees only)
 
 1. In the Razorpay dashboard create **live API keys** and put them in Secrets.
-2. Add a **webhook** → `https://<your-domain>/api/webhooks/razorpay`, secret = `RAZORPAY_WEBHOOK_SECRET`, events: `payment.captured`, `payment.failed`, `refund.processed`, `refund.failed`.
+2. Add a **webhook** → `https://<your-domain>/api/webhooks/razorpay`, secret = `RAZORPAY_WEBHOOK_SECRET`, events: `payment.authorized`, `payment.captured`, `payment.failed`, `refund.processed`, `refund.failed`. An order or subscription is marked paid only once Razorpay reports the payment as `captured`; an `authorized` payment is captured by the server first, and if that fails it stays unpaid (the webhook returns an error so Razorpay retries).
 3. Set `MOCK_MODE=false`, redeploy. Do one ₹1 plan purchase and one small order whose fee you pay and then refund (see the checklist).
 
 Do **not** add Razorpay Route, Smart Collect or anything that receives food money without first getting proper licensing advice.

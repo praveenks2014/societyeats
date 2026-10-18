@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth';
 import { RoleNav } from '@/components/role-nav';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { adminUnreadCount } from '@/lib/messaging/admin-threads';
+import { getCronStatus } from '@/lib/cron-status';
 import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (session.mustChangePassword) redirect('/change-password');
   const settings = await getPlatformSettings();
   const unread = await adminUnreadCount();
+  const cron = await getCronStatus();
   return (
     <>
       <RoleNav
@@ -41,6 +43,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <Link href="/admin/settings" className="mt-4 block rounded-2xl bg-chili-tint px-4 py-3 text-sm font-medium text-chili-dark hover:bg-chili-tint/70">
           ⚠️ Live orders are blocked until the platform’s own FSSAI e-commerce registration is entered — add it in Settings.
         </Link>
+      )}
+      {cron.stale && (
+        <div className="mt-4 rounded-2xl bg-chili-tint px-4 py-3 text-sm font-medium text-chili-dark" role="alert" data-testid="cron-warning">
+          ⚠️ Scheduled jobs have not run {cron.lastRunAt ? `since ${cron.lastRunAt.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })} IST (over 3 hours)` : 'yet'}. Subscription expiry and grace, reminders, unpaid-order expiry and document retention are paused. Schedule <code>POST /api/cron/run</code> hourly — see the README (“Scheduled jobs on Autoscale”).
+        </div>
       )}
       <div className="pt-5">{children}</div>
     </>
