@@ -24,7 +24,8 @@ export async function createRazorpayOrder(input: { amountInPaise: number; receip
   if (!Number.isInteger(input.amountInPaise) || input.amountInPaise < 100) throw new Error('Razorpay amount must be an integer of at least 100 paise');
   if (isMockMode()) return { id: `order_MOCK_${input.receipt}_${Date.now().toString(36)}`, keyId: null };
   const { rzp, keyId } = await client();
-  const o = await rzp.orders.create({ amount: input.amountInPaise, currency: 'INR', receipt: input.receipt, notes: input.notes });
+  // payment_capture: 1 = auto-capture; ensureCaptured() still verifies (and captures an `authorized` payment) before anything is marked paid
+  const o = await rzp.orders.create({ amount: input.amountInPaise, currency: 'INR', receipt: input.receipt, notes: input.notes, payment_capture: 1 } as Parameters<typeof rzp.orders.create>[0]);
   return { id: o.id, keyId };
 }
 
@@ -33,6 +34,12 @@ export async function fetchRazorpayPayment(paymentId: string): Promise<RzpPaymen
   const { rzp } = await client();
   const p = (await rzp.payments.fetch(paymentId)) as unknown as RzpPayment;
   return p;
+}
+
+/** Capture an `authorized` payment for exactly the stored amount (INR). */
+export async function captureRazorpayPayment(paymentId: string, amountInPaise: number): Promise<RzpPayment> {
+  const { rzp } = await client();
+  return (await rzp.payments.capture(paymentId, amountInPaise, 'INR')) as unknown as RzpPayment;
 }
 
 export async function createRazorpayRefund(input: { paymentId: string; amountInPaise: number; notes?: Record<string, string> }): Promise<{ id: string; status: 'processed' | 'pending' }> {

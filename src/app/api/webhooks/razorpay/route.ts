@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { getDb } from '@/lib/db';
 import { kitchenSubscriptions, orders, payments, refunds, webhookEvents } from '@/lib/db/schema';
+import { isMockMode } from '@/lib/config';
 import { log } from '@/lib/log';
+import { ensureCaptured } from '@/lib/payments/capture';
 import { markOrderPaid, verifyWebhookSignature } from '@/lib/payments';
 import { markSubscriptionPaid } from '@/lib/subscriptions/service';
 
@@ -18,7 +20,7 @@ type Payload = {
 /**
  * Razorpay webhook (Dashboard → Webhooks):
  *   URL:    https://<site>/api/webhooks/razorpay        Secret: RAZORPAY_WEBHOOK_SECRET
- *   Events: payment.captured, payment.failed, refund.processed, refund.failed
+ *   Events: payment.authorized, payment.captured, payment.failed, refund.processed, refund.failed
  *
  *  - raw-body HMAC check
  *  - deduplicated on the event id (webhook_events)
@@ -61,7 +63,7 @@ export async function POST(req: NextRequest) {
 async function handle(event: string, payload: Payload): Promise<string> {
   const db = await getDb();
 
-  if (event === 'payment.captured' || event === 'payment.failed') {
+  if (event === 'payment.authorized' || event === 'payment.captured' || event === 'payment.failed') {
     const entity = payload.payload?.payment?.entity;
     if (!entity?.order_id) return 'no_order';
     const [pay] = await db.select().from(payments).where(eq(payments.razorpayOrderId, entity.order_id));
@@ -79,6 +81,10 @@ async function handle(event: string, payload: Payload): Promise<string> {
       log.error('webhook.amount_mismatch', { event, expected, got: entity.amount });
       return 'amount_mismatch';
     }
+    if (!entity.id) return 'no_payment_id';
+    // Live: never trust the payload's status — re-fetch, capture an `authorized` payment, and require `captured`.
+    // A failure throws → 500 → Razorpay retries, and the order/subscription stays unpaid meanwhile.
+    if (!isMockMode()) await ensureCaptured({ paymentId: entity.id, razorpayOrderId: entity.order_id, amountInPaise: expected });
     if (pay) {
       const r = await markOrderPaid(pay.orderId, { razorpayPaymentId: entity.id, method: entity.method ?? 'razorpay', webhookPayload: payload });
       return r.won ? 'order_paid' : 'order_already_paid';

@@ -4,7 +4,7 @@ import { isMockMode } from '@/lib/config';
 import { getDb } from '@/lib/db';
 import { kitchenSubscriptions, orders, payments } from '@/lib/db/schema';
 import { markOrderPaid } from './index';
-import { fetchRazorpayPayment } from './razorpay';
+import { ensureCaptured } from './capture';
 import { verifyCheckoutSignature } from './signature';
 import { markSubscriptionPaid } from '@/lib/subscriptions/service';
 
@@ -23,7 +23,7 @@ export type VerifyInput = {
  *  1. the razorpay_order_id must map to a payment we created
  *  2. that payment must belong to the order/subscription the client named AND to the session user
  *  3. HMAC signature (length-guarded constant-time compare)
- *  4. live mode: fetch the payment from Razorpay; status and amount must match what we stored
+ *  4. live mode: fetch the payment from Razorpay; it must be `captured` (an `authorized` one is captured first) and match the stored amount
  * Any mismatch → 400. Only then the exactly-once markPaid runs.
  */
 export async function verifyAndMarkPaid(v: VerifyInput): Promise<{ kind: 'order' | 'subscription'; won: boolean }> {
@@ -52,10 +52,7 @@ export async function verifyAndMarkPaid(v: VerifyInput): Promise<{ kind: 'order'
   if (!verifyCheckoutSignature(v.razorpay_order_id, v.razorpay_payment_id, v.razorpay_signature)) throw bad('Payment signature verification failed');
 
   if (!isMockMode()) {
-    const rp = await fetchRazorpayPayment(v.razorpay_payment_id);
-    if (rp.order_id !== v.razorpay_order_id) throw bad();
-    if (!['captured', 'authorized'].includes(rp.status)) throw bad('Payment is not captured yet');
-    if (rp.amount !== expectedAmount) throw bad('Payment amount does not match');
+    await ensureCaptured({ paymentId: v.razorpay_payment_id, razorpayOrderId: v.razorpay_order_id, amountInPaise: expectedAmount });
   }
 
   if (pay) {
