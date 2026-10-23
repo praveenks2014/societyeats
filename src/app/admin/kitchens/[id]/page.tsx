@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Modal, Select, Skeleton, Textarea, VegDot } from '@/components/ui';
 import { FoodImage } from '@/components/food-image';
 import { useToast } from '@/components/providers';
@@ -45,8 +45,8 @@ const CATEGORIES = [
 const fmt = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '—');
 type Dialog = null | { kind: 'request_changes' | 'reject' } | { kind: 'delist' } | { kind: 'message' } | { kind: 'grant' } | { kind: 'hide'; dishId: number; title: string } | { kind: 'extend'; subId: number } | { kind: 'cancel'; subId: number } | { kind: 'refund'; subId: number };
 
-export default function KitchenDetail({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export default function KitchenDetail({ params }: { params: Promise<{ id: string }> }) {
+  const id = Number(use(params).id);
   const toast = useToast();
   const [d, setD] = useState<Detail | null>(null);
   const [err, setErr] = useState<string | null>(null);

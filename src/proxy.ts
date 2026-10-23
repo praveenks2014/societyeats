@@ -29,7 +29,7 @@ function allowedHosts(req: NextRequest): Set<string> {
   return hosts;
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (pathname.startsWith('/api/') && MUTATING.has(req.method) && !CSRF_EXEMPT.some((r) => r.test(pathname))) {

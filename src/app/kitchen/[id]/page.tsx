@@ -5,8 +5,8 @@ import { KitchenProfile } from './kitchen-client';
 
 export const dynamic = 'force-dynamic';
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const id = Number(params.id);
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const id = Number((await params).id);
   if (!Number.isFinite(id)) return {};
   const kitchen = await getKitchenProfile(id);
   if (!kitchen) return {};
@@ -22,8 +22,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default async function KitchenPage({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export default async function KitchenPage({ params }: { params: Promise<{ id: string }> }) {
+  const id = Number((await params).id);
   if (!Number.isFinite(id)) notFound();
   const kitchen = await getKitchenProfile(id);
   if (!kitchen) notFound();

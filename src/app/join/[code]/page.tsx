@@ -6,16 +6,16 @@ import { societyForInvite } from '@/lib/join';
 
 export const dynamic = 'force-dynamic';
 
-export async function generateMetadata({ params }: { params: { code: string } }): Promise<Metadata> {
-  const r = await societyForInvite(params.code);
+export async function generateMetadata({ params }: { params: Promise<{ code: string }> }): Promise<Metadata> {
+  const r = await societyForInvite((await params).code);
   if (!r) return {};
   const title = `Join ${BRAND.appName} in ${r.society.name}`;
   const description = `${BRAND.tagline}. ${r.liveKitchens} kitchen${r.liveKitchens === 1 ? '' : 's'} cooking in ${r.society.name}.`;
   return { title, description, openGraph: { title, description, type: 'website' }, twitter: { card: 'summary_large_image', title, description } };
 }
 
-export default async function JoinPage({ params }: { params: { code: string } }) {
-  const r = await societyForInvite(params.code);
+export default async function JoinPage({ params }: { params: Promise<{ code: string }> }) {
+  const r = await societyForInvite((await params).code);
   if (!r) notFound();
   const code = encodeURIComponent(r.society.inviteCode!);
   return (

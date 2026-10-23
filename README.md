@@ -116,7 +116,7 @@ Do **not** add Razorpay Route, Smart Collect or anything that receives food mone
 
 ## Architecture notes
 
-- Next.js 14 App Router + TypeScript, Drizzle ORM (migrations in `drizzle/`), Tailwind, Framer Motion, custom JWT auth with DB-backed sessions (revocable), CSRF Origin check in `src/middleware.ts`.
+- Next.js 14 App Router + TypeScript, Drizzle ORM (migrations in `drizzle/`), Tailwind, Framer Motion, custom JWT auth with DB-backed sessions (revocable), CSRF Origin check in `src/proxy.ts`.
 - Brand and legal placeholders: `src/config/brand.ts` (single source; a test scans the repo for legacy names).
 - Money maths in integer paise / basis points: `src/lib/money/fees.ts`.
 - Mock-first adapters: payments, storage, e-mail, geocode, FSSAI.

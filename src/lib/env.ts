@@ -77,7 +77,7 @@ export function validateEnv(): void {
 
   const lines = result.error.issues.map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
   const report = `Invalid or missing environment variables:\n${lines.join('\n')}\n\nSee .env.example for the full list and SECURITY.md for rotation steps.`;
-  // eslint-disable-next-line no-console
+   
   console.error(`\n[env] ${report}\n`);
   throw new Error(`Environment validation failed:\n${lines.join('\n')}`);
 }

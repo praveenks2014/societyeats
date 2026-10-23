@@ -28,6 +28,6 @@ export async function notifyUser(
     to: u.email,
     kind: opts.emailKind ?? 'notification',
     subject: title.replace(/[\u{1F300}-\u{1FAFF}☀-➿]/gu, '').trim(),
-    text: `${body}\n\n${siteOriginSafe()}${href}`,
+    text: `${body}\n\n${await siteOriginSafe()}${href}`,
   });
 }

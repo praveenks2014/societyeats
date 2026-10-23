@@ -9,8 +9,8 @@ export const contentType = 'image/png';
 export const alt = `Join ${BRAND.appName}`;
 
 /** Text-only branded card so a WhatsApp preview never depends on an external image. */
-export default async function Image({ params }: { params: { code: string } }) {
-  const r = await societyForInvite(params.code);
+export default async function Image({ params }: { params: Promise<{ code: string }> }) {
+  const r = await societyForInvite((await params).code);
   const name = r?.society.name ?? BRAND.appName;
   return new ImageResponse(
     (

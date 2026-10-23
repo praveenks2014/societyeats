@@ -386,7 +386,7 @@ function VerifyRowCard({
               invoice / FSSAI summary pages using window.print() instead of
               a PDF library, DECISIONS.md #68), so it falls back to a plain link. */}
           {/\.(jpe?g|png|webp)$/i.test(row.fssaiCertificateUrl) ? (
-            // eslint-disable-next-line @next/next/no-img-element
+             
             <img
               src={row.fssaiCertificateUrl}
               alt="FSSAI certificate"

@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start -H 0.0.0.0",
-    "lint": "next lint",
+    "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
     "db:push": "node scripts/db-push.mjs",
     "db:seed": "tsx src/lib/db/seed.ts",
@@ -54,5 +54,8 @@
     "typescript": "^5.6.3",
     "vite": "7.3.7",
     "vitest": "5.0.5"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

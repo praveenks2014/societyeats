@@ -13,7 +13,7 @@ export function setCookieJar(name: string, value: string) {
   jar.set(name, value);
 }
 
-export function cookies() {
+export async function cookies() {
   return {
     get: (name: string) => (jar.has(name) ? { name, value: jar.get(name)! } : undefined),
     set: (name: string, value: string, opts?: { maxAge?: number }) => {
@@ -24,6 +24,6 @@ export function cookies() {
   };
 }
 
-export function headers() {
+export async function headers() {
   return { get: (n: string) => requestHeaders[n.toLowerCase()] ?? null };
 }

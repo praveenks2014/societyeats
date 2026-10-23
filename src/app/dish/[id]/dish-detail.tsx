@@ -135,7 +135,7 @@ export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, ot
           </div>
         )}
         {seller.kitchenVideoUrl && (
-          // eslint-disable-next-line jsx-a11y/media-has-caption
+           
           <video src={seller.kitchenVideoUrl} controls className="mt-3 w-full rounded-xl bg-ink" />
         )}
 

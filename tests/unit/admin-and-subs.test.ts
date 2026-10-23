@@ -303,16 +303,16 @@ describe('subscription service', () => {
   });
 });
 
-describe('CSRF origin check (middleware)', () => {
+describe('CSRF origin check (proxy)', () => {
   test('cross-site mutating API calls are blocked; same-origin, no-Origin and webhook calls pass', async () => {
-    const { middleware } = await import('@/middleware');
+    const { proxy } = await import('@/proxy');
     const mk = (origin: string | null, path = '/api/orders', method = 'POST') =>
       new NextRequest(`http://localhost:3000${path}`, { method, headers: { host: 'localhost:3000', ...(origin ? { origin } : {}) } });
-    expect((await middleware(mk('https://evil.example'))).status).toBe(403);
-    expect((await middleware(mk('http://localhost:3000'))).status).toBe(200);
-    expect((await middleware(mk(null))).status).toBe(200);
-    expect((await middleware(mk('https://evil.example', '/api/webhooks/razorpay'))).status).toBe(200);
-    expect((await middleware(mk('https://evil.example', '/api/orders', 'GET'))).status).toBe(200);
+    expect((await proxy(mk('https://evil.example'))).status).toBe(403);
+    expect((await proxy(mk('http://localhost:3000'))).status).toBe(200);
+    expect((await proxy(mk(null))).status).toBe(200);
+    expect((await proxy(mk('https://evil.example', '/api/webhooks/razorpay'))).status).toBe(200);
+    expect((await proxy(mk('https://evil.example', '/api/orders', 'GET'))).status).toBe(200);
   });
 });
 

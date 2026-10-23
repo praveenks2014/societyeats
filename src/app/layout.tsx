@@ -32,7 +32,7 @@ const body = localFont({
 export async function generateMetadata(): Promise<Metadata> {
   let metadataBase: URL | undefined;
   try {
-    metadataBase = new URL(siteOrigin());
+    metadataBase = new URL(await siteOrigin());
   } catch {
     metadataBase = undefined;
   }

@@ -82,7 +82,7 @@ export async function createSession(userId: number): Promise<string> {
   const sid = crypto.randomBytes(24).toString('hex');
   let ua: string | null = null;
   try {
-    ua = headers().get('user-agent')?.slice(0, 200) ?? null;
+    ua = (await headers()).get('user-agent')?.slice(0, 200) ?? null;
   } catch {
     ua = null;
   }
@@ -93,18 +93,18 @@ export async function createSession(userId: number): Promise<string> {
     userAgent: ua,
   });
   await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, userId));
-  cookies().set(COOKIE_NAME, await signSessionToken(sid), cookieOptions());
+  (await cookies()).set(COOKIE_NAME, await signSessionToken(sid), cookieOptions());
   return sid;
 }
 
 export async function destroyCurrentSession(): Promise<void> {
-  const token = cookies().get(COOKIE_NAME)?.value;
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
   const parsed = token ? await verifySessionToken(token) : null;
   if (parsed) {
     const db = await getDb();
     await db.delete(sessions).where(eq(sessions.id, parsed.sid));
   }
-  cookies().set(COOKIE_NAME, '', { maxAge: 0, path: '/' });
+  (await cookies()).set(COOKIE_NAME, '', { maxAge: 0, path: '/' });
 }
 
 export async function revokeAllSessions(userId: number): Promise<void> {
@@ -159,10 +159,10 @@ const sessionForToken = requestCache(async (token: string): Promise<Session | nu
   if (!session) return null;
   // Sliding renewal of the cookie. Setting cookies only works in route
   // handlers/actions, so this is a best-effort no-op while rendering pages
-  // (middleware also renews — see src/middleware.ts).
+  // (the proxy also renews — see src/proxy.ts).
   if (Date.now() / 1000 - parsed.iat > RENEW_AFTER_MS / 1000) {
     try {
-      cookies().set(COOKIE_NAME, await signSessionToken(parsed.sid), cookieOptions());
+      (await cookies()).set(COOKIE_NAME, await signSessionToken(parsed.sid), cookieOptions());
     } catch {
       /* read-only context */
     }
@@ -171,7 +171,7 @@ const sessionForToken = requestCache(async (token: string): Promise<Session | nu
 });
 
 export async function getSession(): Promise<Session | null> {
-  const token = cookies().get(COOKIE_NAME)?.value;
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!token) return null;
   return sessionForToken(token);
 }

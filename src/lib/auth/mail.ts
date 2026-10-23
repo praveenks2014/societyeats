@@ -11,7 +11,7 @@ export async function sendVerificationEmail(userId: number): Promise<void> {
   const [u] = await db.select().from(users).where(eq(users.id, userId));
   if (!u?.email || u.emailVerifiedAt) return;
   const token = await issueToken(u.id, 'verify');
-  const link = `${siteOriginSafe()}/verify-email?token=${token}`;
+  const link = `${await siteOriginSafe()}/verify-email?token=${token}`;
   await sendEmail({
     userId: u.id,
     to: u.email,
@@ -27,7 +27,7 @@ export async function sendPasswordResetEmail(userId: number): Promise<void> {
   const [u] = await db.select().from(users).where(eq(users.id, userId));
   if (!u?.email) return;
   const token = await issueToken(u.id, 'reset');
-  const link = `${siteOriginSafe()}/reset-password?token=${token}`;
+  const link = `${await siteOriginSafe()}/reset-password?token=${token}`;
   await sendEmail({
     userId: u.id,
     to: u.email,

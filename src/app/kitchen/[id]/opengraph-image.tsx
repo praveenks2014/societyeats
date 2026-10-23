@@ -16,8 +16,8 @@ export const alt = `${BRAND.appName} kitchen`;
  * FoodImage's fallback (DECISIONS.md #22), just applied at generation time
  * instead of render time.
  */
-export default async function Image({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export default async function Image({ params }: { params: Promise<{ id: string }> }) {
+  const id = Number((await params).id);
   const kitchen = Number.isFinite(id) ? await getKitchenProfile(id) : null;
 
   const name = kitchen?.profile.kitchenName ?? BRAND.appName;

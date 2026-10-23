@@ -7,7 +7,7 @@ Every non-obvious call made while building PadosiPlate in one session, and why.
 ## Stack & infrastructure
 
 1. **PGlite dev fallback.** The spec mandates Postgres via `DATABASE_URL` (kept as the primary path, used on Replit). When the variable is unset, the app falls back to an embedded PGlite (WASM Postgres) at `./.data/pglite` with auto-migrate + auto-seed. Rationale: the build machine and fresh clones have no Postgres, and "fully clickable tonight" beats "install a database first". Same Drizzle API both ways; no native binaries either way.
-2. **(Superseded in Phase 1 Pilot — `src/middleware.ts` now exists, see below.)** Role checks live in layouts (`/seller`, `/admin`, `/restaurant`) and in every API handler via `requireSession(roles)`. Simpler than edge middleware and avoids edge-runtime DB access.
+2. **(Superseded in Phase 1 Pilot — `src/proxy.ts` now exists, see below.)** Role checks live in layouts (`/seller`, `/admin`, `/restaurant`) and in every API handler via `requireSession(roles)`. Simpler than edge middleware and avoids edge-runtime DB access.
 3. **Hand-rolled service worker** instead of `@ducanh2912/next-pwa`: fewer build-time moving parts, and the spec explicitly allowed it. It precaches an offline shell, uses network-first for navigations, SWR for images, and never caches `/api/*`.
 4. **SVG PWA icons.** Chrome accepts SVG manifest icons; shipping raster PNGs would need an image toolchain. Swap in PNGs later if older Android install banners matter.
 5. **`.replit` committed** so "Import from GitHub" runs with zero changes (dev run + autoscale deployment config).
@@ -219,8 +219,8 @@ Every ambiguous call made while turning the codebase into the PadosiPlate pilot.
 - **E-mail tokens are random and stored hashed** (not JWT-signed): they can be revoked, single-use and are not forgeable if `JWT_SECRET` leaks.
 - **Unverified users may still browse and order**, with a persistent banner to verify; only admin access requires a verified e-mail.
 - **Admin = `ADMIN_EMAILS` + verified e-mail only.** The allowlisted account is created with a one-time password and `must_change_password`; nobody else can be promoted through the app. `ADMIN_BOOTSTRAP_PASSWORD` exists only so e2e can log in deterministically.
-- **DB-backed sessions** (revocable, "log out everywhere") with a JWT cookie carrying the session id; a sliding refresh is done in `src/middleware.ts`.
-- **`src/middleware.ts` now exists** for two cross-cutting jobs only: CSRF `Origin` check on mutating `/api/*` requests and sliding session refresh. Role checks stay in layouts and handlers.
+- **DB-backed sessions** (revocable, "log out everywhere") with a JWT cookie carrying the session id; a sliding refresh is done in `src/proxy.ts`.
+- **`src/proxy.ts` now exists** for two cross-cutting jobs only: CSRF `Origin` check on mutating `/api/*` requests and sliding session refresh. Role checks stay in layouts and handlers.
 - Postgres fixed-window **rate limiter** shared by all instances (login, register, reset, uploads, messaging). It is bypassed only when `E2E=true` and `NODE_ENV!=='production'`.
 
 ### Kitchens, moderation, messaging

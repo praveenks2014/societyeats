@@ -7,8 +7,8 @@ import { DishDetail } from './dish-detail';
 
 export const dynamic = 'force-dynamic';
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const id = Number(params.id);
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const id = Number((await params).id);
   if (!Number.isFinite(id)) return {};
   const detail = await getListingDetail(id);
   if (!detail) return {};
@@ -24,8 +24,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default async function DishPage({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export default async function DishPage({ params }: { params: Promise<{ id: string }> }) {
+  const id = Number((await params).id);
   if (!Number.isFinite(id)) notFound();
   const detail = await getListingDetail(id);
   if (!detail) notFound();

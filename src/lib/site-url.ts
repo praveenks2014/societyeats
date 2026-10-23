@@ -6,19 +6,19 @@ import { headers } from 'next/headers';
  * background jobs); otherwise it is derived from the request's forwarded
  * headers.
  */
-export function siteOrigin(): string {
+export async function siteOrigin(): Promise<string> {
   const fixed = process.env.SITE_URL?.trim().replace(/\/$/, '');
   if (fixed) return fixed;
-  const h = headers();
+  const h = await headers();
   const proto = h.get('x-forwarded-proto') ?? 'https';
   const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3000';
   return `${proto}://${host}`;
 }
 
 /** Never throws — falls back to localhost outside a request (cron, scripts). */
-export function siteOriginSafe(): string {
+export async function siteOriginSafe(): Promise<string> {
   try {
-    return siteOrigin();
+    return await siteOrigin();
   } catch {
     return process.env.SITE_URL?.trim().replace(/\/$/, '') || 'http://localhost:3000';
   }
