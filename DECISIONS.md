@@ -245,3 +245,14 @@ Every ambiguous call made while turning the codebase into the PadosiPlate pilot.
 ### Tests
 - Vitest (PGlite) covers fee maths, subscriptions, state machine, auth, payments/webhooks, refunds, moderation, threads, CSRF, FSSAI and a repo-wide scan that fails on legacy brand names. Playwright runs the ten required journeys plus 390px mobile checks (no horizontal scroll, ≥36px targets, AA-checked palette).
 - Bug found by e2e and fixed: the cart was wiped on every full page load because the persist effect ran before hydration.
+
+### Dependency upgrade (Next 16 / React 19)
+
+- Upgraded to Next 16.4.3, React 19.3.1, vitest 5.0.5, drizzle-orm 0.45.4 to clear critical/high advisories; versions of next, react, react-dom, vitest, vite, eslint and drizzle-orm are pinned exactly. See `docs/AUDIT_DEPS.md`.
+- Node 22: vitest 5 needs `^22.12`; `.replit` moved to `nodejs-22` and `package.json` declares `engines.node >=22.12.0`.
+- `cookies()`, `headers()` and route `params` are awaited. The `api()` wrapper resolves `params` so route handlers keep their plain `{ params }` signature; `siteOrigin()`, `joinUrl()` and `whatsappMessage()` became async.
+- `src/middleware.ts` → `src/proxy.ts` (same CSRF + sliding-session logic, exported as `proxy`).
+- `next lint` is gone: `npm run lint` is `eslint .` with a flat `eslint.config.mjs` (eslint-config-next/core-web-vitals). The new `react-hooks/set-state-in-effect` rule is turned off: the app deliberately loads data and hydrates the cart from localStorage inside effects.
+- `next.config.mjs`: `serverExternalPackages` replaces `experimental.serverComponentsExternalPackages`; `instrumentationHook` is no longer needed. Startup validation moved to `src/instrumentation-node.ts` so the Edge bundle never sees `process.exit`.
+- Turbopack is now the default for `next dev` and `next build`. The e2e database moved to the OS temp dir because Turbopack's dev server full-reloads pages when files in the project tree change.
+- verify-email posts its single-use token once (a ref guard) because React dev StrictMode runs effects twice.

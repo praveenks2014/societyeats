@@ -1,5 +1,7 @@
 # Dependency audit
 
+Goal: zero critical and zero high findings in `npm audit` (production and dev). Result: **0 critical, 0 high**, 13 moderate (listed below, all transitive/dev-only).
+
 ## Before (2026-10-23, `npm audit`)
 
 ```
@@ -177,3 +179,96 @@ To address all issues possible (including breaking changes), run:
 Some issues need review, and may require choosing
 a different dependency.
 ```
+
+## Changes
+
+| Package | Before | After |
+| --- | --- | --- |
+| next | ^14.2.20 (14.2.35) | 16.4.3 (exact) |
+| react / react-dom | ^18.3.1 | 19.3.1 (exact) |
+| @types/react, @types/react-dom | 18.x | 19.3.0 |
+| eslint-config-next | ^14.2.35 | 16.4.3 |
+| eslint | ^8.57.1 | 9.39.5 (flat config; required by eslint-config-next 16) |
+| vitest | ^2.1.9 | 5.0.5 (exact) |
+| vite | transitive | 7.3.7 (peer of vitest 5, patched) |
+| drizzle-orm | ^0.36.4 | 0.45.4 (exact) |
+| drizzle-kit | ^0.28.1 | 0.31.11 |
+| @types/node | ^20 | 22 (vitest 5 peer) |
+| follow-redirects, source-map-js, glob, postcss | vulnerable | patched via `npm audit fix` / the upgrades above |
+
+framer-motion 11.18.2 already declares React 19 as a peer and needed no change; razorpay, sharp, jose, zod and the other dependencies have no React/Next coupling. Node requirement is now `>=22.12` (vitest 5; Next 16 itself needs >=20.9), and `.replit` uses `nodejs-22`.
+
+## After (`npm audit`)
+
+```
+# npm audit report
+
+esbuild  <=0.24.2
+Severity: moderate
+esbuild enables any website to send any requests to the development server and read the response - https://github.com/advisories/GHSA-67mh-4wv8-2f99
+fix available via `npm audit fix --force`
+Will install drizzle-kit@0.18.1, which is a breaking change
+node_modules/@esbuild-kit/core-utils/node_modules/esbuild
+  @esbuild-kit/core-utils  *
+  Depends on vulnerable versions of esbuild
+  node_modules/@esbuild-kit/core-utils
+    @esbuild-kit/esm-loader  *
+    Depends on vulnerable versions of @esbuild-kit/core-utils
+    node_modules/@esbuild-kit/esm-loader
+      drizzle-kit  0.19.0 - 1.0.0-beta.1-fd8bfcc
+      Depends on vulnerable versions of @esbuild-kit/esm-loader
+      node_modules/drizzle-kit
+
+postcss-selector-parser  <7.1.6
+Severity: moderate
+PostCSS: Quadratic complexity in flat selector parsing allows CPU exhaustion - https://github.com/advisories/GHSA-rj75-hqrm-r3gf
+fix available via `npm audit fix --force`
+Will install tailwindcss@4.3.3, which is a breaking change
+node_modules/postcss-selector-parser
+  postcss-nested  2.0.3 - 6.2.0
+  Depends on vulnerable versions of postcss-selector-parser
+  node_modules/postcss-nested
+  tailwindcss  <=0.0.0-oxide-insiders.ff2c25f || 0.5.0 - 3.4.19
+  Depends on vulnerable versions of postcss-nested
+  Depends on vulnerable versions of postcss-selector-parser
+  node_modules/tailwindcss
+
+uuid  <11.1.1
+Severity: moderate
+uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided - https://github.com/advisories/GHSA-w5hq-g745-h8pq
+No fix available
+node_modules/uuid
+  gaxios  6.4.0 - 6.7.1
+  Depends on vulnerable versions of uuid
+  node_modules/gaxios
+  teeny-request  3.9.1 - 9.0.0
+  Depends on vulnerable versions of uuid
+  node_modules/teeny-request
+    @google-cloud/storage  2.2.0 - 2.5.0 || 5.19.0 - 8.0.0
+    Depends on vulnerable versions of retry-request
+    Depends on vulnerable versions of teeny-request
+    node_modules/@google-cloud/storage
+      @replit/object-storage  *
+      Depends on vulnerable versions of @google-cloud/storage
+      node_modules/@replit/object-storage
+    retry-request  7.0.0 - 7.0.2
+    Depends on vulnerable versions of teeny-request
+    node_modules/retry-request
+
+13 moderate severity vulnerabilities
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues possible (including breaking changes), run:
+  npm audit fix --force
+
+Some issues need review, and may require choosing
+a different dependency.
+```
+
+## Remaining moderate findings (not fixable without breaking changes or upstream releases)
+
+- `esbuild <=0.24.2` via `drizzle-kit` → `@esbuild-kit/*` (dev-time CLI only; the dev-server request issue does not apply, drizzle-kit does not run a dev server).
+- `postcss-selector-parser <7.1.6` via `tailwindcss@3` → `postcss-nested` (build time only; the fix is Tailwind 4, a separate migration).
+- `uuid <11.1.1` via `@replit/object-storage` → `@google-cloud/storage` → `gaxios`/`teeny-request` (no upstream fix; only affects `uuid` v3/v5/v6 called with a caller-supplied buffer, which these packages do not do).

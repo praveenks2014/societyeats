@@ -17,7 +17,7 @@ All rates are edited in `/admin/settings` (bounds-checked). Each order and each 
 
 ```bash
 cp .env.example .env     # set JWT_SECRET (openssl rand -hex 32)
-npm ci
+npm ci            # Node >= 22.12
 npm run dev              # http://localhost:3000
 ```
 
