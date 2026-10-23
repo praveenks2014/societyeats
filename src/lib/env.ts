@@ -8,10 +8,8 @@ import { z } from 'zod';
  * every missing/invalid var listed together, instead of surfacing one at a
  * time the first time each code path happens to run.
  *
- * DATABASE_URL is deliberately NOT required here: the app's documented
- * zero-setup dev path is to leave it unset and fall back to embedded
- * PGlite (see src/lib/db/index.ts) — that fallback is a feature, not a
- * misconfiguration.
+ * DATABASE_URL is required when NODE_ENV=production (the embedded PGlite
+ * fallback is for local development only — see src/lib/db/index.ts).
  */
 
 const envSchema = z
@@ -30,15 +28,37 @@ const envSchema = z
         errorMap: () => ({ message: "MOCK_MODE must be exactly 'true' or 'false' when set" }),
       })
       .optional(),
+    DATABASE_URL: z.string().optional(),
+    ADMIN_EMAILS: z.string().optional(),
+    STORAGE_ADAPTER: z.enum(['local', 'replit', 's3']).optional(),
+    EMAIL_ADAPTER: z.enum(['mock', 'resend']).optional(),
     RAZORPAY_KEY_ID: z.string().optional(),
     RAZORPAY_KEY_SECRET: z.string().optional(),
     RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+    RESEND_API_KEY: z.string().optional(),
   })
   .passthrough()
   .superRefine((env, ctx) => {
+    if (env.NODE_ENV === 'production' && !env.DATABASE_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['DATABASE_URL'],
+        message: 'DATABASE_URL is required in production (add the PostgreSQL tool on Replit)',
+      });
+    }
+    if (env.NODE_ENV === 'production' && env.STORAGE_ADAPTER === 'local') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['STORAGE_ADAPTER'],
+        message: 'STORAGE_ADAPTER=local loses uploads on Autoscale — use replit or s3 in production',
+      });
+    }
     const liveMode = env.MOCK_MODE === 'false';
     if (!liveMode) return;
     const required = ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'] as const;
+    if ((env.EMAIL_ADAPTER ?? 'resend') === 'resend' && !env.RESEND_API_KEY) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['RESEND_API_KEY'], message: 'RESEND_API_KEY is required when MOCK_MODE=false (or set EMAIL_ADAPTER=mock)' });
+    }
     for (const key of required) {
       if (!env[key]) {
         ctx.addIssue({

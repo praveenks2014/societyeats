@@ -1,8 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
-import { ApiError } from '@/lib/api';
-import { getDb } from '@/lib/db';
-import { fssaiApplications, sellerProfiles } from '@/lib/db/schema';
-import { isFssaiEligibleToPublish } from '@/lib/fssai/gate';
+import { z } from 'zod';
 
 export type ListingBody = {
   title: string;
@@ -18,36 +14,26 @@ export type ListingBody = {
   isActive?: boolean;
 };
 
-/**
- * Compliance gate: no publishing without FSSAI verified, or a FoSCoS filing
- * old enough to be deemed-eligible under the regulation (see
- * src/lib/fssai/gate.ts), plus admin approval. FSSAI hardening v3
- * (DECISIONS.md #119+) replaces the old fssaiPendingMaxDays grace-window
- * check entirely — see also src/lib/browse.ts, which dropped the auto-pause
- * mechanism this gate superseded.
- */
-export async function assertCanPublish(sellerId: number) {
-  const db = await getDb();
-  const [profile] = await db
-    .select()
-    .from(sellerProfiles)
-    .where(eq(sellerProfiles.userId, sellerId));
-  if (!profile) throw new ApiError(404, 'Seller profile missing');
+const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const SLOTS = ['breakfast', 'lunch', 'dinner'];
 
-  const [latestApplication] = await db
-    .select()
-    .from(fssaiApplications)
-    .where(eq(fssaiApplications.sellerId, sellerId))
-    .orderBy(desc(fssaiApplications.createdAt))
-    .limit(1);
+export const listingCreateSchema = z.object({
+  title: z.string().trim().min(1, 'Dish name required').max(160),
+  description: z.string().trim().max(1000).optional(),
+  priceRupees: z.number({ invalid_type_error: 'Price required' }).finite().min(1, 'Price must be at least ₹1').max(50_000, 'Price is too high'),
+  isVeg: z.boolean(),
+  cuisine: z.string().trim().min(1, 'Cuisine required').max(60),
+  photoUrl: z.string().trim().max(500).optional().nullable(),
+  prepTimeMins: z.number().finite().min(0).max(24 * 60).default(30),
+  availableQty: z.number().int('Quantity must be a whole number').min(0).max(1000).default(0),
+  days: z.array(z.enum(DAYS as [string, ...string[]])).default(DAYS),
+  slots: z.array(z.enum(SLOTS as [string, ...string[]])).default(['lunch', 'dinner']),
+  isActive: z.boolean().optional(),
+});
 
-  if (!isFssaiEligibleToPublish(profile, latestApplication ?? null)) {
-    throw new ApiError(
-      403,
-      'Add your FSSAI license, or file an application on FoSCoS yourself, in Compliance before publishing dishes',
-    );
-  }
-  if (!profile.isApproved) {
-    throw new ApiError(403, 'Your kitchen is awaiting GharSe approval — you can save drafts meanwhile');
-  }
+export const listingPatchSchema = listingCreateSchema.partial();
+
+/** ₹ → integer paise, safely (no float artefacts like 12.34*100 = 1233.9999). */
+export function rupeesToPaise(r: number): number {
+  return Math.round(r * 100 + 1e-9);
 }

@@ -1,12 +1,12 @@
 import { ImageResponse } from 'next/og';
 import { getKitchenProfile } from '@/lib/browse';
-import { BRAND } from '@/lib/config';
+import { BRAND } from '@/config/brand';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
-export const alt = `${BRAND.name} kitchen`;
+export const alt = `${BRAND.appName} kitchen`;
 
 /**
  * Pilot Hardening v2 — Phase 6 (Society-first launch mechanics, DECISIONS.md
@@ -20,7 +20,7 @@ export default async function Image({ params }: { params: { id: string } }) {
   const id = Number(params.id);
   const kitchen = Number.isFinite(id) ? await getKitchenProfile(id) : null;
 
-  const name = kitchen?.profile.kitchenName ?? BRAND.name;
+  const name = kitchen?.profile.kitchenName ?? BRAND.appName;
   const society = kitchen?.society?.name;
   const rating = kitchen?.profile.rating ?? 0;
   const badgeTier = kitchen?.badgeTier;
@@ -42,7 +42,7 @@ export default async function Image({ params }: { params: { id: string } }) {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 32, fontWeight: 700 }}>
           <span>🍲</span>
-          <span>{BRAND.name}</span>
+          <span>{BRAND.appName}</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {society && (

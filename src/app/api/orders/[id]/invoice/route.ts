@@ -11,16 +11,18 @@ import {
   sellerProfiles,
   users,
 } from '@/lib/db/schema';
-import { BRAND } from '@/lib/config';
+import { BRAND } from '@/config/brand';
+import { getPlatformSettings } from '@/lib/db/platform';
+import { splitGst } from '@/lib/money';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Per-order tax invoice — GharSe issues it, not the cook: the platform is the
- * deemed supplier under Sec 9(5) CGST for home-food orders (DECISIONS.md
- * #58+). CGST/SGST assume an intra-state supply (the pilot is one Hyderabad
- * society) — guidance only, not a legal determination; verify with a CA
- * before relying on this for filing.
+ * Per-order invoice. For home-kitchen orders the platform invoices ONLY its
+ * own service — the buyer platform fee (+GST on it, and ECO GST on food when
+ * that mode is on). The food itself is sold by the kitchen and paid to it
+ * directly, so it appears as an information line, not as platform revenue.
+ * CGST/SGST assume an intra-state supply — guidance only; verify with a CA.
  */
 export const GET = api<{ params: { id: string } }>(async (_req, { params }) => {
   const session = await requireSession();
@@ -61,20 +63,26 @@ export const GET = api<{ params: { id: string } }>(async (_req, { params }) => {
     fssaiNumber = p?.fssaiNumber ?? null;
   }
 
-  const cgstInPaise = Math.round(order.gstInPaise / 2);
-  const sgstInPaise = order.gstInPaise - cgstInPaise;
+  const settings = await getPlatformSettings();
+  const home = order.type === 'home_delivery';
+  const feeGst = splitGst(order.platformFeeGstInPaise);
+  const ecoGst = splitGst(order.gstInPaise);
+  const legal = {
+    name: settings.legalEntityName || BRAND.legalEntityName,
+    gstin: settings.platformGstin || BRAND.gstin,
+    address: settings.registeredAddress || BRAND.registeredAddress,
+  };
 
   return ok({
-    invoiceNumber: `GHS-INV-${String(order.id).padStart(6, '0')}`,
+    model: home ? 'home' : 'mall',
+    invoiceNumber: `PP-INV-${String(order.id).padStart(6, '0')}`,
     invoiceDate: payment?.capturedAt ?? order.createdAt,
-    isTaxInvoice: order.gstInPaise > 0,
-    platform: { name: BRAND.name, gstin: BRAND.gstin, address: BRAND.registeredAddress },
+    isTaxInvoice: home ? order.platformFeeGstInPaise + order.gstInPaise > 0 : false,
+    platform: { name: BRAND.appName, legalName: legal.name, gstin: legal.gstin, address: legal.address },
     buyer: {
       name: buyer?.name ?? 'Buyer',
       phone: buyer?.phone ?? '',
-      address: order.deliveryAddressJson
-        ? `${order.deliveryAddressJson.flat}, ${order.deliveryAddressJson.addressText}`
-        : null,
+      address: order.deliveryAddressJson ? `${order.deliveryAddressJson.flat}, ${order.deliveryAddressJson.addressText}` : null,
     },
     fulfilledBy: restaurant
       ? { label: restaurant.name, sub: mall?.name, fssaiNumber: restaurant.fssaiNumber }
@@ -86,12 +94,22 @@ export const GET = api<{ params: { id: string } }>(async (_req, { params }) => {
       createdAt: order.createdAt,
       subtotalInPaise: order.subtotalInPaise,
       deliveryFeeInPaise: order.deliveryFeeInPaise,
+      foodTotalInPaise: order.foodTotalInPaise,
+      foodPaymentMode: order.foodPaymentMode,
+      platformFeeBeforeCreditInPaise: order.feeBeforeCreditInPaise,
       platformFeeInPaise: order.platformFeeInPaise,
-      gstInPaise: order.gstInPaise,
-      cgstInPaise,
-      sgstInPaise,
+      feeBps: order.feeBpsSnapshot,
+      feeGstInPaise: order.platformFeeGstInPaise,
+      feeCgstInPaise: feeGst.cgst,
+      feeSgstInPaise: feeGst.sgst,
+      feeGstBps: order.feeGstBpsSnapshot,
+      ecoGstInPaise: order.gstInPaise,
+      ecoCgstInPaise: ecoGst.cgst,
+      ecoSgstInPaise: ecoGst.sgst,
+      onlineChargeInPaise: order.onlineChargeInPaise,
       referralCreditAppliedInPaise: order.referralCreditAppliedInPaise,
       totalInPaise: order.totalInPaise,
+      refundInPaise: order.refundInPaise,
     },
     items: items.map((i) => ({
       title: i.titleSnapshot,

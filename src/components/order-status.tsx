@@ -3,7 +3,10 @@
 import { Badge } from '@/components/ui';
 
 export const STATUS_META: Record<string, { label: string; emoji: string; tone: 'green' | 'amber' | 'red' | 'neutral' }> = {
-  placed: { label: 'Placed — awaiting payment', emoji: '🕐', tone: 'neutral' },
+  placed: { label: 'Placed — pay the platform fee to send it', emoji: '🕐', tone: 'neutral' },
+  fee_paid: { label: 'Sent to the kitchen', emoji: '🍲', tone: 'amber' },
+  awaiting_kitchen_payment_confirmation: { label: 'Kitchen confirming your UPI payment', emoji: '⏳', tone: 'amber' },
+  expired: { label: 'Expired — platform fee not paid', emoji: '⌛', tone: 'red' },
   paid: { label: 'Paid — waiting for the kitchen', emoji: '✅', tone: 'amber' },
   accepted: { label: 'Accepted by the kitchen', emoji: '👩‍🍳', tone: 'amber' },
   preparing: { label: 'Cooking now', emoji: '🍳', tone: 'amber' },

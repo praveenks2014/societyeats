@@ -5,12 +5,14 @@ import { getDb } from '@/lib/db';
 import { fssaiApplications, sellerProfiles, users } from '@/lib/db/schema';
 import { notify } from '@/lib/db/notify';
 import { getPlatformSettings } from '@/lib/db/platform';
+import { basicRegistrationFeePaise, validateFormA, type FormAAnswers } from '@/lib/fssai/assistant';
+import { recordFunnel } from '@/lib/fssai/funnel';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * "Get me a license" wizard submits here. Two filing paths (DECISIONS.md
- * #62+): 'facilitator' opens a real back-office task for GharSe's compliance
+ * #62+): 'facilitator' opens a real back-office task for PadosiPlate's compliance
  * team (who file on FoSCoS by hand — there is no public submission API);
  * 'self' just records the application for the seller's own reference — no
  * back-office task, no facilitation cost — the wizard's prefilled summary +
@@ -24,12 +26,22 @@ export const POST = api(async (req) => {
     licenseType: 'registration' | 'state';
     documents: { label: string; url: string }[];
     filingMode?: 'facilitator' | 'self';
+    /** Form A answers from the assistant (Basic Registration). */
+    formA?: Omit<FormAAnswers, 'eligibility'> & { eligibility: FormAAnswers['eligibility'] };
   }>(req);
   if (!body.applicantName?.trim() || !body.kitchenAddress?.trim()) {
     throw new ApiError(400, 'Applicant name and kitchen address are required');
   }
 
   const db = await getDb();
+  const settings0 = await getPlatformSettings();
+  // The assistant only prepares Basic Registration (Form A). Validate every answer on the server.
+  let formA: typeof fssaiApplications.$inferInsert['formAJson'] = null;
+  if (body.formA) {
+    const problem = validateFormA(body.formA);
+    if (problem) throw new ApiError(400, problem);
+    formA = { ...body.formA, feeInPaise: basicRegistrationFeePaise(body.formA.years, settings0.fssaiBasicFeePerYear), idType: body.formA.idType };
+  }
   const filingMode: 'facilitator' | 'self' = body.filingMode === 'self' ? 'self' : 'facilitator';
   const now = new Date().toISOString();
 
@@ -58,7 +70,8 @@ export const POST = api(async (req) => {
       sellerId: session.uid,
       applicantName: body.applicantName.trim(),
       kitchenAddress: body.kitchenAddress.trim(),
-      licenseType: body.licenseType === 'state' ? 'state' : 'registration',
+      licenseType: formA ? 'registration' : body.licenseType === 'state' ? 'state' : 'registration',
+      formAJson: formA,
       documentsJson: body.documents ?? [],
       filingMode,
       facilitationCostInPaise,
@@ -66,7 +79,7 @@ export const POST = api(async (req) => {
       status: filingMode === 'facilitator' ? 'submitted_to_backoffice' : 'draft',
       timelineJson:
         filingMode === 'facilitator'
-          ? [{ at: now, event: "Application submitted to GharSe's back office" }]
+          ? [{ at: now, event: "Application submitted to PadosiPlate's back office" }]
           : [{ at: now, event: 'Application created — filing it yourself on FoSCoS' }],
     })
     .returning();
@@ -92,6 +105,12 @@ export const POST = api(async (req) => {
     );
   }
 
+  await recordFunnel(session.uid, 'started');
+  if (formA) {
+    await recordFunnel(session.uid, 'eligible');
+    await recordFunnel(session.uid, 'details_complete');
+    if ((body.documents ?? []).length >= 4) await recordFunnel(session.uid, 'documents_ready');
+  }
   return ok({ application: app });
 });
 

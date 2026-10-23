@@ -1,6 +1,7 @@
 import { and, eq, gte, ne } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { orders } from '@/lib/db/schema';
+import { istAtHour, istHour } from '@/lib/time';
 
 /**
  * Seller order-cap by meal slot (DECISIONS.md #37+): `seller_profiles.maxOrdersPerSlot`
@@ -20,7 +21,7 @@ const SLOT_WINDOWS: Record<MealSlot, [number, number]> = {
 
 /** Which meal slot "now" falls into, by hour-of-day; null outside every serving window. */
 export function currentSlot(now: Date = new Date()): MealSlot | null {
-  const hour = now.getHours();
+  const hour = istHour(now); // slot windows are IST wall-clock hours, whatever the server TZ
   for (const slot of Object.keys(SLOT_WINDOWS) as MealSlot[]) {
     const [start, end] = SLOT_WINDOWS[slot];
     if (hour >= start && hour < end) return slot;
@@ -29,9 +30,7 @@ export function currentSlot(now: Date = new Date()): MealSlot | null {
 }
 
 function slotStartToday(slot: MealSlot, now: Date): Date {
-  const d = new Date(now);
-  d.setHours(SLOT_WINDOWS[slot][0], 0, 0, 0);
-  return d;
+  return istAtHour(now, SLOT_WINDOWS[slot][0]);
 }
 
 /**

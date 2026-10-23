@@ -1,9 +1,9 @@
 import { api, ok } from '@/lib/api';
-import { clearSessionCookie } from '@/lib/auth';
+import { destroyCurrentSession } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export const POST = api(async () => {
-  clearSessionCookie();
+  await destroyCurrentSession();
   return ok({ ok: true });
 });

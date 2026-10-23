@@ -12,7 +12,7 @@ import type { DeliveryProvider, OrderInfo, ProviderOrder, Quote, TrackingState }
 
 const BASE_URL = process.env.BORZO_BASE_URL || 'https://robotapitest-in.borzodelivery.com/api/business/1.6';
 
-function useLive(): boolean {
+function shouldUseLive(): boolean {
   return !isMockMode() && !!process.env.BORZO_AUTH_TOKEN;
 }
 
@@ -50,7 +50,7 @@ export const BorzoAdapter: DeliveryProvider = {
   name: 'borzo',
 
   async getQuote(pickup: GeoPoint, drop: GeoPoint): Promise<Quote> {
-    if (!useLive()) return mockQuote('borzo', pickup, drop);
+    if (!shouldUseLive()) return mockQuote('borzo', pickup, drop);
     // VERIFY against partner docs when keys arrive
     const data = await borzoFetch('/calculate-order', {
       method: 'POST',
@@ -70,7 +70,7 @@ export const BorzoAdapter: DeliveryProvider = {
   },
 
   async createDelivery(order: OrderInfo): Promise<ProviderOrder> {
-    if (!useLive()) return mockCreateDelivery('borzo');
+    if (!shouldUseLive()) return mockCreateDelivery('borzo');
     // VERIFY against partner docs when keys arrive
     const data = await borzoFetch('/create-order', {
       method: 'POST',
@@ -83,7 +83,7 @@ export const BorzoAdapter: DeliveryProvider = {
   },
 
   async track(providerOrderId: string): Promise<TrackingState> {
-    if (!useLive()) return mockTrack(providerOrderId);
+    if (!shouldUseLive()) return mockTrack(providerOrderId);
     // VERIFY against partner docs when keys arrive
     const data = await borzoFetch(`/orders?order_id=${providerOrderId}`);
     const o = data.orders?.[0];
@@ -102,7 +102,7 @@ export const BorzoAdapter: DeliveryProvider = {
   },
 
   async cancel(providerOrderId: string): Promise<void> {
-    if (!useLive()) {
+    if (!shouldUseLive()) {
       await simulateLatency();
       return;
     }

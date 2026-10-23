@@ -21,7 +21,13 @@ type ComplaintRow = {
   buyerPhone: string;
   kitchenName: string | null;
   orderTotalInPaise: number;
-  refundableInPaise: number;
+  foodTotalInPaise: number;
+  foodPaymentMode: string | null;
+  foodPaymentStatus: string | null;
+  feeRefundableInPaise: number;
+  platformFeeRefundInPaise: number;
+  foodRefundDueInPaise: number;
+  raisedBy: string;
   createdAt: string;
 };
 
@@ -42,7 +48,8 @@ const OUTCOME_BADGE: Record<string, { label: string; tone: 'green' | 'amber' | '
 
 export default function AdminComplaints() {
   const [rows, setRows] = useState<ComplaintRow[] | null>(null);
-  const [partialInputs, setPartialInputs] = useState<Record<number, string>>({});
+  const [feeInputs, setFeeInputs] = useState<Record<number, string>>({});
+  const [foodInputs, setFoodInputs] = useState<Record<number, string>>({});
   const [noteInputs, setNoteInputs] = useState<Record<number, string>>({});
   const [busyId, setBusyId] = useState<number | null>(null);
   const toast = useToast();
@@ -55,12 +62,12 @@ export default function AdminComplaints() {
   }
   useEffect(load, []);
 
-  async function resolve(id: number, outcome: string, refundInPaise?: number) {
+  async function resolve(id: number, outcome: string, platformFeeRefundInPaise?: number, foodRefundDueInPaise?: number) {
     setBusyId(id);
     const res = await fetch(`/api/admin/complaints/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ outcome, refundInPaise, note: noteInputs[id] }),
+      body: JSON.stringify({ outcome, platformFeeRefundInPaise, foodRefundDueInPaise, note: noteInputs[id] }),
     });
     const d = await res.json();
     setBusyId(null);
@@ -80,9 +87,9 @@ export default function AdminComplaints() {
     <div className="mx-auto max-w-2xl">
       <h1 className="text-2xl font-bold">Complaints</h1>
       <p className="mt-1 text-sm text-ink-soft">
-        Buyers can report an issue within 24h of delivery/pickup. Resolving a complaint records any
-        refund against the order immediately and deducts it from the seller&apos;s next payout —
-        three upheld hygiene complaints auto-pause the kitchen.
+        Buyers can report an issue within 24h of delivery/pickup. The <strong>platform fee</strong> is refunded by
+        PadosiPlate through Razorpay. The <strong>food amount</strong> was paid straight to the kitchen, so the kitchen
+        owes it — it becomes a “kitchen refund due” (see Refunds). Three upheld hygiene complaints auto-delist the kitchen.
       </p>
 
       {open.length === 0 ? (
@@ -109,7 +116,7 @@ export default function AdminComplaints() {
                 </a>
               )}
               <Link href={`/orders/${c.orderId}`} className="mt-2 block text-xs font-semibold text-leaf underline">
-                View order (total {formatINR(c.orderTotalInPaise)}, {formatINR(c.refundableInPaise)} refundable) →
+                View order (food {formatINR(c.foodTotalInPaise)} paid to kitchen · {formatINR(c.feeRefundableInPaise)} platform fee refundable) →
               </Link>
 
               <Input
@@ -119,31 +126,27 @@ export default function AdminComplaints() {
                 onChange={(e) => setNoteInputs((p) => ({ ...p, [c.id]: e.target.value }))}
               />
 
-              <div className="mt-2 flex flex-wrap gap-2">
+              {c.raisedBy === 'seller' && <p className="mt-2 text-xs text-turmeric-deep">Raised by the kitchen: UPI payment not received (food {c.foodPaymentStatus}).</p>}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Button size="sm" loading={busyId === c.id} onClick={() => resolve(c.id, 'full_refund')}>
-                  Full refund
+                  Full refund (fee + food due)
                 </Button>
-                <Input
-                  className="w-28"
-                  inputMode="numeric"
-                  placeholder="₹ partial"
-                  value={partialInputs[c.id] ?? ''}
-                  onChange={(e) => setPartialInputs((p) => ({ ...p, [c.id]: e.target.value.replace(/\D/g, '') }))}
-                />
+                <Input className="w-24" inputMode="numeric" placeholder="₹ fee" aria-label="Platform fee refund in rupees" value={feeInputs[c.id] ?? ''} onChange={(e) => setFeeInputs((p) => ({ ...p, [c.id]: e.target.value.replace(/\D/g, '') }))} />
+                <Input className="w-24" inputMode="numeric" placeholder="₹ food" aria-label="Kitchen food refund in rupees" value={foodInputs[c.id] ?? ''} onChange={(e) => setFoodInputs((p) => ({ ...p, [c.id]: e.target.value.replace(/\D/g, '') }))} />
                 <Button
                   size="sm"
                   variant="secondary"
-                  disabled={!(partialInputs[c.id] ?? '').trim()}
+                  disabled={!(feeInputs[c.id] ?? '').trim() && !(foodInputs[c.id] ?? '').trim()}
                   loading={busyId === c.id}
-                  onClick={() => resolve(c.id, 'partial_refund', Number(partialInputs[c.id]) * 100)}
+                  onClick={() => resolve(c.id, 'partial_refund', Number(feeInputs[c.id] || 0) * 100, Number(foodInputs[c.id] || 0) * 100)}
                 >
                   Partial refund
                 </Button>
                 <Button size="sm" variant="secondary" loading={busyId === c.id} onClick={() => resolve(c.id, 'warning')}>
-                  Warn seller
+                  Warn kitchen
                 </Button>
                 <Button size="sm" variant="danger" loading={busyId === c.id} onClick={() => resolve(c.id, 'seller_paused')}>
-                  Pause seller
+                  Delist kitchen
                 </Button>
                 <Button size="sm" variant="ghost" loading={busyId === c.id} onClick={() => resolve(c.id, 'rejected')}>
                   Reject
@@ -167,7 +170,8 @@ export default function AdminComplaints() {
                       {c.kitchenName ?? 'Kitchen'} · Order #{c.orderId} · {CATEGORY_LABEL[c.category]}
                     </span>
                     <div className="flex items-center gap-2">
-                      {c.refundInPaise > 0 && <span className="text-xs text-ink-faint">{formatINR(c.refundInPaise)} refunded</span>}
+                      {c.platformFeeRefundInPaise > 0 && <span className="text-xs text-ink-faint">{formatINR(c.platformFeeRefundInPaise)} fee refunded</span>}
+                      {c.foodRefundDueInPaise > 0 && <span className="text-xs text-ink-faint">{formatINR(c.foodRefundDueInPaise)} due from kitchen</span>}
                       <Badge tone={badge.tone}>{badge.label}</Badge>
                     </div>
                   </div>

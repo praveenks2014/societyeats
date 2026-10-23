@@ -59,7 +59,7 @@ export const fssaiVerifiedByEnum = pgEnum('fssai_verified_by', ['api', 'admin'])
 
 // Pilot Hardening v2 — Phase 4 (Compliance center refinements, DECISIONS.md
 // #62+). Who actually files the application on FoSCoS: 'facilitator' = the
-// GharSe compliance back-office (a real back-office task is created);
+// PadosiPlate compliance back-office (a real back-office task is created);
 // 'self' = the seller files it themselves using the wizard's prefilled
 // summary + document bundle as a walkthrough aid — no back-office task, no
 // facilitation cost.
@@ -80,6 +80,10 @@ export const fulfillmentTypeEnum = pgEnum('fulfillment_type', [
 
 export const orderStatusEnum = pgEnum('order_status', [
   'placed',
+  // Phase 1 Pilot: the buyer's platform fee is paid; the kitchen now sees the order.
+  'fee_paid',
+  'awaiting_kitchen_payment_confirmation',
+  'expired',
   'paid',
   'accepted',
   'preparing',
@@ -151,7 +155,7 @@ export const complaintOutcomeEnum = pgEnum('complaint_outcome', [
 // Pilot Hardening v2 — Phase 6 (Society-first launch mechanics, DECISIONS.md
 // #87+). 'available' = granted, not yet spent; 'applied' = consumed against
 // one of the referrer's own orders (referralCredits.appliedToOrderId).
-export const referralCreditStatusEnum = pgEnum('referral_credit_status', ['available', 'applied']);
+export const referralCreditStatusEnum = pgEnum('referral_credit_status', ['available', 'reserved', 'applied']);
 
 // ---------- core tables ----------
 
@@ -181,6 +185,13 @@ export const societies = pgTable(
     // a platform-wide setting — editable inline on the metrics page itself
     // via PATCH /api/admin/metrics rather than /admin/settings.
     targetHouseholds: integer('target_households').notNull().default(300),
+    // Phase 1 Pilot (admin /admin/societies).
+    pincode: varchar('pincode', { length: 10 }),
+    // Deactivated societies cannot be joined and their kitchens are hidden.
+    isActive: boolean('is_active').notNull().default(true),
+    // When true, new residents wait in 'pending' until an admin approves them.
+    requireApproval: boolean('require_approval').notNull().default(false),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (table) => [index('societies_lat_lng_idx').on(table.lat, table.lng)],
 );
@@ -190,8 +201,18 @@ export const users = pgTable(
   {
     id: serial('id').primaryKey(),
     phone: varchar('phone', { length: 15 }).notNull().unique(),
+    // Lowercased. Nullable for pre-Phase-1 users; required for new registrations.
+    email: varchar('email', { length: 254 }).unique(),
+    emailVerifiedAt: timestamp('email_verified_at'),
     name: varchar('name', { length: 120 }).notNull(),
     passwordHash: text('password_hash').notNull(),
+    // Set for bootstrap-created admins; cleared by the forced change-password screen.
+    mustChangePassword: boolean('must_change_password').notNull().default(false),
+    // Admin block: kills every session and refuses login.
+    blockedAt: timestamp('blocked_at'),
+    // 'pending' residents wait for admin approval when their society has requireApproval.
+    approvalStatus: varchar('approval_status', { length: 12 }).notNull().default('approved'),
+    lastLoginAt: timestamp('last_login_at'),
     role: roleEnum('role').notNull().default('buyer'),
     societyId: integer('society_id').references(() => societies.id),
     lat: doublePrecision('lat'),
@@ -222,6 +243,21 @@ export const sellerProfiles = pgTable('seller_profiles', {
   fssaiStatus: fssaiStatusEnum('fssai_status').notNull().default('unverified'),
   fssaiExpiry: date('fssai_expiry'),
   isApproved: boolean('is_approved').notNull().default(false),
+  // Phase 1 Pilot kitchen state machine (src/lib/kitchen/state.ts):
+  // draft -> submitted -> changes_requested | approved | rejected;
+  // approved <-> delisted. `isApproved` mirrors (listingState === 'approved').
+  listingState: varchar('listing_state', { length: 20 }).notNull().default('draft'),
+  listingSubmittedAt: timestamp('listing_submitted_at'),
+  listingReviewNote: text('listing_review_note'),
+  delistReasonCategory: varchar('delist_reason_category', { length: 30 }),
+  delistedAt: timestamp('delisted_at'),
+  // Food-payment details (buyer pays the kitchen directly; the platform never touches food money).
+  // Tower/block inside the society, shown to admin and (after acceptance) the buyer.
+  tower: varchar('tower', { length: 40 }),
+  upiVpa: varchar('upi_vpa', { length: 80 }),
+  upiName: varchar('upi_name', { length: 120 }),
+  acceptsUpiNow: boolean('accepts_upi_now').notNull().default(true),
+  acceptsPayAtPickup: boolean('accepts_pay_at_pickup').notNull().default(true),
   vegOnly: boolean('veg_only').notNull().default(false),
   rating: doublePrecision('rating').notNull().default(0),
   ratingCount: integer('rating_count').notNull().default(0),
@@ -289,9 +325,19 @@ export const fssaiApplications = pgTable('fssai_applications', {
   timelineJson: jsonb('timeline_json').$type<{ at: string; event: string }[]>(),
   // Pilot Hardening v2 — Phase 4 (DECISIONS.md #62+). See fssaiFilingModeEnum.
   filingMode: fssaiFilingModeEnum('filing_mode').notNull().default('facilitator'),
-  // Recorded as GharSe's own acquisition cost when sponsoredByPlatform is
+  // Phase 1 Pilot: the Form A (Basic Registration) answers collected by the assistant.
+  formAJson: jsonb('form_a_json').$type<{
+    eligibility: { sales: 'under_12l' | '12l_to_20cr' | 'above_20cr'; homeKitchen: boolean; onlyTelangana: boolean };
+    foodCategories: string[];
+    years: number;
+    feeInPaise: number;
+    waterSource: string;
+    idType: 'aadhaar' | 'pan' | 'voter' | 'driving_licence';
+    declarations: string[];
+  }>(),
+  // Recorded as PadosiPlate's own acquisition cost when sponsoredByPlatform is
   // true — never billed back to the seller as a debt. 0 for self-filed
-  // applications (GharSe does no facilitation work on those).
+  // applications (PadosiPlate does no facilitation work on those).
   facilitationCostInPaise: integer('facilitation_cost_in_paise').notNull().default(200000),
   sponsoredByPlatform: boolean('sponsored_by_platform').notNull().default(true),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -313,6 +359,13 @@ export const listings = pgTable('listings', {
   availableQty: integer('available_qty').notNull().default(0),
   slotsJson: jsonb('slots_json').$type<{ days: string[]; slots: string[] }>(),
   isActive: boolean('is_active').notNull().default(true),
+  // Dish moderation: 'pending' | 'approved' | 'rejected' | 'hidden' (admin delist).
+  moderationStatus: varchar('moderation_status', { length: 12 }).notNull().default('approved'),
+  moderationReasonCategory: varchar('moderation_reason_category', { length: 30 }),
+  moderationNote: text('moderation_note'),
+  moderatedAt: timestamp('moderated_at'),
+  // What the admin last approved; a changed name/photo or a >30% price move re-queues the dish.
+  approvedSnapshotJson: jsonb('approved_snapshot_json').$type<{ title: string; photoUrl: string | null; priceInPaise: number }>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -377,7 +430,7 @@ export const orders = pgTable('orders', {
   deliveryFeeInPaise: integer('delivery_fee_in_paise').notNull().default(0),
   platformFeeInPaise: integer('platform_fee_in_paise').notNull().default(0),
   commissionInPaise: integer('commission_in_paise').notNull().default(0),
-  // GST 5% on the food subtotal — GharSe is the deemed supplier under Sec
+  // GST 5% on the food subtotal — PadosiPlate is the deemed supplier under Sec
   // 9(5) CGST for home-food orders, so the platform (not the cook) remits
   // this. 0 for mall/restaurant orders (out of scope for this pivot).
   gstInPaise: integer('gst_in_paise').notNull().default(0),
@@ -391,11 +444,40 @@ export const orders = pgTable('orders', {
   // from a seller payout (src/lib/payouts.ts) so a later batch never double-deducts it.
   refundInPaise: integer('refund_in_paise').notNull().default(0),
   refundDeductedAt: timestamp('refund_deducted_at'),
+  // ---- Phase 1 Pilot money model ----
+  // The food (subtotal + seller delivery) is paid by the buyer DIRECTLY to the
+  // kitchen. Only `onlineChargeInPaise` (platform fee + GST + optional ECO GST,
+  // minus referral credit) ever goes through the platform's Razorpay account.
+  foodTotalInPaise: integer('food_total_in_paise').notNull().default(0),
+  onlineChargeInPaise: integer('online_charge_in_paise').notNull().default(0),
+  feeBeforeCreditInPaise: integer('fee_before_credit_in_paise').notNull().default(0),
+  platformFeeGstInPaise: integer('platform_fee_gst_in_paise').notNull().default(0),
+  // Rates in force when the order was placed (immutable snapshots).
+  feeBpsSnapshot: integer('fee_bps_snapshot').notNull().default(0),
+  feeMinSnapshot: integer('fee_min_snapshot').notNull().default(0),
+  feeMaxSnapshot: integer('fee_max_snapshot').notNull().default(0),
+  feeGstBpsSnapshot: integer('fee_gst_bps_snapshot').notNull().default(0),
+  ecoModeSnapshot: varchar('eco_mode_snapshot', { length: 30 }).notNull().default('off'),
+  ecoBpsSnapshot: integer('eco_bps_snapshot').notNull().default(0),
+  // 'upi_now' | 'pay_at_pickup'; status: pending | buyer_claimed | confirmed | not_received | at_handover
+  foodPaymentMode: varchar('food_payment_mode', { length: 16 }),
+  foodPaymentStatus: varchar('food_payment_status', { length: 20 }),
+  foodPaymentUtr: varchar('food_payment_utr', { length: 40 }),
+  foodPaymentClaimedAt: timestamp('food_payment_claimed_at'),
+  foodPaymentConfirmedAt: timestamp('food_payment_confirmed_at'),
+  kitchenPaymentRemindedAt: timestamp('kitchen_payment_reminded_at'),
+  feePaidAt: timestamp('fee_paid_at'),
+  // Unpaid-fee orders expire here; unaccepted orders auto-cancel after acceptBy.
+  expiresAt: timestamp('expires_at'),
+  acceptBy: timestamp('accept_by'),
+  completedAt: timestamp('completed_at'),
+  cancelReason: text('cancel_reason'),
+  stockReserved: boolean('stock_reserved').notNull().default(false),
   // Pilot Hardening v2 — Phase 6 (Society-first launch mechanics, DECISIONS.md
   // #87+). Referral credit (src/lib/referrals.ts) redeemed against this
   // order's total at checkout — server-computed from the buyer's real
   // available balance, never trusted from the client. Comes entirely out of
-  // GharSe's own margin, same as buyerPlatformFeePaise being ₹0 by default:
+  // PadosiPlate's own margin, same as buyerPlatformFeePaise being ₹0 by default:
   // it never reduces subtotalInPaise/commissionInPaise, so seller payouts
   // (which key off those, not totalInPaise) are unaffected.
   referralCreditAppliedInPaise: integer('referral_credit_applied_in_paise').notNull().default(0),
@@ -439,6 +521,10 @@ export const payments = pgTable('payments', {
   status: paymentStatusEnum('status').notNull().default('created'),
   method: varchar('method', { length: 40 }),
   capturedAt: timestamp('captured_at'),
+  // Phase 1 Pilot: the amount Razorpay was asked to collect, compared with
+  // what is captured/verified. kind: 'order_fee' (home) | 'order_full' (mall).
+  amountInPaise: integer('amount_in_paise').notNull().default(0),
+  kind: varchar('kind', { length: 12 }).notNull().default('order_fee'),
   webhookPayloadJson: jsonb('webhook_payload_json'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   // Pilot Hardening v2 — Phase 5 (Trust & hygiene, DECISIONS.md #73+). Amount
@@ -452,7 +538,7 @@ export const payments = pgTable('payments', {
 
 // ---------- payouts (merchant-of-record, T+2 manual settlement) ----------
 // Pilot Hardening v2 (DECISIONS.md #51+): the platform is the merchant of
-// record (payments settle to GharSe, not the cook), so cooks are paid out as
+// record (payments settle to PadosiPlate, not the cook), so cooks are paid out as
 // disclosed suppliers on a manual T+2 cadence via an admin batch tool —
 // Razorpay Route stays a stub (src/lib/payments/settlements.ts) until volume
 // justifies automated settlement.
@@ -601,6 +687,11 @@ export const complaints = pgTable('complaints', {
   resolutionNote: text('resolution_note'),
   resolvedByAdminId: integer('resolved_by_admin_id').references(() => users.id),
   resolvedAt: timestamp('resolved_at'),
+  // Phase 1 Pilot: who raised it ('buyer' | 'seller' for a not-received UPI payment | 'system')
+  // and the platform-fee refund (Razorpay) vs the food refund the KITCHEN owes.
+  raisedBy: varchar('raised_by', { length: 10 }).notNull().default('buyer'),
+  platformFeeRefundInPaise: integer('platform_fee_refund_in_paise').notNull().default(0),
+  foodRefundDueInPaise: integer('food_refund_due_in_paise').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -657,3 +748,305 @@ export const notifications = pgTable('notifications', {
   readAt: timestamp('read_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+// ---------- Phase 1 Pilot: foundations ----------
+
+// Fixed-window rate limiter shared by every instance (Autoscale-safe).
+export const rateLimits = pgTable('rate_limits', {
+  key: varchar('key', { length: 200 }).primaryKey(),
+  windowStart: timestamp('window_start').notNull().defaultNow(),
+  count: integer('count').notNull().default(0),
+});
+
+// Metadata for every object in the StorageAdapter, so /api/files/[key] can
+// enforce visibility. `visibility='private'` objects (FSSAI documents, ID
+// proofs, complaint photos, thread attachments) are only served to the owner,
+// admins and (for thread attachments) thread participants.
+export const files = pgTable('files', {
+  key: varchar('key', { length: 80 }).primaryKey(),
+  ownerId: integer('owner_id').references(() => users.id),
+  purpose: varchar('purpose', { length: 30 }).notNull(),
+  visibility: varchar('visibility', { length: 10 }).notNull().default('public'),
+  contentType: varchar('content_type', { length: 80 }).notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  // AES-256-GCM at rest for ID/address documents (Step 8). iv/tag are base64.
+  encrypted: boolean('encrypted').notNull().default(false),
+  deleteAfter: timestamp('delete_after'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Every sensitive admin action and every admin view of identity documents.
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id: serial('id').primaryKey(),
+    actorId: integer('actor_id').references(() => users.id),
+    action: varchar('action', { length: 60 }).notNull(),
+    targetType: varchar('target_type', { length: 40 }),
+    targetId: varchar('target_id', { length: 80 }),
+    meta: jsonb('meta'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('audit_log_target_idx').on(t.targetType, t.targetId), index('audit_log_action_idx').on(t.action)],
+);
+
+// ---------- Phase 1 Pilot: auth ----------
+
+// DB-backed sessions: the JWT cookie carries only `sid`; role/blocked state is
+// read from the user row on every request, so demotion, blocking and logout
+// take effect immediately.
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(),
+    expiresAt: timestamp('expires_at').notNull(),
+    userAgent: varchar('user_agent', { length: 200 }),
+  },
+  (t) => [index('sessions_user_idx').on(t.userId)],
+);
+
+// Single-use email tokens (verification 24h, password reset 30min). Only a
+// SHA-256 of the token is stored.
+export const emailTokens = pgTable(
+  'email_tokens',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 12 }).notNull(), // 'verify' | 'reset'
+    tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
+    expiresAt: timestamp('expires_at').notNull(),
+    usedAt: timestamp('used_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('email_tokens_user_idx').on(t.userId, t.kind)],
+);
+
+// Every email the platform sends (or, in mock mode, would send).
+export const emailOutbox = pgTable('email_outbox', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+  toEmail: varchar('to_email', { length: 254 }).notNull(),
+  subject: varchar('subject', { length: 300 }).notNull(),
+  bodyText: text('body_text').notNull(),
+  kind: varchar('kind', { length: 40 }).notNull().default('generic'),
+  status: varchar('status', { length: 12 }).notNull().default('mock'), // mock | sent | failed
+  providerId: varchar('provider_id', { length: 80 }),
+  error: text('error'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// ---------- Phase 1 Pilot: subscriptions (the platform's own revenue) ----------
+
+export const subscriptionPlans = pgTable('subscription_plans', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 80 }).notNull(),
+  durationMonths: integer('duration_months').notNull(),
+  pricePaise: integer('price_paise').notNull(),
+  active: boolean('active').notNull().default(true),
+  sort: integer('sort').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// 'pending_payment' | 'active' | 'grace' | 'expired' | 'waived' | 'cancelled'.
+// starts_at/ends_at are set when the row becomes active/waived. Fee rates in
+// force are snapshotted and never rewritten.
+export const kitchenSubscriptions = pgTable(
+  'kitchen_subscriptions',
+  {
+    id: serial('id').primaryKey(),
+    sellerId: integer('seller_id')
+      .notNull()
+      .references(() => users.id),
+    planId: integer('plan_id').references(() => subscriptionPlans.id),
+    planNameSnapshot: varchar('plan_name_snapshot', { length: 80 }),
+    durationMonthsSnapshot: integer('duration_months_snapshot').notNull().default(0),
+    pricePaiseSnapshot: integer('price_paise_snapshot').notNull().default(0),
+    gstPaise: integer('gst_paise').notNull().default(0),
+    gstBpsSnapshot: integer('gst_bps_snapshot').notNull().default(0),
+    startsAt: timestamp('starts_at'),
+    endsAt: timestamp('ends_at'),
+    status: varchar('status', { length: 20 }).notNull().default('pending_payment'),
+    razorpayOrderId: varchar('razorpay_order_id', { length: 80 }),
+    razorpayPaymentId: varchar('razorpay_payment_id', { length: 80 }),
+    paidAt: timestamp('paid_at'),
+    refundedPaise: integer('refunded_paise').notNull().default(0),
+    grantedByAdminId: integer('granted_by_admin_id').references(() => users.id),
+    notes: text('notes'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('kitchen_subs_seller_idx').on(t.sellerId), index('kitchen_subs_rzp_idx').on(t.razorpayOrderId)],
+);
+
+// ---------- Phase 1 Pilot: admin <-> kitchen messaging ----------
+
+export const adminKitchenThreads = pgTable(
+  'admin_kitchen_threads',
+  {
+    id: serial('id').primaryKey(),
+    sellerId: integer('seller_id')
+      .notNull()
+      .references(() => users.id),
+    subject: varchar('subject', { length: 200 }).notNull(),
+    createdByAdminId: integer('created_by_admin_id').references(() => users.id),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    lastMessageAt: timestamp('last_message_at').notNull().defaultNow(),
+  },
+  (t) => [index('akt_seller_idx').on(t.sellerId)],
+);
+
+export const adminKitchenMessages = pgTable(
+  'admin_kitchen_messages',
+  {
+    id: serial('id').primaryKey(),
+    threadId: integer('thread_id')
+      .notNull()
+      .references(() => adminKitchenThreads.id),
+    senderId: integer('sender_id')
+      .notNull()
+      .references(() => users.id),
+    senderRole: varchar('sender_role', { length: 10 }).notNull(), // 'admin' | 'seller'
+    body: text('body').notNull(),
+    attachmentsJson: jsonb('attachments_json').$type<{ url: string; name: string }[]>(),
+    // Set when the recipient (the other side) opens the thread.
+    readAt: timestamp('read_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('akm_thread_idx').on(t.threadId)],
+);
+
+export const messageTemplates = pgTable('message_templates', {
+  id: serial('id').primaryKey(),
+  title: varchar('title', { length: 120 }).notNull(),
+  body: text('body').notNull(),
+  sort: integer('sort').notNull().default(0),
+});
+
+// ---------- Phase 1 Pilot: money tables ----------
+
+// Platform-fee and subscription refunds issued through Razorpay. The food
+// amount is never refunded by the platform (see kitchenRefundsDue).
+export const refunds = pgTable(
+  'refunds',
+  {
+    id: serial('id').primaryKey(),
+    kind: varchar('kind', { length: 16 }).notNull(), // 'platform_fee' | 'subscription' | 'order_full'
+    orderId: integer('order_id').references(() => orders.id),
+    subscriptionId: integer('subscription_id').references(() => kitchenSubscriptions.id),
+    razorpayPaymentId: varchar('razorpay_payment_id', { length: 80 }),
+    razorpayRefundId: varchar('razorpay_refund_id', { length: 80 }),
+    amountInPaise: integer('amount_in_paise').notNull(),
+    status: varchar('status', { length: 12 }).notNull().default('pending'), // pending | processed | failed
+    reason: text('reason'),
+    initiatedBy: varchar('initiated_by', { length: 16 }).notNull().default('system'), // system | admin:<id>
+    error: text('error'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    processedAt: timestamp('processed_at'),
+  },
+  (t) => [index('refunds_order_idx').on(t.orderId), index('refunds_rzp_idx').on(t.razorpayRefundId)],
+);
+
+// Food money the KITCHEN owes a buyer (rejected/cancelled after a UPI food
+// payment, or an upheld complaint). The platform only tracks and chases it.
+export const kitchenRefundsDue = pgTable(
+  'kitchen_refunds_due',
+  {
+    id: serial('id').primaryKey(),
+    orderId: integer('order_id')
+      .notNull()
+      .references(() => orders.id),
+    sellerId: integer('seller_id')
+      .notNull()
+      .references(() => users.id),
+    amountInPaise: integer('amount_in_paise').notNull(),
+    reason: varchar('reason', { length: 40 }).notNull(), // rejected | not_accepted | complaint
+    status: varchar('status', { length: 12 }).notNull().default('due'), // due | refunded
+    refundUtr: varchar('refund_utr', { length: 40 }),
+    refundedAt: timestamp('refunded_at'),
+    lastChasedAt: timestamp('last_chased_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('krd_seller_idx').on(t.sellerId, t.status)],
+);
+
+// Razorpay webhook deliveries, deduplicated on the event id.
+export const webhookEvents = pgTable('webhook_events', {
+  id: varchar('id', { length: 120 }).primaryKey(),
+  type: varchar('type', { length: 60 }).notNull(),
+  outcome: varchar('outcome', { length: 40 }),
+  receivedAt: timestamp('received_at').notNull().defaultNow(),
+});
+
+// ---------- Phase 1 Pilot: anonymous buyer <-> kitchen threads ----------
+
+export const orderMessages = pgTable(
+  'order_messages',
+  {
+    id: serial('id').primaryKey(),
+    orderId: integer('order_id')
+      .notNull()
+      .references(() => orders.id),
+    senderId: integer('sender_id').references(() => users.id),
+    senderRole: varchar('sender_role', { length: 10 }).notNull(), // buyer | seller | system
+    body: text('body').notNull(),
+    quickReplyKey: varchar('quick_reply_key', { length: 30 }),
+    reportedAt: timestamp('reported_at'),
+    reportedById: integer('reported_by_id').references(() => users.id),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('order_messages_order_idx').on(t.orderId)],
+);
+
+// "Block user": the blocked user can no longer message the blocker.
+export const userBlocks = pgTable(
+  'user_blocks',
+  {
+    id: serial('id').primaryKey(),
+    blockerId: integer('blocker_id')
+      .notNull()
+      .references(() => users.id),
+    blockedId: integer('blocked_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('user_blocks_pair_idx').on(t.blockerId, t.blockedId)],
+);
+
+// ---------- Phase 1 Pilot: FSSAI assistant ----------
+
+// Editable FoSCoS walkthrough (admin: /admin/fssai/content). One row per step per language.
+export const fssaiWalkthroughSteps = pgTable(
+  'fssai_walkthrough_steps',
+  {
+    id: serial('id').primaryKey(),
+    lang: varchar('lang', { length: 4 }).notNull().default('en'), // en | te | hi
+    sort: integer('sort').notNull().default(0),
+    title: varchar('title', { length: 160 }).notNull(),
+    body: text('body').notNull(),
+    tip: text('tip'),
+    screenshotUrl: text('screenshot_url'),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('fssai_steps_lang_idx').on(t.lang, t.sort)],
+);
+
+// One row per (seller, stage) the first time they reach it — powers the funnel on /admin/fssai.
+export const fssaiFunnelEvents = pgTable(
+  'fssai_funnel_events',
+  {
+    id: serial('id').primaryKey(),
+    sellerId: integer('seller_id')
+      .notNull()
+      .references(() => users.id),
+    stage: varchar('stage', { length: 30 }).notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('fssai_funnel_seller_stage_idx').on(t.sellerId, t.stage)],
+);

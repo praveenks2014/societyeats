@@ -16,20 +16,21 @@ export const GET = api(async () => {
   const complaintRows = await db.select().from(complaints);
 
   const active = allOrders.filter((o) =>
-    ['paid', 'accepted', 'preparing', 'ready', 'out_for_delivery'].includes(o.status),
+    ['fee_paid', 'awaiting_kitchen_payment_confirmation', 'paid', 'accepted', 'preparing', 'ready', 'out_for_delivery'].includes(o.status),
   );
   return ok({
     stats: {
       totalOrders: allOrders.length,
       activeOrders: active.length,
       unassigned: allOrders.filter((o) => o.status === 'delivery_unassigned').length,
+      // GMV = food value kitchens were paid directly (the platform never held it).
       gmvPaise: allOrders
         .filter((o) => ['delivered', 'picked_up'].includes(o.status))
-        .reduce((s, o) => s + o.totalInPaise, 0),
-      commissionPaise: allOrders
+        .reduce((s, o) => s + o.foodTotalInPaise, 0),
+      platformFeePaise: allOrders
         .filter((o) => ['delivered', 'picked_up'].includes(o.status))
-        .reduce((s, o) => s + o.commissionInPaise, 0),
-      sellersAwaitingApproval: sellers.filter((s) => !s.isApproved).length,
+        .reduce((s, o) => s + o.platformFeeInPaise, 0),
+      sellersAwaitingApproval: sellers.filter((s) => s.listingState === 'submitted').length,
       fssaiQueue: apps.filter((a) => ['submitted_to_backoffice', 'filed_on_foscos'].includes(a.status)).length,
       providersDown: providers.filter((p) => !p.isEnabled).length,
       openComplaints: complaintRows.filter((c) => c.status === 'open').length,

@@ -1,31 +1,33 @@
-import { BRAND } from '@/lib/config';
+import { BRAND } from '@/config/brand';
+import { getPlatformSettings } from '@/lib/db/platform';
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  const s = await getPlatformSettings();
+  const entity = s.legalEntityName || BRAND.legalEntityName;
+  const feePct = s.buyerPlatformFeeBps / 100;
   return (
     <>
-      <h1>Terms of Service</h1>
+      <h1>Terms of Use</h1>
       <p>
-        {BRAND.name} is a marketplace that connects buyers with independent home kitchens and
-        food-court restaurants ("Sellers"). {BRAND.name} is not the manufacturer or preparer of any
-        food sold on the platform; each Seller is an independent food business operator responsible
-        for the food they prepare and its compliance with the Food Safety and Standards Act, 2006.
+        {BRAND.appName} (operated by {entity}) is a neighbourhood marketplace that helps residents discover and order food from independent home kitchens in their society and nearby societies. We are a technology platform — we do not cook, sell, deliver or handle food, and we are not a party to the sale of food between a buyer and a kitchen.
       </p>
-      <h2>Marketplace role</h2>
+      <h2>How money works</h2>
       <ul>
-        <li>Orders are contracts between the buyer and the Seller. {BRAND.name} facilitates discovery, payment collection and delivery logistics.</li>
-        <li>Delivery is fulfilled by third-party logistics partners; delivery fees are passed through at cost.</li>
-        <li>{BRAND.name} charges Sellers a disclosed commission per order, shown on their earnings page.</li>
+        <li><strong>You pay the kitchen directly for the food</strong> — by UPI to the kitchen’s own UPI ID, or at pickup (UPI or cash). {BRAND.appName} never collects, holds or routes your food payment.</li>
+        <li><strong>The platform fee</strong> (currently {feePct}% of the food value{s.platformGstin ? ', plus GST' : ''}) is {BRAND.appName}’s own service charge for operating the marketplace. It is paid online through Razorpay when you place an order and shown separately from the food price at checkout.</li>
+        <li>Kitchens pay {BRAND.appName} a <strong>subscription</strong> to be listed. That is also the platform’s own service charge.</li>
+        <li>{BRAND.appName} does not hold a payment-aggregator licence and does not act as an escrow or settlement agent.</li>
+      </ul>
+      <h2>Orders</h2>
+      <ul>
+        <li>Placing an order sends it to the kitchen once the platform fee is paid. An order whose platform fee is not paid within {s.unpaidOrderExpiryMinutes} minutes expires.</li>
+        <li>A kitchen may accept or decline an order. If it declines, or does not accept within {s.sellerAcceptWindowMinutes} minutes, the order is cancelled and your platform fee is refunded automatically.</li>
+        <li>The food contract is between you and the kitchen. Hand-over is confirmed by the 4-digit code shown only to you.</li>
       </ul>
       <h2>Accounts</h2>
-      <ul>
-        <li>You must provide a valid Indian mobile number and keep your credentials safe.</li>
-        <li>Sellers must hold, or have applied for, an FSSAI license/registration. Displaying false license information is grounds for immediate removal and may be reported.</li>
-      </ul>
-      <h2>Grievance officer</h2>
-      <p>
-        As required by the Consumer Protection (E-Commerce) Rules, 2020: {BRAND.grievanceOfficer}.
-        Grievances are acknowledged within 48 hours and resolved within 30 days.
-      </p>
+      <p>You must give a correct phone number and email, keep your password safe, and belong to the society you sign up for. We may suspend accounts that break these terms or the Kitchen Terms.</p>
+      <h2>Contact &amp; grievances</h2>
+      <p>{s.grievanceOfficer || BRAND.grievanceOfficer} · {BRAND.supportEmail}</p>
     </>
   );
 }

@@ -121,7 +121,7 @@ export async function getWeeklyMetrics(
   // "Counted" orders for volume/AOV/mix/revenue/retention — excludes
   // cancelled orders (never charged, so they'd distort AOV/net-revenue and
   // shouldn't count as a buyer "being active" that week).
-  const counted = societyOrders.filter((o) => o.status !== 'cancelled');
+  const counted = societyOrders.filter((o) => !['cancelled', 'expired', 'placed'].includes(o.status));
 
   // Each buyer's first-ever counted order — the anchor for both the repeat-
   // rate and week-4 cohort-retention metrics below.
@@ -203,18 +203,16 @@ export async function getWeeklyMetrics(
     }
     const sellerChurnPct = eligibleSellers.length > 0 ? (sellerChurnCount / eligibleSellers.length) * 100 : 0;
 
-    // Net revenue per order = platform's own take (commission + buyer
-    // platform fee — NOT GST, which the platform collects only to remit to
-    // the government as the deemed supplier, never its own revenue), less an
-    // estimated gateway fee and this week's refunds. Applied against
-    // totalInPaise (what actually moved through the gateway), deliberately
-    // NOT subtotalInPaise as src/lib/payouts.ts's seller-ledger gateway-fee
-    // line uses — that ledger is estimating a cost attributable to the
-    // seller's payout, this is estimating the platform's own gateway cost on
-    // the full amount it actually processed (DECISIONS.md #99).
-    const grossCommission = weekOrders.reduce((s, o) => s + o.commissionInPaise, 0);
+    // Net revenue per order = the platform's own take: the buyer platform fee
+    // (NOT the GST on it, which is remitted to the government) less an
+    // estimated Razorpay cost on what actually moved through the gateway
+    // (onlineChargeInPaise — food money never does) and this week's refunds.
+    const grossCommission = weekOrders.reduce((s, o) => s + o.commissionInPaise, 0); // mall only
     const grossPlatformFee = weekOrders.reduce((s, o) => s + o.platformFeeInPaise, 0);
-    const gatewayFeeEstimate = pctOf(grossTotal, DEFAULTS.gatewayFeeEstimatePct);
+    const gatewayFeeEstimate = pctOf(
+      weekOrders.reduce((s, o) => s + o.onlineChargeInPaise, 0),
+      DEFAULTS.gatewayFeeEstimatePct,
+    );
     const refunds = weekOrders.reduce((s, o) => s + o.refundInPaise, 0);
     const netRevenueTotal = grossCommission + grossPlatformFee - gatewayFeeEstimate - refunds;
     const netRevenuePerOrderPaise = ordersThisWeek > 0 ? Math.round(netRevenueTotal / ordersThisWeek) : 0;

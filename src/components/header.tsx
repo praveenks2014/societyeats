@@ -1,5 +1,6 @@
 'use client';
 
+import { BRAND } from '@/config/brand';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -29,6 +30,13 @@ export function Header({ session }: { session: Session | null }) {
     return () => document.removeEventListener('click', close);
   }, []);
 
+  async function logoutAll() {
+    await fetch('/api/auth/logout-all', { method: 'POST' });
+    setMenuOpen(false);
+    router.push('/');
+    router.refresh();
+  }
+
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     setMenuOpen(false);
@@ -40,16 +48,16 @@ export function Header({ session }: { session: Session | null }) {
     <>
       <header className="sticky top-0 z-50 border-b border-rice-line bg-rice/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2 px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-1.5" aria-label="GharSe home">
+          <Link href="/" className="flex min-h-[44px] items-center gap-1.5" aria-label={`${BRAND.appName} home`}>
             <BowlMark />
             <span className="font-display text-xl font-bold tracking-tight text-leaf">
-              GharSe
+              {BRAND.appName}
             </span>
           </Link>
 
           <button
             onClick={openPicker}
-            className="ml-1 flex min-w-0 max-w-[46vw] items-center gap-1 rounded-pill border border-rice-line bg-white px-3 py-1.5 text-xs font-medium text-ink-soft transition-colors hover:border-leaf/40 sm:max-w-xs sm:text-sm"
+            className="ml-1 flex min-h-[44px] min-w-0 max-w-[46vw] items-center gap-1 rounded-pill border border-rice-line bg-white px-3 text-xs font-medium text-ink-soft transition-colors hover:border-leaf/40 sm:max-w-xs sm:text-sm"
           >
             <span aria-hidden>📍</span>
             <span className="truncate">{loc ? loc.label : 'Set location'}</span>
@@ -111,11 +119,24 @@ export function Header({ session }: { session: Session | null }) {
                     >
                       🎁 Invite neighbours
                     </Link>
+                    <Link
+                      href="/change-password"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2.5 text-sm hover:bg-rice"
+                    >
+                      Change password
+                    </Link>
                     <button
                       onClick={logout}
                       className="block w-full px-4 py-2.5 text-left text-sm text-chili hover:bg-rice"
                     >
                       Log out
+                    </button>
+                    <button
+                      onClick={logoutAll}
+                      className="block w-full px-4 py-2.5 text-left text-sm text-ink-soft hover:bg-rice"
+                    >
+                      Log out of all devices
                     </button>
                   </div>
                 )}

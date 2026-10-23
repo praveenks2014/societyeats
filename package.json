@@ -1,41 +1,57 @@
 {
-  "name": "gharse",
+  "name": "padosiplate",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 0.0.0.0",
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
     "db:push": "node scripts/db-push.mjs",
     "db:seed": "tsx src/lib/db/seed.ts",
-    "test": "tsx --test src/lib/browse.test.ts",
-    "prebuild": "node scripts/gen-sw.mjs"
+    "test": "vitest run",
+    "prebuild": "node scripts/gen-sw.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test",
+    "verify": "npm run typecheck && npm run lint && npm test && npm run test:e2e",
+    "icons": "node scripts/gen-icons.mjs",
+    "db:bootstrap": "tsx scripts/bootstrap.ts",
+    "uploads:migrate": "tsx scripts/migrate-uploads.ts",
+    "cron": "tsx scripts/cron.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.14",
+    "@replit/object-storage": "^1.0.0",
     "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.36.4",
     "framer-motion": "^11.11.17",
     "jose": "^5.9.6",
     "next": "^14.2.20",
+    "pdf-lib": "^1.17.1",
     "postgres": "^3.4.5",
+    "qrcode": "^1.5.4",
     "razorpay": "^2.9.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sharp": "^0.35.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.17.9",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "autoprefixer": "^10.4.20",
     "drizzle-kit": "^0.28.1",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.35",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
     "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
   }
 }

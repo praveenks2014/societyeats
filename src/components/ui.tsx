@@ -107,7 +107,7 @@ export function Chip({
   return (
     <button
       onClick={onClick}
-      className={`shrink-0 whitespace-nowrap rounded-pill border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+      className={`shrink-0 whitespace-nowrap rounded-pill border min-h-[44px] px-3.5 text-sm font-medium transition-colors ${
         active
           ? 'border-leaf bg-leaf text-white'
           : 'border-rice-line bg-white text-ink-soft hover:border-leaf/40'
@@ -123,12 +123,14 @@ export function Chip({
 export function Card({
   className = '',
   children,
-}: {
+  ...rest
+}: React.HTMLAttributes<HTMLDivElement> & {
   className?: string;
   children: React.ReactNode;
+  'data-testid'?: string;
 }) {
   return (
-    <div className={`rounded-card border border-rice-line bg-white shadow-card ${className}`}>
+    <div className={`rounded-card border border-rice-line bg-white shadow-card ${className}`} {...rest}>
       {children}
     </div>
   );
@@ -303,7 +305,7 @@ export function Modal({
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-[80]">
+        <div className={`fixed inset-0 z-[80] flex justify-center ${sheet ? 'items-end sm:items-center' : 'items-center px-4'}`}>
           <motion.button
             aria-label="Close"
             className="absolute inset-0 w-full bg-ink/45"
@@ -321,9 +323,11 @@ export function Modal({
             exit={sheet ? { y: '100%' } : { opacity: 0, scale: 0.97, y: 8 }}
             transition={{ type: 'spring', damping: 30, stiffness: 380 }}
             className={
+              // Centred with flexbox (not CSS translate): framer-motion writes an inline
+              // `transform` for the enter animation, which would override a translate-based centring.
               sheet
-                ? 'absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col overflow-hidden rounded-t-3xl bg-rice shadow-lift sm:left-1/2 sm:right-auto sm:bottom-auto sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl'
-                : 'absolute left-1/2 top-1/2 flex max-h-[85vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl bg-rice shadow-lift'
+                ? 'relative flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-3xl bg-rice shadow-lift sm:max-w-md sm:rounded-3xl'
+                : 'relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-rice shadow-lift'
             }
           >
             {/* Scrollable body — overscroll-contain stops an over-scroll at

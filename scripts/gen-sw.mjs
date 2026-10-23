@@ -23,7 +23,7 @@ const buildId =
   process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ||
   Date.now().toString(36);
 
-const cacheVersion = `gharse-v${pkg.version}-${buildId}`;
+const cacheVersion = `padosiplate-v${pkg.version}-${buildId}`;
 
 const templatePath = path.join(process.cwd(), 'public', 'sw.template.js');
 const outPath = path.join(process.cwd(), 'public', 'sw.js');

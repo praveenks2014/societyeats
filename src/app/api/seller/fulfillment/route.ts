@@ -12,6 +12,7 @@ type FulfillmentBody = {
   sellerDeliveryFeeRupees: number;
   sellerDeliveryRadiusKm: number;
   pickupInstructions: string;
+  tower?: string;
   maxOrdersPerSlot: number;
 };
 
@@ -30,6 +31,7 @@ export const GET = api(async () => {
     sellerDeliveryFeeInPaise: profile.sellerDeliveryFeeInPaise,
     sellerDeliveryRadiusKm: profile.sellerDeliveryRadiusKm,
     pickupInstructions: profile.pickupInstructions,
+    tower: profile.tower,
     maxOrdersPerSlot: profile.maxOrdersPerSlot,
   });
 });
@@ -55,6 +57,7 @@ export const PATCH = api(async (req) => {
       sellerDeliveryFeeInPaise: Math.round((body.sellerDeliveryFeeRupees || 0) * 100),
       sellerDeliveryRadiusKm: body.sellerDeliveryRadiusKm || 5,
       pickupInstructions: body.pickupInstructions?.trim() || null,
+      ...(body.tower !== undefined ? { tower: body.tower.trim().slice(0, 40) || null } : {}),
       maxOrdersPerSlot: Math.round(body.maxOrdersPerSlot),
     })
     .where(eq(sellerProfiles.userId, session.uid))
@@ -66,6 +69,7 @@ export const PATCH = api(async (req) => {
     sellerDeliveryFeeInPaise: updated.sellerDeliveryFeeInPaise,
     sellerDeliveryRadiusKm: updated.sellerDeliveryRadiusKm,
     pickupInstructions: updated.pickupInstructions,
+    tower: updated.tower,
     maxOrdersPerSlot: updated.maxOrdersPerSlot,
   });
 });

@@ -13,7 +13,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const title = kitchen.profile.kitchenName;
   const description =
     kitchen.profile.bio ||
-    `Home-cooked food from ${kitchen.profile.kitchenName}${kitchen.society ? `, ${kitchen.society.name}` : ''} — order on GharSe.`;
+    `Home-cooked food from ${kitchen.profile.kitchenName}${kitchen.society ? `, ${kitchen.society.name}` : ''} — order on PadosiPlate.`;
   return {
     title,
     description,

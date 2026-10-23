@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { istParts } from '@/lib/time';
 import { api, ApiError, ok, readJson } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
@@ -58,7 +59,7 @@ export const PATCH = api(async (req) => {
   }
   if (body.cookingSinceYear !== undefined) {
     const y = body.cookingSinceYear;
-    if (y !== null && (typeof y !== 'number' || y < 1950 || y > new Date().getFullYear())) {
+    if (y !== null && (typeof y !== 'number' || y < 1950 || y > istParts().year)) {
       throw new ApiError(400, 'Enter a valid year');
     }
     patch.cookingSinceYear = y;

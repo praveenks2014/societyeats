@@ -1,4 +1,4 @@
-/* GharSe service worker — hand-rolled, no build-step framework dependency.
+/* PadosiPlate service worker — hand-rolled, no build-step framework dependency.
  *
  * Cache name is stamped at build time from package.json's version plus a
  * fresh build id (see scripts/gen-sw.mjs, run by the "prebuild" npm

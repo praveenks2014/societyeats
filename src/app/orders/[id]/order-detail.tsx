@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Modal, Select, Skeleton, Textarea } from '@/components/ui';
 import { FoodImage } from '@/components/food-image';
+import { FeeRetryCard, FoodPaymentCard, OrderThread } from '@/components/order-extras';
 import { OrderTimeline, STATUS_META, StatusPill } from '@/components/order-status';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
@@ -19,9 +20,16 @@ type Detail = {
     status: string;
     subtotalInPaise: number;
     deliveryFeeInPaise: number;
+    foodTotalInPaise: number;
+    onlineChargeInPaise: number;
     platformFeeInPaise: number;
+    platformFeeGstInPaise: number;
+    feeBeforeCreditInPaise: number;
+    feeBpsSnapshot: number;
     gstInPaise: number;
     totalInPaise: number;
+    expiresAt: string | null;
+    cancelReason: string | null;
     refundInPaise: number;
     referralCreditAppliedInPaise: number;
     otpCode: string | null;
@@ -40,12 +48,15 @@ type Detail = {
   tracking: { status: string; etaMins?: number; note?: string } | null;
   review: { rating: number; text: string | null; sellerReplyText: string | null } | null;
   vendor:
-    | { kind: 'seller'; name: string | null; phone: string | null }
+    | { kind: 'seller'; name: string | null }
     | { kind: 'restaurant'; name: string; counterNumber: string; mallName?: string };
+  pickup: { tower: string | null; instructions: string | null } | null;
+  upi: { vpa: string; payeeName: string; uri: string; qrSvg: string; amountInPaise: number } | null;
+  foodPayment: { mode: string | null; status: string | null; utr: string | null };
   viewerIsBuyer: boolean;
 };
 
-const ACTIVE = ['placed', 'paid', 'accepted', 'preparing', 'ready', 'out_for_delivery', 'delivery_unassigned'];
+const ACTIVE = ['placed', 'fee_paid', 'awaiting_kitchen_payment_confirmation', 'paid', 'accepted', 'preparing', 'ready', 'out_for_delivery', 'delivery_unassigned'];
 
 export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: boolean }) {
   const [data, setData] = useState<Detail | null>(null);
@@ -128,6 +139,37 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
           </p>
         )}
       </Card>
+
+      {order.cancelReason && ['cancelled', 'expired'].includes(order.status) && (
+        <p className="mt-3 rounded-xl bg-chili-tint px-4 py-3 text-sm text-chili-dark" role="status">
+          {order.cancelReason}.{order.refundInPaise > 0 ? ` Your platform fee of ${formatINR(order.refundInPaise)} has been refunded.` : ''}
+        </p>
+      )}
+
+      {data.viewerIsBuyer && order.type === 'home_delivery' && order.status === 'placed' && (
+        <FeeRetryCard orderId={order.id} amountInPaise={order.onlineChargeInPaise} expiresAt={order.expiresAt} mockMode={mockMode} onPaid={load} />
+      )}
+
+      {data.viewerIsBuyer && order.type === 'home_delivery' && vendor.kind === 'seller' && (
+        <FoodPaymentCard
+          orderId={order.id}
+          status={order.status}
+          mode={data.foodPayment.mode}
+          paymentStatus={data.foodPayment.status}
+          utr={data.foodPayment.utr}
+          foodTotalInPaise={order.foodTotalInPaise}
+          kitchenName={vendor.name ?? 'the kitchen'}
+          upi={data.upi}
+          onChanged={load}
+        />
+      )}
+
+      {data.pickup && data.viewerIsBuyer && (
+        <Card className="mt-4 p-4">
+          <div className="eyebrow">{order.fulfillmentType === 'self_pickup' ? 'COLLECT FROM' : 'KITCHEN LOCATION'}</div>
+          <p className="mt-1 text-sm">{[data.pickup.tower, data.pickup.instructions].filter(Boolean).join(' · ') || 'Details shared by the kitchen at pickup.'}</p>
+        </Card>
+      )}
 
       {/* OTP + rider panel */}
       {order.otpCode && ['out_for_delivery', 'ready'].includes(order.status) && data.viewerIsBuyer && (
@@ -221,66 +263,63 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
       </Card>
 
       {/* bill */}
-      <Card className="mt-4 p-4">
-        <div className="eyebrow mb-3">BILL</div>
-        <div className="space-y-1.5 text-sm">
-          {data.items.map((i) => (
-            <div key={i.id} className="flex justify-between">
-              <span className="text-ink-soft">
-                {i.titleSnapshot} × {i.qty}
-              </span>
-              <span>{formatINR(i.qty * i.unitPriceInPaise)}</span>
+      {order.type === 'home_delivery' ? (
+        <Card className="mt-4 p-4" data-testid="order-bill">
+          <div className="eyebrow mb-3">BILL</div>
+          <div className="space-y-1.5 text-sm">
+            {data.items.map((i) => (
+              <div key={i.id} className="flex justify-between">
+                <span className="text-ink-soft">{i.titleSnapshot} × {i.qty}</span>
+                <span>{formatINR(i.qty * i.unitPriceInPaise)}</span>
+              </div>
+            ))}
+            {order.deliveryFeeInPaise > 0 && (
+              <div className="flex justify-between"><span className="text-ink-soft">Delivery (kept by the kitchen)</span><span>{formatINR(order.deliveryFeeInPaise)}</span></div>
+            )}
+            <div className="flex justify-between border-t border-dashed border-rice-line pt-1.5 font-bold">
+              <span>Food, paid to {vendor.name}</span>
+              <span>{formatINR(order.foodTotalInPaise)}</span>
             </div>
-          ))}
-          <div className="border-t border-dashed border-rice-line pt-1.5" />
-          <div className="flex justify-between">
-            <span>
-              {order.fulfillmentType === 'self_pickup'
-                ? 'Delivery (self pickup)'
-                : order.fulfillmentType === 'seller_delivery'
-                  ? 'Delivery fee (kept by the kitchen)'
-                  : 'Delivery fee (via delivery partner)'}
-            </span>
-            <span>{order.deliveryFeeInPaise > 0 ? formatINR(order.deliveryFeeInPaise) : 'FREE'}</span>
+            <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Platform fee · paid via Razorpay</div>
+            <div className="flex justify-between"><span>Platform fee ({order.feeBpsSnapshot / 100}%)</span><span>{formatINR(order.feeBeforeCreditInPaise)}</span></div>
+            {order.referralCreditAppliedInPaise > 0 && (
+              <div className="flex justify-between text-leaf"><span>Referral credit</span><span>−{formatINR(order.referralCreditAppliedInPaise)}</span></div>
+            )}
+            {order.platformFeeGstInPaise > 0 && <div className="flex justify-between"><span>GST on platform fee</span><span>{formatINR(order.platformFeeGstInPaise)}</span></div>}
+            {order.gstInPaise > 0 && <div className="flex justify-between"><span>GST on food (e-commerce operator)</span><span>{formatINR(order.gstInPaise)}</span></div>}
+            <div className="flex justify-between pt-1 text-base font-bold">
+              <span>Platform fee {order.status === 'placed' ? 'to pay' : 'paid'}</span>
+              <span>{formatINR(order.onlineChargeInPaise)}</span>
+            </div>
+            {order.refundInPaise > 0 && (
+              <div className="flex justify-between text-leaf"><span>Platform fee refunded</span><span>−{formatINR(order.refundInPaise)}</span></div>
+            )}
           </div>
-          {order.platformFeeInPaise > 0 && (
-            <div className="flex justify-between">
-              <span>Platform fee</span>
-              <span>{formatINR(order.platformFeeInPaise)}</span>
-            </div>
+          {!['placed', 'expired'].includes(order.status) && (
+            <Link href={`/orders/${order.id}/invoice`} className="mt-3 block text-center text-sm font-semibold text-leaf underline">
+              🧾 View invoice
+            </Link>
           )}
-          {order.gstInPaise > 0 && (
-            <div className="flex justify-between">
-              <span>GST on food</span>
-              <span>{formatINR(order.gstInPaise)}</span>
-            </div>
-          )}
-          {order.referralCreditAppliedInPaise > 0 && (
-            <div className="flex justify-between text-leaf">
-              <span>Referral credit applied</span>
-              <span>−{formatINR(order.referralCreditAppliedInPaise)}</span>
-            </div>
-          )}
-          <div className="flex justify-between pt-1 text-base font-bold">
-            <span>Total paid</span>
-            <span>{formatINR(order.totalInPaise)}</span>
+        </Card>
+      ) : (
+        <Card className="mt-4 p-4">
+          <div className="eyebrow mb-3">BILL</div>
+          <div className="space-y-1.5 text-sm">
+            {data.items.map((i) => (
+              <div key={i.id} className="flex justify-between"><span className="text-ink-soft">{i.titleSnapshot} × {i.qty}</span><span>{formatINR(i.qty * i.unitPriceInPaise)}</span></div>
+            ))}
+            <div className="flex justify-between pt-1 text-base font-bold"><span>Total paid</span><span>{formatINR(order.totalInPaise)}</span></div>
           </div>
-          {order.refundInPaise > 0 && (
-            <div className="flex justify-between text-leaf">
-              <span>Refunded</span>
-              <span>−{formatINR(order.refundInPaise)}</span>
-            </div>
-          )}
-        </div>
-        {order.status !== 'placed' && (
-          <Link
-            href={`/orders/${order.id}/invoice`}
-            className="mt-3 block text-center text-sm font-semibold text-leaf underline"
-          >
-            🧾 View invoice
-          </Link>
-        )}
-      </Card>
+        </Card>
+      )}
+
+      {/* anonymous messages with the kitchen */}
+      {data.viewerIsBuyer && order.type === 'home_delivery' && order.status !== 'placed' && (
+        <OrderThread
+          orderId={order.id}
+          onRefund={() => document.getElementById('complaint-block')?.scrollIntoView({ behavior: 'smooth' })}
+        />
+      )}
 
       {/* review */}
       {data.viewerIsBuyer && ['delivered', 'picked_up'].includes(order.status) && (
@@ -289,7 +328,9 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
 
       {/* complaint (DECISIONS.md #73+) */}
       {data.viewerIsBuyer && ['delivered', 'picked_up'].includes(order.status) && (
-        <ComplaintBlock orderId={order.id} />
+        <div id="complaint-block">
+          <ComplaintBlock orderId={order.id} />
+        </div>
       )}
 
       <div className="mt-8 text-center">
@@ -457,6 +498,7 @@ function ComplaintBlock({ orderId }: { orderId: number }) {
     setUploading(true);
     const fd = new FormData();
     fd.append('file', file);
+    fd.append('purpose', 'complaint');
     const res = await fetch('/api/uploads', { method: 'POST', body: fd });
     const d = await res.json();
     setUploading(false);

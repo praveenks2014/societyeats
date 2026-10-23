@@ -6,9 +6,11 @@ hidden = [".next", "node_modules", ".data"]
 [nix]
 channel = "stable-24_05"
 
+# Autoscale: build once (install, migrate + bootstrap the DB, compile), then
+# serve with `next start`. The DB and Object Storage are shared across instances.
 [deployment]
 deploymentTarget = "autoscale"
-build = ["sh", "-c", "npm run build"]
+build = ["sh", "-c", "npm ci && npm run db:bootstrap && npm run build"]
 run = ["sh", "-c", "npm run start"]
 
 [[ports]]

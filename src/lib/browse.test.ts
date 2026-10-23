@@ -1,6 +1,5 @@
-import assert from 'node:assert/strict';
 import path from 'node:path';
-import test from 'node:test';
+import { expect, test } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
@@ -53,7 +52,14 @@ async function seedSeller(
     userId: user.id,
     kitchenName: `Kitchen ${phone}`,
     isApproved: true,
+    listingState: 'approved',
     fssaiStatus: 'verified',
+  });
+  await db.insert(schema.kitchenSubscriptions).values({
+    sellerId: user.id,
+    status: 'waived',
+    startsAt: new Date(Date.now() - 86_400_000),
+    endsAt: new Date(Date.now() + 30 * 86_400_000),
   });
   await db.insert(schema.listings).values({
     sellerId: user.id,
@@ -70,7 +76,7 @@ test('browseListings: SQL radius filter includes 9.9 km and excludes 10.1 km', a
   // Point the app's lazy DB singleton (src/lib/db/index.ts) at this isolated,
   // in-memory database before browseListings() — or anything it transitively
   // calls — ever invokes getDb() itself.
-  (globalThis as { __gharseDb?: unknown }).__gharseDb = Promise.resolve(db);
+  (globalThis as { __padosiDb?: unknown }).__padosiDb = Promise.resolve(db);
 
   const { browseListings } = await import('@/lib/browse');
 
@@ -85,13 +91,10 @@ test('browseListings: SQL radius filter includes 9.9 km and excludes 10.1 km', a
   const result = await browseListings({ lat: originLat, lng: originLng });
   const titles = result.listings.map((l) => l.title);
 
-  assert.ok(titles.includes('Near dish (9.9km)'), '9.9 km seller should be inside the radius');
-  assert.ok(!titles.includes('Far dish (10.1km)'), '10.1 km seller should be outside the radius');
+  expect(titles).toContain('Near dish (9.9km)');
+  expect(titles).not.toContain('Far dish (10.1km)');
 
   const near = result.listings.find((l) => l.title === 'Near dish (9.9km)');
-  assert.ok(near, 'the 9.9 km listing should be present');
-  assert.ok(
-    near!.distanceKm != null && Math.abs(near!.distanceKm - 9.9) < 0.01,
-    `expected distanceKm ≈ 9.9, got ${near!.distanceKm}`,
-  );
+  expect(near).toBeDefined();
+  expect(Math.abs((near!.distanceKm ?? 0) - 9.9)).toBeLessThan(0.01);
 });

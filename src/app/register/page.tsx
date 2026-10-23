@@ -14,14 +14,15 @@ function RegisterForm() {
   const [societies, setSocieties] = useState<{ id: number; name: string }[]>([]);
   // Pilot Hardening v2 — Phase 6 (DECISIONS.md #87+): pick from the pilot's
   // live society/societies, or switch to an invite code for a not-yet-public one.
-  const [societyMode, setSocietyMode] = useState<'select' | 'code'>('select');
+  const [societyMode, setSocietyMode] = useState<'select' | 'code'>(params.get('code') ? 'code' : 'select');
   const referredByCode = params.get('ref') ?? '';
   const [form, setForm] = useState({
     name: '',
     phone: '',
+    email: '',
     password: '',
     societyId: '',
-    inviteCode: '',
+    inviteCode: params.get('code') ?? '',
     kitchenName: '',
     bio: '',
     vegOnly: false,
@@ -55,7 +56,7 @@ function RegisterForm() {
       toast(data.error || 'Could not register', 'err');
       return;
     }
-    toast('Welcome to GharSe!');
+    toast('Welcome to PadosiPlate! Check your email to verify your address.');
     // Sellers land on the kitchen-profile onboarding step (photos etc.)
     // before the dashboard — see DECISIONS.md #73+.
     router.push(role === 'seller' ? '/seller/onboarding' : '/');
@@ -66,7 +67,7 @@ function RegisterForm() {
 
   return (
     <div className="mx-auto mt-10 max-w-sm">
-      <h1 className="text-2xl font-bold">Join GharSe</h1>
+      <h1 className="text-2xl font-bold">Join PadosiPlate</h1>
       <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-rice-deep p-1.5">
         {(['buyer', 'seller'] as const).map((r) => (
           <button
@@ -94,7 +95,16 @@ function RegisterForm() {
             required
           />
         </Field>
-        <Field label="Password" hint="At least 6 characters">
+        <Field label="Email" hint="We'll send a verification link — also used to reset your password.">
+          <Input
+            type="email"
+            autoComplete="email"
+            value={form.email}
+            onChange={(e) => set('email', e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Password" hint="At least 8 characters">
           <Input
             type="password"
             value={form.password}
@@ -104,7 +114,7 @@ function RegisterForm() {
         </Field>
         {referredByCode && (
           <p className="rounded-xl bg-leaf-tint px-3 py-2 text-xs font-medium text-leaf">
-            👋 You were invited by a neighbour — welcome to GharSe!
+            👋 You were invited by a neighbour — welcome to PadosiPlate!
           </p>
         )}
 
@@ -112,7 +122,7 @@ function RegisterForm() {
           label="Your society"
           hint={
             societyMode === 'select'
-              ? 'GharSe is live in one society right now — more coming soon.'
+              ? 'PadosiPlate is live in one society right now — more coming soon.'
               : 'Got a code from your society WhatsApp group? Enter it here.'
           }
         >
@@ -136,7 +146,7 @@ function RegisterForm() {
           <button
             type="button"
             onClick={() => setSocietyMode((m) => (m === 'select' ? 'code' : 'select'))}
-            className="mt-1.5 text-xs font-semibold text-leaf underline"
+            className="mt-1 inline-flex min-h-[44px] items-center text-xs font-semibold text-leaf underline"
           >
             {societyMode === 'select' ? 'Have an invite code instead?' : '← Choose from the list instead'}
           </button>
@@ -176,7 +186,7 @@ function RegisterForm() {
       </form>
       <p className="mt-4 text-sm text-ink-soft">
         Already have an account?{' '}
-        <Link href="/login" className="font-semibold text-leaf underline">
+        <Link href="/login" className="inline-flex min-h-[44px] items-center font-semibold text-leaf underline">
           Log in
         </Link>
       </p>

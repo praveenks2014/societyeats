@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const title = `${detail.listing.title} — ${detail.profile.kitchenName}`;
   const description =
     detail.listing.description ||
-    `${detail.listing.cuisine} from ${detail.profile.kitchenName}${detail.society ? `, ${detail.society.name}` : ''} — order on GharSe.`;
+    `${detail.listing.cuisine} from ${detail.profile.kitchenName}${detail.society ? `, ${detail.society.name}` : ''} — order on PadosiPlate.`;
   return {
     title,
     description,
@@ -50,7 +50,7 @@ export default async function DishPage({ params }: { params: { id: string } }) {
         photoUrl: detail.listing.photoUrl,
         prepTimeMins: detail.listing.prepTimeMins,
         availableQty: detail.listing.availableQty,
-        isActive: detail.listing.isActive,
+        isActive: detail.listable,
         slotsJson: detail.listing.slotsJson,
       }}
       seller={{

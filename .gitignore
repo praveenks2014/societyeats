@@ -15,9 +15,12 @@ out/
 # see scripts/gen-sw.mjs
 public/sw.js
 
-# user uploads (seeded demo images are remote URLs)
-public/uploads/*
-!public/uploads/.gitkeep
+# legacy upload directory (uploads now go through the StorageAdapter)
+public/uploads/
+
+# playwright
+test-results/
+playwright-report/
 
 # misc
 *.log

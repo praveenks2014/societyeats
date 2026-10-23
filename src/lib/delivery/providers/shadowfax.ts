@@ -12,7 +12,7 @@ import type { DeliveryProvider, OrderInfo, ProviderOrder, Quote, TrackingState }
 
 const BASE_URL = process.env.SHADOWFAX_BASE_URL || 'https://hlbackend.staging.shadowfax.in';
 
-function useLive(): boolean {
+function shouldUseLive(): boolean {
   return !isMockMode() && !!process.env.SHADOWFAX_API_TOKEN;
 }
 
@@ -33,7 +33,7 @@ export const ShadowfaxAdapter: DeliveryProvider = {
   name: 'shadowfax',
 
   async getQuote(pickup: GeoPoint, drop: GeoPoint): Promise<Quote> {
-    if (!useLive()) return mockQuote('shadowfax', pickup, drop);
+    if (!shouldUseLive()) return mockQuote('shadowfax', pickup, drop);
     // VERIFY against partner docs when keys arrive
     const data = await sfxFetch('/api/v1/stores/serviceability/', {
       method: 'POST',
@@ -50,12 +50,12 @@ export const ShadowfaxAdapter: DeliveryProvider = {
   },
 
   async createDelivery(order: OrderInfo): Promise<ProviderOrder> {
-    if (!useLive()) return mockCreateDelivery('shadowfax');
+    if (!shouldUseLive()) return mockCreateDelivery('shadowfax');
     // VERIFY against partner docs when keys arrive
     const data = await sfxFetch('/api/v1/orders/', {
       method: 'POST',
       body: JSON.stringify({
-        order_details: { client_order_id: `gharse-${order.orderId}` },
+        order_details: { client_order_id: `pp-${order.orderId}` },
         pickup_details: {
           name: order.pickupName,
           contact_number: order.pickupPhone,
@@ -75,7 +75,7 @@ export const ShadowfaxAdapter: DeliveryProvider = {
   },
 
   async track(providerOrderId: string): Promise<TrackingState> {
-    if (!useLive()) return mockTrack(providerOrderId);
+    if (!shouldUseLive()) return mockTrack(providerOrderId);
     // VERIFY against partner docs when keys arrive
     const data = await sfxFetch(`/api/v1/orders/${providerOrderId}/track/`);
     const map: Record<string, TrackingState['status']> = {
@@ -95,7 +95,7 @@ export const ShadowfaxAdapter: DeliveryProvider = {
   },
 
   async cancel(providerOrderId: string): Promise<void> {
-    if (!useLive()) {
+    if (!shouldUseLive()) {
       await simulateLatency();
       return;
     }

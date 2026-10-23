@@ -78,3 +78,15 @@ provides its own encrypted store:
 There is no public bug bounty for this pilot. If you find a security issue,
 contact the grievance/support address in `src/lib/config.ts` (`BRAND`)
 rather than opening a public issue.
+
+
+## Phase 1 Pilot additions
+
+- **No food money:** the platform never receives or routes food payments; Razorpay is used only for the platform's own fees. No bank account numbers or PAN are collected.
+- **Admin access** requires an address in `ADMIN_EMAILS` *and* a verified e-mail; the first login forces a password change. Nothing in the app promotes a user to admin.
+- **Sessions** are DB-backed and revocable (`/api/auth/logout-all`); passwords are bcrypt-hashed; e-mail verification and reset tokens are random, single-use and stored only as hashes.
+- **CSRF:** `src/middleware.ts` rejects mutating `/api/*` requests whose `Origin` is not the site. **Rate limits** are in Postgres, so they hold across Autoscale instances.
+- **Uploads:** magic-byte checked, EXIF stripped, id/address proofs encrypted at rest (AES-256-GCM, key from `DOC_ENCRYPTION_KEY`), served only through an authorised route. Aadhaar images must be masked in the browser first.
+- **Webhooks:** Razorpay signatures verified, events de-duplicated, amounts asserted, captured payments never downgraded.
+- **FSSAI:** the assistant never asks for FoSCoS passwords/OTPs and never files on a seller's behalf.
+- Dev endpoints (`/api/dev/*`) return 404 in production.

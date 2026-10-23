@@ -3,25 +3,43 @@ import postgres from 'postgres';
 import * as schema from './schema';
 
 /**
- * Primary path (Replit / production): PostgreSQL via DATABASE_URL with the
- * postgres-js driver (no native binaries).
+ * Production (Replit Autoscale): PostgreSQL via DATABASE_URL with the
+ * postgres-js driver. DATABASE_URL is REQUIRED when NODE_ENV=production — the
+ * app fails fast instead of silently falling back to a throw-away embedded
+ * database.
  *
- * Zero-config dev fallback: when DATABASE_URL is unset, an embedded PGlite
- * (WASM Postgres) database is created at ./.data/pglite, migrated from
- * ./drizzle and seeded automatically — `npm run dev` alone gives a fully
- * working demo. Both paths speak the same Drizzle API.
+ * Local dev only: when DATABASE_URL is unset, an embedded PGlite (WASM
+ * Postgres) database is created at ./.data/pglite, migrated from ./drizzle
+ * and seeded with demo data automatically. Both paths speak the same Drizzle
+ * API.
  */
 
 export type Db = ReturnType<typeof drizzlePostgres<typeof schema>>;
 
-const g = globalThis as unknown as { __gharseDb?: Promise<Db> };
+const g = globalThis as unknown as { __padosiDb?: Promise<Db> };
 
 export function getDb(): Promise<Db> {
-  if (!g.__gharseDb) g.__gharseDb = initDb();
-  return g.__gharseDb;
+  if (!g.__padosiDb) g.__padosiDb = initDb();
+  return g.__padosiDb;
+}
+
+/** `db.execute()` returns an array on postgres-js and `{ rows }` on PGlite. */
+export function rowsOf<T = Record<string, unknown>>(res: unknown): T[] {
+  if (Array.isArray(res)) return res as T[];
+  const rows = (res as { rows?: T[] } | null)?.rows;
+  return rows ?? [];
+}
+
+export function requireDatabaseUrlInProduction(): void {
+  if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
+    throw new Error(
+      'DATABASE_URL is required when NODE_ENV=production. On Replit, add the PostgreSQL tool (it sets DATABASE_URL for you).',
+    );
+  }
 }
 
 async function initDb(): Promise<Db> {
+  requireDatabaseUrlInProduction();
   const url = process.env.DATABASE_URL;
   if (url) {
     const client = postgres(url, { max: 5, onnotice: () => {} });
@@ -34,14 +52,16 @@ async function initDb(): Promise<Db> {
   const path = await import('node:path');
   const fs = await import('node:fs');
 
-  const dataDir = path.join(process.cwd(), '.data', 'pglite');
+  const dataDir = process.env.PGLITE_DIR || path.join(process.cwd(), '.data', 'pglite');
   fs.mkdirSync(dataDir, { recursive: true });
   const client = new PGlite(dataDir);
   const db = drizzlePglite(client, { schema }) as unknown as Db;
   await migrate(db as never, {
     migrationsFolder: path.join(process.cwd(), 'drizzle'),
   });
-  const { seedIfEmpty } = await import('./seed-data');
-  await seedIfEmpty(db);
+  if (process.env.SKIP_DEMO_SEED !== 'true') {
+    const { seedIfEmpty } = await import('./seed-data');
+    await seedIfEmpty(db);
+  }
   return db;
 }

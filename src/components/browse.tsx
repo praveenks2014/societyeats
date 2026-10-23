@@ -13,6 +13,8 @@ export function Browse() {
   const [loading, setLoading] = useState(true);
   const [veg, setVeg] = useState(false);
   const [cuisine, setCuisine] = useState<string | null>(null);
+  const [scope, setScope] = useState<'nearby' | 'society'>('nearby');
+  const [hasSociety, setHasSociety] = useState(false);
   const [q, setQ] = useState('');
   const [qDebounced, setQDebounced] = useState('');
 
@@ -22,6 +24,10 @@ export function Browse() {
   }, [q]);
 
   useEffect(() => {
+    fetch('/api/auth/me').then((r) => r.json()).then((d) => setHasSociety(!!d.session?.societyId)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     let alive = true;
     setLoading(true);
     const params = new URLSearchParams();
@@ -29,6 +35,7 @@ export function Browse() {
       params.set('lat', String(loc.lat));
       params.set('lng', String(loc.lng));
     }
+    if (scope === 'society') params.set('scope', 'society');
     if (veg) params.set('veg', '1');
     if (cuisine) params.set('cuisine', cuisine);
     if (qDebounced) params.set('q', qDebounced);
@@ -44,7 +51,7 @@ export function Browse() {
     return () => {
       alive = false;
     };
-  }, [loc, veg, cuisine, qDebounced]);
+  }, [loc, veg, cuisine, qDebounced, scope]);
 
   const cuisines = useMemo(() => data?.cuisines ?? [], [data]);
 
@@ -52,6 +59,15 @@ export function Browse() {
     <section id="browse">
       {/* sticky search + filters */}
       <div className="sticky top-14 z-30 -mx-4 bg-rice/90 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6">
+        {hasSociety && (
+          <div className="mb-2 flex rounded-pill bg-rice-deep p-1" role="tablist" aria-label="Where to look">
+            {([['society', '🏢 My society'], ['nearby', '📍 Nearby']] as const).map(([k, label]) => (
+              <button key={k} role="tab" aria-selected={scope === k} onClick={() => setScope(k)} data-testid={`scope-${k}`} className={`min-h-[40px] flex-1 rounded-pill text-sm font-semibold transition-colors ${scope === k ? 'bg-white shadow-card' : 'text-ink-soft'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex gap-2">
           <Input
             value={q}

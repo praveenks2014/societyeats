@@ -1,4 +1,5 @@
 import { api, ok } from '@/lib/api';
+import { getSession } from '@/lib/auth';
 import { browseListings } from '@/lib/browse';
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +8,9 @@ export const GET = api(async (req) => {
   const sp = req.nextUrl.searchParams;
   const lat = sp.get('lat');
   const lng = sp.get('lng');
+  const session = sp.get('scope') === 'society' ? await getSession() : null;
   const result = await browseListings({
+    societyId: session?.societyId ?? undefined,
     lat: lat ? Number(lat) : undefined,
     lng: lng ? Number(lng) : undefined,
     veg: sp.get('veg') === '1',

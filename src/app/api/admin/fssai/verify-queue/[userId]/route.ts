@@ -4,6 +4,9 @@ import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { fssaiApplications, sellerProfiles } from '@/lib/db/schema';
 import { notify } from '@/lib/db/notify';
+import { recordFunnel } from '@/lib/fssai/funnel';
+import { scheduleDocumentDeletion } from '@/lib/fssai/jobs';
+import { recordAudit } from '@/lib/audit';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +22,7 @@ type Body =
  * timeline).
  */
 export const PATCH = api<{ params: { userId: string } }>(async (req, { params }) => {
-  await requireSession(['admin']);
+  const admin = await requireSession(['admin']);
   const body = await readJson<Body>(req);
   const sellerId = Number(params.userId);
   const db = await getDb();
@@ -49,6 +52,9 @@ export const PATCH = api<{ params: { userId: string } }>(async (req, { params })
         fssaiVerificationTimelineJson: timeline,
       })
       .where(eq(sellerProfiles.userId, sellerId));
+    await scheduleDocumentDeletion(sellerId);
+    await recordFunnel(sellerId, 'verified');
+    await recordAudit({ actorId: admin.uid, action: 'fssai.verify', targetType: 'kitchen', targetId: sellerId });
     await notify(
       sellerId,
       'FSSAI license verified! ✅',

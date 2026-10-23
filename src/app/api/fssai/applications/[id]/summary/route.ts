@@ -3,7 +3,8 @@ import { api, ApiError, ok } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { fssaiApplications, sellerProfiles, users } from '@/lib/db/schema';
-import { BRAND } from '@/lib/config';
+import { BRAND } from '@/config/brand';
+import { PERSISTENT_NOTICE, buildFormASections } from '@/lib/fssai/assistant';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +12,7 @@ export const dynamic = 'force-dynamic';
  * The wizard's actual "output" (DECISIONS.md #62+): a prefilled application
  * summary + document bundle that either the seller themselves (the only
  * path the wizard UI offers as of DECISIONS.md #119+) or, for a small
- * number of legacy applications, GharSe's back office (facilitator path,
+ * number of legacy applications, PadosiPlate's back office (facilitator path,
  * backend kept but no longer reachable from the wizard) uses to file on
  * FoSCoS by hand. There is no government submission API this calls — it
  * only renders what was already collected in the wizard.
@@ -32,10 +33,26 @@ export const GET = api<{ params: { id: string } }>(async (_req, { params }) => {
     .where(eq(sellerProfiles.userId, app.sellerId));
   const [seller] = await db.select().from(users).where(eq(users.id, app.sellerId));
 
+  const formA = app.formAJson
+    ? buildFormASections({
+        applicantName: app.applicantName,
+        phone: seller?.phone ?? '',
+        email: seller?.email ?? null,
+        kitchenName: profile?.kitchenName ?? '',
+        kitchenAddress: app.kitchenAddress,
+        form: app.formAJson,
+        documents: (app.documentsJson ?? []).map((d) => ({ label: d.label })),
+      })
+    : null;
+
   return ok({
+    persistentNotice: PERSISTENT_NOTICE,
+    formA,
+    feeInPaise: app.formAJson?.feeInPaise ?? null,
+    years: app.formAJson?.years ?? null,
     id: app.id,
     generatedAt: new Date().toISOString(),
-    platform: { name: BRAND.name },
+    platform: { name: BRAND.appName },
     applicant: {
       name: app.applicantName,
       phone: seller?.phone ?? '',

@@ -63,7 +63,7 @@ export function ReferClient() {
         </div>
         <div className="mt-3">
           <ShareButton
-            text="Come join GharSe — home-cooked food from our own society, delivered by our neighbours 🍲"
+            text="Come join PadosiPlate — home-cooked food from our own society, delivered by our neighbours 🍲"
             url={link}
             className="w-full"
           />

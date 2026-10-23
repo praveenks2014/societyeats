@@ -1,46 +1,48 @@
-import { desc, eq, inArray } from 'drizzle-orm';
+import { desc, eq, inArray, sql, and } from 'drizzle-orm';
 import { api, ok } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
-import { orderItems, orders } from '@/lib/db/schema';
+import { kitchenRefundsDue, orderItems, orders } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * A kitchen's own sales record. The food money is paid to the kitchen
+ * directly by buyers (UPI / at pickup) — PadosiPlate never holds or pays it
+ * out — so this page is a ledger for the kitchen's books, not a payout.
+ */
 export const GET = api(async () => {
   const session = await requireSession(['seller']);
   const db = await getDb();
-  const rows = await db
+  const completed = await db
     .select()
     .from(orders)
-    .where(eq(orders.sellerId, session.uid))
-    .orderBy(desc(orders.createdAt));
+    .where(and(eq(orders.sellerId, session.uid), inArray(orders.status, ['delivered', 'picked_up'])))
+    .orderBy(desc(orders.completedAt));
 
-  // 'delivered' (seller/platform delivery) and 'picked_up' (self-pickup) are
-  // both terminal-success states — see DECISIONS.md #37+.
-  const completed = rows.filter((o) => o.status === 'delivered' || o.status === 'picked_up');
-  const gross = completed.reduce((s, o) => s + o.subtotalInPaise, 0);
-  const commission = completed.reduce((s, o) => s + o.commissionInPaise, 0);
-  const deliveryCollected = completed.reduce((s, o) => s + o.deliveryFeeInPaise, 0);
+  const foodTotal = completed.reduce((s, o) => s + o.foodTotalInPaise, 0);
+  const upi = completed.filter((o) => o.foodPaymentMode === 'upi_now').reduce((s, o) => s + o.foodTotalInPaise, 0);
+  const [due] = await db
+    .select({ n: sql<number>`count(*)`, total: sql<number>`coalesce(sum(${kitchenRefundsDue.amountInPaise}), 0)` })
+    .from(kitchenRefundsDue)
+    .where(and(eq(kitchenRefundsDue.sellerId, session.uid), eq(kitchenRefundsDue.status, 'due')));
 
   const ids = completed.slice(0, 30).map((o) => o.id);
-  const items = ids.length
-    ? await db.select().from(orderItems).where(inArray(orderItems.orderId, ids))
-    : [];
-
+  const items = ids.length ? await db.select().from(orderItems).where(inArray(orderItems.orderId, ids)) : [];
   return ok({
     totals: {
-      grossPaise: gross,
-      commissionPaise: commission,
-      deliveryCollectedPaise: deliveryCollected,
-      netPayablePaise: gross - commission,
+      foodReceivedPaise: foodTotal,
+      viaUpiPaise: upi,
+      atHandoverPaise: foodTotal - upi,
       orderCount: completed.length,
+      refundsDueCount: Number(due?.n ?? 0),
+      refundsDuePaise: Number(due?.total ?? 0),
     },
     ledger: completed.slice(0, 30).map((o) => ({
       id: o.id,
-      createdAt: o.createdAt,
-      subtotalInPaise: o.subtotalInPaise,
-      commissionInPaise: o.commissionInPaise,
-      netPaise: o.subtotalInPaise - o.commissionInPaise,
+      completedAt: o.completedAt,
+      foodTotalInPaise: o.foodTotalInPaise,
+      mode: o.foodPaymentMode,
       items: items.filter((i) => i.orderId === o.id).map((i) => `${i.titleSnapshot} ×${i.qty}`),
     })),
   });

@@ -3,9 +3,10 @@ import { api, ApiError, ok } from '@/lib/api';
 import { getDb } from '@/lib/db';
 import { sellerProfiles, societies, users } from '@/lib/db/schema';
 import { getPlatformSettings } from '@/lib/db/platform';
-import { getBestQuote } from '@/lib/delivery/orchestrator';
 import { haversineKm } from '@/lib/geo';
-import { DEFAULTS } from '@/lib/config';
+import { getSession } from '@/lib/auth';
+import { feeConfigFromSettings } from '@/lib/money';
+import { availableCreditPaise as availableCreditPaiseFor } from '@/lib/referrals';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +29,8 @@ export const GET = api(async (req) => {
 
   const db = await getDb();
   const settings = await getPlatformSettings();
+  const session = await getSession();
+  const availableCreditPaise = session ? await availableCreditPaiseFor(session.uid) : 0;
   const [seller] = await db.select().from(users).where(eq(users.id, sellerId));
   if (!seller) throw new ApiError(404, 'Kitchen not found');
   const [profile] = await db
@@ -50,12 +53,14 @@ export const GET = api(async (req) => {
     offersSellerDelivery: profile.offersSellerDelivery,
     sellerDeliveryFeeInPaise: profile.sellerDeliveryFeeInPaise,
     sellerDeliveryRadiusKm: profile.sellerDeliveryRadiusKm,
-    platformDeliveryEnabled: settings.platformDeliveryEnabled,
-    platformDeliveryMinOrderPaise: settings.platformDeliveryMinOrderPaise,
-    buyerPlatformFeePaise: settings.platformFeePaise,
-    commissionHomePct: settings.commissionHomePct,
-    gstPct: DEFAULTS.gstPct,
+    platformDeliveryEnabled: false, // not available while the platform holds no payment-aggregator licence
+    // The bill is two parts: food (paid to the kitchen) + platform fee (Razorpay).
+    // The fee maths lives in src/lib/money/fees.ts and is shared with the server.
+    feeConfig: feeConfigFromSettings(settings),
+    acceptsUpiNow: profile.acceptsUpiNow,
+    acceptsPayAtPickup: profile.acceptsPayAtPickup,
     radiusKm: settings.radiusKm,
+    availableCreditPaise,
   };
 
   // No location yet, or the kitchen has no resolvable point: fulfillment
@@ -89,9 +94,7 @@ export const GET = api(async (req) => {
     profile.offersSellerDelivery && distanceKm <= profile.sellerDeliveryRadiusKm;
   // Only ask the orchestrator for a live/mock quote when the option is
   // actually enabled — it's an overflow path, not the default.
-  const quote = settings.platformDeliveryEnabled
-    ? await getBestQuote(point, { lat: lat!, lng: lng! })
-    : null;
+  const quote = null as { amountInPaise: number; etaMins: number } | null;
 
   return ok({
     ...base,
