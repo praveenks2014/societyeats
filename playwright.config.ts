@@ -1,7 +1,11 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 3100;
+// Outside the project: Next 16's Turbopack dev server watches the tree and full-reloads pages when files under it change (PGlite writes constantly).
+const E2E_DIR = path.join(os.tmpdir(), 'padosiplate-e2e');
 const chromium = process.env.PW_CHROMIUM_PATH || (fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
 
 /**
@@ -29,7 +33,7 @@ export default defineConfig({
     { name: 'mobile-390', testMatch: /mobile\.spec\.ts/, use: { ...devices['Pixel 5'], viewport: { width: 390, height: 844 } } },
   ],
   webServer: {
-    command: `sh -c "rm -rf .data/e2e && mkdir -p .data/e2e && tsx scripts/e2e-bootstrap.ts && next dev -p ${PORT}"`,
+    command: `sh -c "rm -rf ${E2E_DIR} && mkdir -p ${E2E_DIR} && tsx scripts/e2e-bootstrap.ts && next dev -p ${PORT}"`,
     url: `http://localhost:${PORT}/api/health`,
     reuseExistingServer: false,
     timeout: 240_000,
@@ -38,8 +42,8 @@ export default defineConfig({
       E2E: 'true',
       MOCK_MODE: 'true',
       JWT_SECRET: 'e2e-secret-e2e-secret-e2e-secret-0123',
-      PGLITE_DIR: '.data/e2e/pglite',
-      LOCAL_UPLOAD_DIR: '.data/e2e/uploads',
+      PGLITE_DIR: path.join(E2E_DIR, 'pglite'),
+      LOCAL_UPLOAD_DIR: path.join(E2E_DIR, 'uploads'),
       STORAGE_ADAPTER: 'local',
       SKIP_DEMO_SEED: 'true',
       ADMIN_EMAILS: 'e2e-admin@example.com',

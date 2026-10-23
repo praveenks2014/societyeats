@@ -2,14 +2,18 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 
 function Verify() {
   const token = useSearchParams().get('token') ?? '';
   const [state, setState] = useState<'working' | 'ok' | 'error'>('working');
   const [message, setMessage] = useState('');
+  const sent = useRef('');
 
   useEffect(() => {
+    // single-use token: React dev StrictMode runs effects twice, and a second POST would report the link as already used
+    if (token && sent.current === token) return;
+    sent.current = token;
     if (!token) {
       setState('error');
       setMessage('This link is missing its token.');

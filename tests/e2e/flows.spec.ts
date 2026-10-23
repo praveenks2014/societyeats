@@ -24,8 +24,11 @@ async function loginUI(page: Page, identifier: string, password: string) {
 test('1. resident joins via invite link, registers and verifies email through the mock outbox', async ({ page, request }) => {
   await page.goto('/join/E2E-ONE');
   await expect(page.getByTestId('join-society')).toHaveText('E2E Heights');
-  await page.getByTestId('join-resident').click();
-  await expect(page).toHaveURL(/\/register\?code=E2E-ONE/);
+  // Next 16 dev (Turbopack) reloads the page once while it compiles; retry the click until navigation sticks
+  await expect(async () => {
+    await page.getByTestId('join-resident').click();
+    await expect(page).toHaveURL(/\/register\?code=E2E-ONE/, { timeout: 5000 });
+  }).toPass({ timeout: 30_000 });
 
   await page.getByLabel('Your name').fill(RESIDENT.name);
   await page.getByLabel('Phone number').fill(RESIDENT.phone);
