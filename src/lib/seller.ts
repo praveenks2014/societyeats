@@ -20,7 +20,7 @@ const SLOTS = ['breakfast', 'lunch', 'dinner'];
 export const listingCreateSchema = z.object({
   title: z.string().trim().min(1, 'Dish name required').max(160),
   description: z.string().trim().max(1000).optional(),
-  priceRupees: z.number({ invalid_type_error: 'Price required' }).finite().min(1, 'Price must be at least ₹1').max(50_000, 'Price is too high'),
+  priceRupees: z.number({ error: 'Price required' }).finite().min(1, 'Price must be at least ₹1').max(50_000, 'Price is too high'),
   isVeg: z.boolean(),
   cuisine: z.string().trim().min(1, 'Cuisine required').max(60),
   photoUrl: z.string().trim().max(500).optional().nullable(),

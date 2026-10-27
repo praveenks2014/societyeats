@@ -81,13 +81,13 @@ export function validatorFor(key: SettingKey): z.ZodTypeAny {
   const d = SETTING_DEFS[key] as Def;
   switch (d.kind) {
     case 'int':
-      return z.number({ invalid_type_error: `${d.label} must be a whole number` }).int(`${d.label} must be a whole number`).min(d.min, `${d.label} must be at least ${d.min}`).max(d.max, `${d.label} must be at most ${d.max}`);
+      return z.number({ error: `${d.label} must be a whole number` }).int(`${d.label} must be a whole number`).min(d.min, `${d.label} must be at least ${d.min}`).max(d.max, `${d.label} must be at most ${d.max}`);
     case 'number':
-      return z.number({ invalid_type_error: `${d.label} must be a number` }).finite().min(d.min, `${d.label} must be at least ${d.min}`).max(d.max, `${d.label} must be at most ${d.max}`);
+      return z.number({ error: `${d.label} must be a number` }).finite().min(d.min, `${d.label} must be at least ${d.min}`).max(d.max, `${d.label} must be at most ${d.max}`);
     case 'bool':
-      return z.boolean({ invalid_type_error: `${d.label} must be true or false` });
+      return z.boolean({ error: `${d.label} must be true or false` });
     case 'enum':
-      return z.enum(d.options as [string, ...string[]], { errorMap: () => ({ message: `${d.label} must be one of ${d.options.join(', ')}` }) });
+      return z.enum(d.options as [string, ...string[]], { error: `${d.label} must be one of ${d.options.join(', ')}` });
     case 'text':
       return z
         .string()

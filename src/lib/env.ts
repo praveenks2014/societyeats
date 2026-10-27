@@ -16,8 +16,10 @@ const envSchema = z
   .object({
     JWT_SECRET: z
       .string({
-        required_error:
-          'JWT_SECRET is required — the app refuses to start without it (no dev fallback). Generate one with `openssl rand -hex 32` and set it as an env var (a Replit Secret in production).',
+        error: (iss) =>
+          iss.input === undefined
+            ? 'JWT_SECRET is required — the app refuses to start without it (no dev fallback). Generate one with `openssl rand -hex 32` and set it as an env var (a Replit Secret in production).'
+            : undefined,
       })
       .min(
         20,
@@ -25,7 +27,7 @@ const envSchema = z
       ),
     MOCK_MODE: z
       .enum(['true', 'false'], {
-        errorMap: () => ({ message: "MOCK_MODE must be exactly 'true' or 'false' when set" }),
+        error: "MOCK_MODE must be exactly 'true' or 'false' when set",
       })
       .optional(),
     DATABASE_URL: z.string().optional(),

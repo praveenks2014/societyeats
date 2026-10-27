@@ -256,3 +256,4 @@ Every ambiguous call made while turning the codebase into the PadosiPlate pilot.
 - `next.config.mjs`: `serverExternalPackages` replaces `experimental.serverComponentsExternalPackages`; `instrumentationHook` is no longer needed. Startup validation moved to `src/instrumentation-node.ts` so the Edge bundle never sees `process.exit`.
 - Turbopack is now the default for `next dev` and `next build`. The e2e database moved to the OS temp dir because Turbopack's dev server full-reloads pages when files in the project tree change.
 - verify-email posts its single-use token once (a ref guard) because React dev StrictMode runs effects twice.
+- zod 3 → 4.6.7: a new high advisory (memory exhaustion on oversized constrained collections) landed against zod <4.6.6. Only the error-option names changed in our schemas (`invalid_type_error`/`required_error`/`errorMap` → `error`).

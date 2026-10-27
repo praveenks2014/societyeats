@@ -1,6 +1,6 @@
 # Dependency audit
 
-Goal: zero critical and zero high findings in `npm audit` (production and dev). Result: **0 critical, 0 high**, 13 moderate (listed below, all transitive/dev-only).
+Goal: zero critical and zero high findings in `npm audit` (production and dev). Result: **0 critical, 0 high**, 10 moderate (listed below, all transitive/dev-only).
 
 ## Before (2026-10-23, `npm audit`)
 
@@ -192,13 +192,14 @@ a different dependency.
 | vitest | ^2.1.9 | 5.0.5 (exact) |
 | vite | transitive | 7.3.7 (peer of vitest 5, patched) |
 | drizzle-orm | ^0.36.4 | 0.45.4 (exact) |
+| zod | ^3.23.8 | 4.6.7 (exact; GHSA-mrhx-c7xc-m3w5 high advisory published after the first pass, fixed only in 4.6.6+) |
 | drizzle-kit | ^0.28.1 | 0.31.11 |
 | @types/node | ^20 | 22 (vitest 5 peer) |
 | follow-redirects, source-map-js, glob, postcss | vulnerable | patched via `npm audit fix` / the upgrades above |
 
 framer-motion 11.18.2 already declares React 19 as a peer and needed no change; razorpay, sharp, jose, zod and the other dependencies have no React/Next coupling. Node requirement is now `>=22.12` (vitest 5; Next 16 itself needs >=20.9), and `.replit` uses `nodejs-22`.
 
-## After (`npm audit`)
+## After (`npm audit`, re-run 2026-10-27)
 
 ```
 # npm audit report
@@ -218,20 +219,6 @@ node_modules/@esbuild-kit/core-utils/node_modules/esbuild
       drizzle-kit  0.19.0 - 1.0.0-beta.1-fd8bfcc
       Depends on vulnerable versions of @esbuild-kit/esm-loader
       node_modules/drizzle-kit
-
-postcss-selector-parser  <7.1.6
-Severity: moderate
-PostCSS: Quadratic complexity in flat selector parsing allows CPU exhaustion - https://github.com/advisories/GHSA-rj75-hqrm-r3gf
-fix available via `npm audit fix --force`
-Will install tailwindcss@4.3.3, which is a breaking change
-node_modules/postcss-selector-parser
-  postcss-nested  2.0.3 - 6.2.0
-  Depends on vulnerable versions of postcss-selector-parser
-  node_modules/postcss-nested
-  tailwindcss  <=0.0.0-oxide-insiders.ff2c25f || 0.5.0 - 3.4.19
-  Depends on vulnerable versions of postcss-nested
-  Depends on vulnerable versions of postcss-selector-parser
-  node_modules/tailwindcss
 
 uuid  <11.1.1
 Severity: moderate
@@ -255,7 +242,7 @@ node_modules/uuid
     Depends on vulnerable versions of teeny-request
     node_modules/retry-request
 
-13 moderate severity vulnerabilities
+10 moderate severity vulnerabilities
 
 To address issues that do not require attention, run:
   npm audit fix
