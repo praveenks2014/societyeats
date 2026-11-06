@@ -11,6 +11,8 @@ import { SwRegister } from '@/components/sw-register';
 import { SiteFooter } from '@/components/site-footer';
 import { PilotBanner } from '@/components/pilot-banner';
 import { listDisclaimers } from '@/lib/disclaimers';
+import { ReconsentGate } from '@/components/reconsent-gate';
+import { pendingReconsent } from '@/lib/legal/docs';
 
 // Self-hosted variable fonts (no Google Fonts request at build or run time).
 const display = localFont({
@@ -63,6 +65,7 @@ export const dynamic = 'force-dynamic';
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   const pilotVersion = (await listDisclaimers().catch(() => [])).find((d) => d.id === 'pilot')?.version ?? 1;
+  const pending = session && session.role !== 'admin' ? await pendingReconsent(session.uid, session.role).catch(() => []) : [];
   return (
     <html lang="en" className={`${display.variable} ${body.variable}`}>
       <body className="min-h-screen">
@@ -73,6 +76,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <main className="mx-auto w-full max-w-5xl px-4 pb-6 sm:px-6">{children}</main>
           <SiteFooter />
           <SwRegister />
+          {pending.length > 0 && <ReconsentGate pending={pending} />}
         </Providers>
       </body>
     </html>

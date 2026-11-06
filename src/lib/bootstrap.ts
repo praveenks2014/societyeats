@@ -37,6 +37,8 @@ export async function runBootstrap(db: Db): Promise<BootstrapReport> {
   await seedSubscriptionPlans(db);
   const { seedFssaiContent } = await import('@/lib/fssai/content');
   await seedFssaiContent(db);
+  const { seedLegalDocuments } = await import('@/lib/legal/docs');
+  await seedLegalDocuments(db);
   const { seedDisclaimers } = await import('@/lib/disclaimers');
   await seedDisclaimers(db);
   log.info('bootstrap.done', { adminsCreated: report.adminsCreated.length });

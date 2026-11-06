@@ -7,7 +7,7 @@ import { getDb } from '@/lib/db';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { sellerProfiles, societies, users } from '@/lib/db/schema';
 import { recordConsent } from '@/lib/consent';
-import { LEGAL_VERSIONS } from '@/lib/legal/versions';
+import { currentConsentLabel } from '@/lib/legal/docs';
 import { joinSociety } from '@/lib/membership';
 import { clientIp, rateLimit } from '@/lib/rate-limit';
 import { referralCodeFor } from '@/lib/referrals';
@@ -101,8 +101,8 @@ export const POST = api(async (req) => {
   // Consent is recorded with the version accepted, when and from where.
   const ip = clientIp(req);
   await recordConsent(user.id, 'age18', '1', ip);
-  await recordConsent(user.id, 'terms', LEGAL_VERSIONS.terms, ip);
-  await recordConsent(user.id, 'privacy', LEGAL_VERSIONS.privacy, ip);
+  await recordConsent(user.id, 'terms', await currentConsentLabel('terms'), ip);
+  await recordConsent(user.id, 'privacy', await currentConsentLabel('privacy'), ip);
   // Society membership: automatic for a valid invite link, otherwise it waits for an admin.
   await joinSociety({ userId: user.id, societyId: society.id, tower: body.tower, flat: body.flat, viaInvite: !!inviteCode });
 
