@@ -4,6 +4,7 @@ import { recordAudit } from '@/lib/audit';
 import { isMockMode } from '@/lib/config';
 import { getDb } from '@/lib/db';
 import { notify, notifyUser } from '@/lib/db/notify';
+import { emit } from '@/lib/notify';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { kitchenSubscriptions, notifications, sellerProfiles, subscriptionPlans } from '@/lib/db/schema';
 import { subscriptionCharge, subscriptionGstBps } from '@/lib/money';
@@ -206,7 +207,15 @@ export async function syncSubscriptions(now: Date = new Date()): Promise<{ moved
       const left = Math.ceil((r.endsAt.getTime() - now.getTime()) / DAY_MS);
       // Only the tightest threshold that applies is sent, so a missed run never produces a burst of reminders.
       const d = reminderDays.filter((x) => left <= x).sort((a, b) => a - b)[0];
-      if (d !== undefined && left > 0 && (await notifyOnce(r.sellerId, `Subscription ends in ${d} day${d === 1 ? '' : 's'}`, 'Renew from Seller → Subscription to stay visible without a break.', `remind${d}`, r.id, true))) reminded++;
+      if (d !== undefined && left > 0) {
+        // The href doubles as the once-per-threshold key; the wording and channels come from the notification catalogue.
+        const href = `/seller/subscription?r=remind${d}-${r.id}`;
+        const [seen] = await db.select({ id: notifications.id }).from(notifications).where(and(eq(notifications.userId, r.sellerId), eq(notifications.href, href)));
+        if (!seen) {
+          await emit('plan_expiring', r.sellerId, { days: d, href }, now);
+          reminded++;
+        }
+      }
     }
   }
   return { moved, reminded };

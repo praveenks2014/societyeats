@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { isMockMode } from '@/lib/config';
 import { getDb } from '@/lib/db';
 import { notify } from '@/lib/db/notify';
+import { emit } from '@/lib/notify';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { orderEvents, orders, payments, restaurantItems, restaurants, orderItems } from '@/lib/db/schema';
 import { log } from '@/lib/log';
@@ -112,7 +113,7 @@ export async function markOrderPaid(
 
   const order = result.order!;
   if (order.sellerId) {
-    await notify(order.sellerId, `New order #${orderId} 🍲`, 'A neighbour just placed an order. Accept it from your order queue.', '/seller/orders');
+    await emit('order_booked', order.sellerId, { orderId, items: 'A neighbour placed an order', acceptMinutes: (await getPlatformSettings()).sellerAcceptWindowMinutes });
   }
   if (order.restaurantId) {
     const [rest] = await db.select().from(restaurants).where(eq(restaurants.id, order.restaurantId));

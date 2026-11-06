@@ -108,9 +108,9 @@ describe('Sec 393 / 194-O sales tracking', () => {
     expect(await checkTdsThresholds(k.seller.id)).toBe('paused');
     const alerts = await db.select().from(s.notifications).where(eq(s.notifications.userId, k.seller.id));
     expect(alerts.filter((n) => n.title === 'You are close to the tax threshold')).toHaveLength(1);
-    expect(alerts.filter((n) => n.title === 'New orders paused')).toHaveLength(1);
+    expect(alerts.filter((n) => n.eventKey === 'listing_paused')).toHaveLength(1);
     await checkTdsThresholds(k.seller.id);
-    expect((await db.select().from(s.notifications).where(eq(s.notifications.userId, k.seller.id))).filter((n) => n.title === 'New orders paused')).toHaveLength(1);
+    expect((await db.select().from(s.notifications).where(eq(s.notifications.userId, k.seller.id))).filter((n) => n.eventKey === 'listing_paused')).toHaveLength(1);
     await expect(place(k, 1)).rejects.toMatchObject({ status: 409, message: expect.stringMatching(/not taking new orders/) });
     await setPlatformSetting('tdsWarnPaise', '40000000');
     await setPlatformSetting('tdsPausePaise', '50000000');

@@ -858,6 +858,8 @@ export const notifications = pgTable('notifications', {
   body: text('body'),
   href: varchar('href', { length: 200 }),
   readAt: timestamp('read_at'),
+  // Which catalogue event produced it (see src/lib/notify/events.ts); null for older / ad-hoc notifications.
+  eventKey: varchar('event_key', { length: 40 }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -1419,3 +1421,29 @@ export const invoiceCounters = pgTable('invoice_counters', {
   fy: varchar('fy', { length: 7 }).primaryKey(),
   last: integer('last').notNull().default(0),
 });
+
+/** Per-user channel choices. Transactional in-app and email messages are always on; these gate push / WhatsApp / SMS and marketing. */
+export const notificationPrefs = pgTable('notification_prefs', {
+  userId: integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  pushEnabled: boolean('push_enabled').notNull().default(true),
+  whatsappEnabled: boolean('whatsapp_enabled').notNull().default(false),
+  smsEnabled: boolean('sms_enabled').notNull().default(false),
+  marketingEnabled: boolean('marketing_enabled').notNull().default(false),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+/** Record of every SMS / WhatsApp message. Mock adapters: the row IS the delivery (read at /admin/outbox). */
+export const messageOutbox = pgTable(
+  'message_outbox',
+  {
+    id: serial('id').primaryKey(),
+    channel: varchar('channel', { length: 10 }).notNull(), // sms | whatsapp
+    userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+    toPhone: varchar('to_phone', { length: 20 }).notNull(),
+    body: text('body').notNull(),
+    eventKey: varchar('event_key', { length: 40 }),
+    status: varchar('status', { length: 10 }).notNull().default('mock'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('message_outbox_user_idx').on(t.userId, t.createdAt)],
+);

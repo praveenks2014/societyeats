@@ -567,7 +567,7 @@ test('12b. admin changes the platform fee 10% → 8%: new orders snapshot 8%, th
   await admin.getByTestId('setting-buyerPlatformFeeBps').fill('30'); // above the 25% cap
   await expect(async () => {
     await admin.getByTestId('save-settings').click();
-    await expect(admin.getByText(/at most/i)).toBeVisible({ timeout: 3000 });
+    await expect(admin.getByText(/must be at most/i).first()).toBeVisible({ timeout: 3000 });
   }).toPass({ timeout: 20_000 });
   await admin.getByTestId('setting-buyerPlatformFeeBps').fill('8');
   await expect(async () => {

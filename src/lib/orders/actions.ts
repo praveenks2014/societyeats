@@ -1,7 +1,8 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { ApiError } from '@/lib/api';
 import { getDb } from '@/lib/db';
-import { notifyUser } from '@/lib/db/notify';
+import { emit, emitToAdmins, type EventKey } from '@/lib/notify';
+import type { Ctx } from '@/lib/notify/events';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { grievances, orderEvents, orders, referralCredits, sellerProfiles } from '@/lib/db/schema';
 import { createGrievance } from '@/lib/grievances';
@@ -236,62 +237,61 @@ function eventNote(action: OrderAction, reason: string, input: ActionInput, food
 async function afterTransition(order: typeof orders.$inferSelect, action: OrderAction, input: ActionInput, result: ActionResult) {
   const db = await getDb();
   const id = order.id;
-  const buyer = (title: string, body: string, email = false) => notifyUser(order.buyerId, title, body, `/orders/${id}`, { email, emailKind: 'order' });
-  const seller = (title: string, body: string, email = false) => (order.sellerId ? notifyUser(order.sellerId, title, body, '/seller/orders', { email, emailKind: 'order' }) : Promise.resolve());
+  const toBuyer = (event: EventKey, ctx: Ctx = {}) => emit(event, order.buyerId, { orderId: id, role: 'buyer', ...ctx });
+  const toSeller = (event: EventKey, ctx: Ctx = {}) => (order.sellerId ? emit(event, order.sellerId, { orderId: id, role: 'seller', ...ctx }) : Promise.resolve());
+  const cancelCtx = { refundPaise: result.refundedFeePaise, creditPaise: result.creditIssuedPaise };
 
   switch (action) {
-    case 'accept': await buyer(`Order #${id} accepted ✅`, 'The kitchen has started on your order.', true); break;
+    case 'accept': await toBuyer('order_accepted'); break;
     case 'preparing': break;
-    case 'ready':
-      await buyer(order.fulfillmentType === 'self_pickup' ? 'Order ready for pickup 🔔' : 'Order ready 🔔', order.fulfillmentType === 'self_pickup' ? `Your order #${id} is ready — head to the kitchen.` : `Order #${id} is ready and will be on its way shortly.`);
-      break;
-    case 'on_the_way': await buyer('Your order is on the way 🛵', `The kitchen is bringing order #${id}. Pay for the food only after it reaches you.`, true); break;
+    case 'ready': await toBuyer('order_ready', { pickup: order.fulfillmentType === 'self_pickup' }); break;
+    case 'on_the_way': await toBuyer('order_on_the_way'); break;
     case 'reached_door':
     case 'buyer_arrived':
-      await buyer(action === 'reached_door' ? 'The kitchen is at your door 🚪' : 'Collect your order', `Pay ${formatINR(order.foodTotalInPaise)} to the kitchen by UPI once you have the food. Open the order to see the QR.`, true);
+      await toBuyer('order_at_door', { foodPaise: order.foodTotalInPaise, pickup: action === 'buyer_arrived' });
       break;
-    case 'collect': await seller(`Order #${id}: buyer has the food`, 'They will now pay you. Confirm when the money arrives.'); break;
-    case 'claim_paid': await seller(`Order #${id}: confirm payment`, `The buyer says they paid ${formatINR(order.foodTotalInPaise)}${order.foodPaymentUtr ? ` — UTR ${order.foodPaymentUtr}` : ''}. Check your UPI app, then confirm.`, true); break;
+    case 'collect': break;
+    case 'claim_paid': await toSeller('order_payment_claimed', { foodPaise: order.foodTotalInPaise, utr: order.foodPaymentUtr }); break;
     case 'confirm_paid':
     case 'auto_complete':
     case 'resolve_paid':
-      await buyer(`Order #${id} complete 🎉`, 'Thanks! Tell your neighbours — and rate the kitchen.');
       await ensureInvoiceNumber(id).catch((e) => log.error('invoice.issue_failed', { orderId: id, err: e }));
+      await toBuyer('order_payment_received');
       await maybeGrantReferralCredit({ id, buyerId: order.buyerId });
       if (order.sellerId) await checkTdsThresholds(order.sellerId);
       break;
     case 'not_received':
     case 'raise_dispute': {
       await createGrievance({ kind: 'dispute_payment', orderId: id, raisedById: input.actorId, raisedRole: 'seller', subject: `Order #${id}: kitchen says payment not received`, body: input.reason, evidence: { utr: order.foodPaymentUtr, method: order.foodPaymentMethod, foodPaise: order.foodTotalInPaise } });
-      await buyer(`Order #${id}: payment not found`, 'The kitchen could not find your payment. PadosiPlate will look into it — please keep your UPI receipt.', true);
-      await notifyAdmins(`Payment dispute — order #${id}`, 'Kitchen says the food payment was not received.', '/admin/disputes');
+      await toBuyer('order_payment_disputed');
+      await emitToAdmins('order_payment_disputed', { orderId: id });
       break;
     }
     case 'resolve_unpaid':
-      await buyer(`Order #${id} closed`, 'PadosiPlate could not confirm payment for this order. Contact Help if you think this is wrong.', true);
-      await seller(`Order #${id} closed as unpaid`, 'PadosiPlate reviewed the dispute and recorded the order as unpaid.');
+      await toBuyer('order_cancelled', { cause: 'resolve_unpaid', reason: 'PadosiPlate could not confirm payment for this order. Contact Help if you think this is wrong.' });
+      await toSeller('order_cancelled', { cause: 'resolve_unpaid', reason: 'PadosiPlate reviewed the dispute and recorded the order as unpaid.' });
       await recordStrike({ userId: order.buyerId, role: 'buyer', kind: 'buyer_unpaid', orderId: id, reason: 'Order closed as unpaid after a dispute' });
       await db.update(grievances).set({ status: 'resolved', resolution: 'unpaid', resolvedAt: new Date() }).where(and(eq(grievances.orderId, id), inArray(grievances.status, ['open', 'acknowledged'])));
       break;
     case 'seller_cancel':
-      await buyer(`Order #${id} cancelled by the kitchen`, `We're sorry. Your platform fee${result.refundedFeePaise ? ` of ${formatINR(result.refundedFeePaise)}` : ''} is being refunded${result.creditIssuedPaise ? ` and ${formatINR(result.creditIssuedPaise)} PadosiPlate credit has been added for your next order` : ''}.`, true);
+      await toBuyer('order_cancelled', { cause: order.acceptedAt ? 'seller_cancel' : 'seller_decline', ...cancelCtx });
       break;
     case 'buyer_cancel':
-      await seller(`Order #${id} cancelled by the buyer`, 'The buyer cancelled this order.');
-      await buyer(`Order #${id} cancelled`, result.refundedFeePaise ? 'Your platform fee is being refunded.' : 'The platform fee is not refunded after the kitchen has accepted.');
+      await toSeller('order_cancelled', { cause: 'buyer_cancel' });
+      await toBuyer('order_cancelled', { cause: 'buyer_cancel', refundPaise: result.refundedFeePaise });
       break;
     case 'auto_cancel':
-      await buyer(`Order #${id} was not accepted`, 'The kitchen did not respond in time. Your platform fee is being refunded.', true);
-      await seller(`Order #${id} auto-cancelled`, 'You did not accept in time.');
+      await toBuyer('order_cancelled', { cause: 'auto_cancel', refundPaise: result.refundedFeePaise });
+      await toSeller('order_cancelled', { cause: 'auto_cancel' });
       break;
     case 'buyer_couldnt_pay':
     case 'no_show':
-      await buyer(`Order #${id} closed`, action === 'no_show' ? 'The kitchen waited at the door and could not reach you. The platform fee is not refunded.' : "The food was not paid for at the door, so the order was cancelled. The platform fee is not refunded.", true);
+      await toBuyer('order_cancelled', { cause: action });
       await notifyAdmins(`Order #${id}: ${action === 'no_show' ? 'buyer no-show' : "buyer couldn't pay"}`, 'Food was prepared and not paid for.', '/admin/orders');
       break;
     case 'admin_cancel':
-      await buyer(`Order #${id} cancelled by PadosiPlate`, 'Your platform fee is being refunded.', true);
-      await seller(`Order #${id} cancelled by PadosiPlate`, input.reason ?? 'Cancelled by PadosiPlate.');
+      await toBuyer('order_cancelled', { cause: 'admin', ...cancelCtx });
+      await toSeller('order_cancelled', { cause: 'admin', reason: input.reason ?? 'Cancelled by PadosiPlate.' });
       break;
     default: break;
   }

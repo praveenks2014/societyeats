@@ -71,6 +71,11 @@ export const SETTING_DEFS = {
   chatReadOnlyHours: { kind: 'int', unit: 'count', min: 1, max: 720, def: 48, group: 'Chat', label: 'Chat stays open this many hours after completion' },
   chatBadWords: { kind: 'text', def: 'fuck,shit,bitch,asshole,bastard,madarchod,behenchod,chutiya,bhosdi,randi,harami,gaandu,kutta,saala', maxLen: 2000, group: 'Chat', label: 'Abusive words (comma-separated)', hint: 'A message containing one triggers a warning before sending. Reports and strikes handle repeat abuse.' },
   chatMaxLength: { kind: 'int', unit: 'count', min: 100, max: 4000, def: 1000, group: 'Chat', label: 'Max characters per message' },
+  // ---- notifications ----
+  quietHoursStart: { kind: 'int', unit: 'count', min: 0, max: 23, def: 22, group: 'Notifications', label: 'Quiet hours start (hour, IST)', hint: 'Non-urgent push / WhatsApp / SMS wait out the night. In-app and email are unaffected.' },
+  quietHoursEnd: { kind: 'int', unit: 'count', min: 0, max: 23, def: 7, group: 'Notifications', label: 'Quiet hours end (hour, IST)' },
+  chatNotifyDebounceMinutes: { kind: 'int', unit: 'minutes', min: 1, max: 60, def: 2, group: 'Notifications', label: 'Chat notification debounce (minutes)', hint: 'At most one chat alert per order per person in this window.' },
+  pushEnabled: { kind: 'bool', def: true, group: 'Notifications', label: 'Web push on', hint: 'Needs VAPID keys (npm run vapid:generate). Off or missing keys: push is simply skipped.' },
   // ---- pilot ----
   pilotSocietiesOnly: { kind: 'bool', def: true, group: 'Pilot', label: 'Invite-only pilot', hint: 'Only members of active pilot societies can browse, order or sell.' },
   membershipAutoApprove: { kind: 'bool', def: true, group: 'Pilot', label: 'Auto-approve residents who join by invite link', hint: 'A society can be switched to manual approval in /admin/societies.' },

@@ -109,6 +109,7 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
   const [application] = await db.select().from(fssaiApplications).where(eq(fssaiApplications.sellerId, input.sellerId)).orderBy(desc(fssaiApplications.createdAt)).limit(1);
   const tierInfo = fssaiTierInfo(profile, application ?? null, { deemedDays: settings.fssaiDeemedGrantDaysRegistration, provisionalMaxDays: settings.provisionalMaxDays, now });
 
+  let capHit: 'day' | 'total' | null = null;
   const created = await db.transaction(async (tx) => {
     // Row lock on the kitchen: bookings for the same kitchen are serialised, so cap checks cannot race.
     await tx.select({ id: sellerProfiles.userId }).from(sellerProfiles).where(eq(sellerProfiles.userId, input.sellerId)).for('update');
@@ -119,7 +120,10 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
     if (tierInfo.tier === 'provisional') {
       const caps = effectiveCaps(settings, profile.capOverrideJson, now);
       const check = checkCaps(caps, usage, foodForCaps);
-      if (!check.ok) throw new ApiError(409, check.message);
+      if (!check.ok) {
+        capHit = check.reason === 'value_total' ? 'total' : 'day';
+        throw new ApiError(409, check.message);
+      }
     }
     // Sec 393 (ex-194-O) tracking: new orders pause at the statutory gross-sales threshold until an admin decides.
     if (settings.tdsPausePaise > 0 && (await sellerFySalesPaise(tx, input.sellerId, now)) >= settings.tdsPausePaise) {
@@ -180,6 +184,10 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
     await tx.insert(orderItems).values(lines.map((l) => ({ orderId: order.id, listingId: l.listingId, titleSnapshot: l.title, qty: l.qty, unitPriceInPaise: l.unit })));
     await tx.insert(orderEvents).values({ orderId: order.id, status: 'fee_pending', note: 'Order created — waiting for the platform fee' });
     return { order, quote };
+  }).catch(async (e) => {
+    // Tell the kitchen (once a day) that a buyer was turned away by its provisional limit.
+    if (capHit) await notifyCapReached(input.sellerId, capHit, now);
+    throw e;
   });
 
   const { order, quote } = created;
@@ -190,4 +198,16 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
   }
   const payment = await createOrderPayment(order.id, quote.onlineChargePaise, 'order_fee');
   return { orderId: order.id, quote, payment };
+}
+
+/** One “provisional limit reached” alert per kitchen per IST day (the notification itself is the de-dup record). */
+async function notifyCapReached(sellerId: number, which: 'day' | 'total', now: Date): Promise<void> {
+  const db = await getDb();
+  const { notifications } = await import('@/lib/db/schema');
+  const { istStartOfDay } = await import('@/lib/time');
+  const { gte } = await import('drizzle-orm');
+  const [seen] = await db.select({ id: notifications.id }).from(notifications).where(and(eq(notifications.userId, sellerId), eq(notifications.eventKey, 'provisional_cap_reached'), gte(notifications.createdAt, istStartOfDay(now))));
+  if (seen) return;
+  const { emit } = await import('@/lib/notify');
+  await emit('provisional_cap_reached', sellerId, { which }, now);
 }

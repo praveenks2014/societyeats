@@ -5,7 +5,7 @@ const nextConfig = {
     return process.env.NODE_ENV === 'production' ? [{ source: '/:path*', headers: securityHeaders }] : [];
   },
   // Native/WASM DB drivers must stay in node_modules, not be bundled.
-  serverExternalPackages: ['@electric-sql/pglite', 'postgres', 'sharp'],
+  serverExternalPackages: ['@electric-sql/pglite', 'postgres', 'sharp', 'web-push'],
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'images.unsplash.com' },

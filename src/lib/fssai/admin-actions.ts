@@ -3,6 +3,7 @@ import { ApiError } from '@/lib/api';
 import { recordAudit } from '@/lib/audit';
 import { getDb } from '@/lib/db';
 import { notify } from '@/lib/db/notify';
+import { emit } from '@/lib/notify';
 import { fssaiApplications, sellerProfiles } from '@/lib/db/schema';
 import { istDateString } from '@/lib/time';
 
@@ -20,7 +21,7 @@ export async function recordInterruption(input: { applicationId: number; kind: '
   const timeline = [...(app.timelineJson ?? []), { at: new Date().toISOString(), event: `${label} by FoSCoS on ${input.date}${input.note ? ` — ${input.note}` : ''}` }];
   await db.update(fssaiApplications).set({ status: input.kind, interruptionAt: new Date(`${input.date}T00:00:00+05:30`), interruptionNote: input.note ?? null, timelineJson: timeline, updatedAt: new Date() }).where(eq(fssaiApplications.id, input.applicationId));
   await recordAudit({ actorId: input.adminId, action: 'fssai.interruption', targetType: 'fssai_application', targetId: input.applicationId, meta: { kind: input.kind, date: input.date } });
-  await notify(app.sellerId, `FSSAI: ${label.toLowerCase()}`, `FoSCoS responded to your filing (ref ${app.foscosRefNumber}) with a ${label.toLowerCase()}. Check your FoSCoS account for next steps. Your kitchen is hidden until this is sorted.`, '/seller/compliance');
+  await emit('fssai_tier_change', app.sellerId, { tier: 'blocked', label: label.toLowerCase(), body: `FoSCoS responded to your filing (ref ${app.foscosRefNumber}) with a ${label.toLowerCase()}. Check your FoSCoS account for next steps. Your kitchen is hidden until this is sorted.` });
 }
 
 export async function blockFssai(input: { sellerId: number; reason: string; adminId: number }) {
@@ -30,14 +31,15 @@ export async function blockFssai(input: { sellerId: number; reason: string; admi
   const [p] = await db.update(sellerProfiles).set({ fssaiBlockedReason: reason.slice(0, 200), fssaiBlockedAt: new Date() }).where(eq(sellerProfiles.userId, input.sellerId)).returning({ id: sellerProfiles.userId });
   if (!p) throw new ApiError(404, 'Kitchen not found');
   await recordAudit({ actorId: input.adminId, action: 'fssai.block', targetType: 'kitchen', targetId: input.sellerId, meta: { reason } });
-  await notify(input.sellerId, 'FSSAI: your kitchen is hidden', `PadosiPlate blocked your FSSAI status: ${reason}. Fix it and we will review again.`, '/seller/compliance');
+  await emit('fssai_tier_change', input.sellerId, { tier: 'blocked', label: 'your kitchen is hidden', body: `PadosiPlate blocked your FSSAI status: ${reason}. Fix it and we will review again.` });
+  await emit('listing_paused', input.sellerId, { reason: `FSSAI blocked: ${reason}` });
 }
 
 export async function unblockFssai(input: { sellerId: number; adminId: number }) {
   const db = await getDb();
   await db.update(sellerProfiles).set({ fssaiBlockedReason: null, fssaiBlockedAt: null }).where(eq(sellerProfiles.userId, input.sellerId));
   await recordAudit({ actorId: input.adminId, action: 'fssai.unblock', targetType: 'kitchen', targetId: input.sellerId });
-  await notify(input.sellerId, 'FSSAI: block lifted', 'Your FSSAI status is back to normal.', '/seller/compliance');
+  await emit('fssai_tier_change', input.sellerId, { tier: 'restored', label: 'block lifted', body: 'Your FSSAI status is back to normal.' });
 }
 
 export async function requestFssaiChanges(input: { applicationId: number; note: string; adminId: number }) {

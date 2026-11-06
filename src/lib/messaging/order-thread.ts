@@ -3,7 +3,6 @@ import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import { ApiError } from '@/lib/api';
 import { recordAudit } from '@/lib/audit';
 import { getDb } from '@/lib/db';
-import { notify } from '@/lib/db/notify';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { chatReads, files, grievances, orderMessages, orders, sellerProfiles, societies, userBlocks, users } from '@/lib/db/schema';
 import type { Session } from '@/lib/auth';
@@ -212,15 +211,10 @@ export async function postMessage(orderId: number, session: Session, input: Send
   return { sent: true, message: msg };
 }
 
-/** One in-app notification per unread burst (the debounced multi-channel version arrives with the notification service). */
+/** Debounced (one alert per order per person per few minutes), via the notification service. */
 async function notifyNewMessage(order: typeof orders.$inferSelect, party: Party, other: number, preview: string) {
-  const db = await getDb();
-  const href = party === 'buyer' ? '/seller/orders' : `/orders/${order.id}#messages`;
-  const { notifications } = await import('@/lib/db/schema');
-  const [unread] = await db.select({ id: notifications.id }).from(notifications).where(and(eq(notifications.userId, other), eq(notifications.href, href), isNull(notifications.readAt)));
-  if (unread) return;
-  const title = party === 'buyer' ? `New message on order #${order.id}` : `Message on order #${order.id}`;
-  await notify(other, title, preview.slice(0, 100), href);
+  const { emit } = await import('@/lib/notify');
+  await emit('chat_message', other, { orderId: order.id, role: party === 'buyer' ? 'seller' : 'buyer', preview });
 }
 
 export async function reportMessage(orderId: number, session: Session, messageId: number) {

@@ -3,6 +3,7 @@ import { ApiError } from '@/lib/api';
 import { recordAudit } from '@/lib/audit';
 import { getDb } from '@/lib/db';
 import { notifyUser } from '@/lib/db/notify';
+import { emit } from '@/lib/notify';
 import { listings, sellerProfiles } from '@/lib/db/schema';
 import { and } from 'drizzle-orm';
 
@@ -77,8 +78,12 @@ export async function transitionKitchen(
       const { grantFoundingKitchen } = await import('@/lib/subscriptions/service');
       await grantFoundingKitchen(sellerId, actor.id);
     }
-    const [title, body] = copy[action];
-    await notifyUser(sellerId, title, body, '/seller', { email: true, emailKind: `kitchen_${action}` });
+    if (action === 'approve' || action === 'request_changes' || action === 'reject') {
+      await emit('onboarding_decision', sellerId, { decision: action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'changes', note: action === 'approve' ? copy.approve[1] : opts.reason });
+    } else {
+      const [title, body] = copy[action];
+      await notifyUser(sellerId, title, body, '/seller', { email: true, emailKind: `kitchen_${action}` });
+    }
   }
   return to;
 }

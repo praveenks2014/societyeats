@@ -69,6 +69,7 @@ export function AccountClient({ name, email, role }: { name: string; email: stri
       <Card className="space-y-3 p-4">
         <div className="eyebrow">LOGIN OPTIONS</div>
         <Link href="/change-password" className="flex min-h-[44px] items-center text-sm font-semibold text-leaf underline">Change password</Link>
+        <Link href="/account/notifications" className="flex min-h-[44px] items-center text-sm font-semibold text-leaf underline" data-testid="notification-prefs-link">Notifications</Link>
         <a href="/api/auth/google/start?link=1" className="flex min-h-[44px] items-center text-sm font-semibold text-leaf underline">Link my Google account</a>
       </Card>
 

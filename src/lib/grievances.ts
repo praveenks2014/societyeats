@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { grievances } from '@/lib/db/schema';
 import { DAY_MS } from '@/lib/time';
+import { emit } from '@/lib/notify';
 
 export type GrievanceKind = 'dispute_payment' | 'dispute_food' | 'dispute_quality' | 'chat_report' | 'grievance' | 'data_request';
 
@@ -42,6 +43,7 @@ export async function createGrievance(input: {
 export async function acknowledgeGrievance(id: number, adminId: number, now: Date = new Date()) {
   const db = await getDb();
   const [row] = await db.update(grievances).set({ status: 'acknowledged', ackAt: now, handledBy: adminId }).where(and(eq(grievances.id, id), eq(grievances.status, 'open'))).returning();
+  if (row?.raisedById) await emit('grievance_acknowledged', row.raisedById, { grievanceId: row.id, resolveDays: (await getPlatformSettings()).grievanceResolveDays });
   return row ?? null;
 }
 
@@ -52,6 +54,7 @@ export async function resolveGrievance(id: number, adminId: number, resolution: 
     .set({ status: 'resolved', resolvedAt: now, resolution, resolutionNote: note ?? null, handledBy: adminId, ackAt: now })
     .where(and(eq(grievances.id, id), inArray(grievances.status, ['open', 'acknowledged'])))
     .returning();
+  if (row?.raisedById) await emit('grievance_resolved', row.raisedById, { grievanceId: row.id, resolution: row.resolutionNote ?? row.resolution ?? 'Resolved' });
   return row ?? null;
 }
 

@@ -1,6 +1,7 @@
 import { and, eq, gte, isNull, isNotNull, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { notify } from '@/lib/db/notify';
+import { emit } from '@/lib/notify';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { orders, sellerProfiles, strikes, users } from '@/lib/db/schema';
 import { DAY_MS } from '@/lib/time';
@@ -34,16 +35,16 @@ export async function recordStrike(input: { userId: number; role: 'buyer' | 'sel
     .where(and(eq(strikes.userId, input.userId), eq(strikes.role, input.role), gte(strikes.createdAt, since), isNull(strikes.liftedAt)));
 
   if (input.role === 'seller') {
-    await notify(input.userId, 'You received a strike', input.reason ?? 'A cancellation counted as a strike.', '/seller/orders');
+    await emit('strike_issued', input.userId, { role: 'seller', reason: input.reason ?? 'A cancellation counted as a strike', count, windowDays: settings.strikeWindowDays, limit: settings.sellerStrikeLimit });
     if (count >= settings.sellerStrikeLimit) {
       const [p] = await db.update(sellerProfiles).set({ listingsPausedReason: 'strikes', listingsPausedAt: now }).where(and(eq(sellerProfiles.userId, input.userId), isNull(sellerProfiles.listingsPausedReason))).returning({ id: sellerProfiles.userId });
       if (p) {
-        await notify(input.userId, 'Your kitchen is paused', `You reached ${count} strikes in ${settings.strikeWindowDays} days. PadosiPlate will review your kitchen.`, '/seller/inbox');
+        await emit('listing_paused', input.userId, { reason: `You reached ${count} strikes in ${settings.strikeWindowDays} days. PadosiPlate will review your kitchen.` });
         await notifyAdmins('Kitchen auto-paused after strikes', `Kitchen #${input.userId} reached ${count} strikes.`, `/admin/kitchens/${input.userId}`);
       }
     }
   } else {
-    await notify(input.userId, 'You received a strike', input.reason ?? 'A cancelled order counted as a strike.', '/orders');
+    await emit('strike_issued', input.userId, { role: 'buyer', reason: input.reason ?? 'A cancelled order counted as a strike', count, windowDays: settings.strikeWindowDays, limit: settings.buyerStrikeLimit });
     if (count >= settings.buyerStrikeLimit) {
       const until = new Date(now.getTime() + settings.buyerBlockDays * DAY_MS);
       await db.update(users).set({ ordersBlockedUntil: until }).where(eq(users.id, input.userId));
