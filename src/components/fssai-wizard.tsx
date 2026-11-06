@@ -5,6 +5,7 @@ import { AadhaarMask } from '@/components/aadhaar-mask';
 import { Button, Field, Input, Modal, Select, Textarea } from '@/components/ui';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
+import { DisclaimerClient } from '@/components/disclaimer-client';
 import {
   DECLARATIONS, FOOD_CATEGORIES, ID_TYPES, MAX_YEARS, MIN_YEARS, ANTI_SCAM_NOTICE, PERSISTENT_NOTICE, RULES_VERIFIED_NOTE, SALES_LABELS, WATER_SOURCES,
   basicRegistrationFeePaise, checkEligibility, type IdType, type SalesBand,
@@ -261,6 +262,7 @@ export function FssaiWizard({
       title="FSSAI Basic Registration assistant"
       footer={
         <div className="space-y-2">
+          <DisclaimerClient id="fssai-help" />
           <p className="text-[11px] leading-snug text-ink-faint">{PERSISTENT_NOTICE} {ANTI_SCAM_NOTICE} {RULES_VERIFIED_NOTE}</p>
           <div className="flex gap-3">
             {step > 0 && <Button variant="ghost" onClick={() => setStep((s) => s - 1)}>← Back</Button>}

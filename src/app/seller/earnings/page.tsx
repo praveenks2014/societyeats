@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Card, EmptyState, Skeleton } from '@/components/ui';
 import { formatINR } from '@/lib/money';
+import { DisclaimerClient } from '@/components/disclaimer-client';
 
 type Sales = {
   totals: { foodReceivedPaise: number; viaUpiPaise: number; atHandoverPaise: number; orderCount: number; refundsDueCount: number; refundsDuePaise: number };

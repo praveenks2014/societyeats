@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { BRAND } from '@/config/brand';
 import { societyForInvite } from '@/lib/join';
+import { Disclaimer } from '@/components/disclaimer';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +36,8 @@ export default async function JoinPage({ params }: { params: Promise<{ code: str
         </Link>
         <Link href="/login" className="inline-flex min-h-[44px] items-center text-sm font-semibold text-leaf underline">Already have an account? Log in</Link>
       </div>
-      <p className="mt-8 text-xs text-ink-faint">You pay kitchens directly at your door, after the food arrives. {BRAND.appName} charges only a small platform fee.</p>
+      <Disclaimer id="community" className="mt-6 text-left" />
+      <p className="mt-4 text-xs text-ink-faint">You pay kitchens directly at your door, after the food arrives. {BRAND.appName} charges only a small platform fee.</p>
     </div>
   );
 }

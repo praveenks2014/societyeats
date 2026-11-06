@@ -7,6 +7,7 @@ import { FoodImage } from '@/components/food-image';
 import { useCart } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 import { PriceLines } from '@/components/price-lines';
+import { DisclaimerClient } from '@/components/disclaimer-client';
 
 export default function CartPage() {
   const { vendor, items, subtotalPaise, inc, dec, clear } = useCart();
@@ -73,6 +74,13 @@ export default function CartPage() {
           <span>{vendor?.kind === 'restaurant' ? 'No delivery fee — counter pickup' : 'Final bill at checkout'}</span>
         </div>
         {vendor?.kind !== 'restaurant' && <div className="mt-3"><PriceLines foodPaise={subtotalPaise} /></div>}
+        {vendor?.kind !== 'restaurant' && (
+          <div className="mt-3 space-y-2" data-testid="cart-disclaimers">
+            <DisclaimerClient id="pricing" />
+            <DisclaimerClient id="home-kitchen" />
+            <DisclaimerClient id="allergens" />
+          </div>
+        )}
       </div>
 
       <div className="mt-5 flex gap-3">

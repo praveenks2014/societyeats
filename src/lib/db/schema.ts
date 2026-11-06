@@ -1300,6 +1300,20 @@ export const disclaimers = pgTable('disclaimers', {
   updatedBy: integer('updated_by').references(() => users.id),
 });
 
+/** Every published text of a disclaimer, so edits are auditable and restorable. */
+export const disclaimerVersions = pgTable(
+  'disclaimer_versions',
+  {
+    id: serial('id').primaryKey(),
+    disclaimerId: varchar('disclaimer_id', { length: 40 }).notNull(),
+    version: integer('version').notNull(),
+    text: text('text').notNull(),
+    changedBy: integer('changed_by').references(() => users.id),
+    changedAt: timestamp('changed_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('disclaimer_versions_uq').on(t.disclaimerId, t.version)],
+);
+
 export const legalDocuments = pgTable('legal_documents', {
   slug: varchar('slug', { length: 40 }).primaryKey(),
   version: integer('version').notNull().default(1),
@@ -1308,7 +1322,31 @@ export const legalDocuments = pgTable('legal_documents', {
   // Material changes bump `reconsentRequired` so users are asked to accept again.
   reconsentRequired: boolean('reconsent_required').notNull().default(false),
   publishedAt: timestamp('published_at').notNull().defaultNow(),
+  // 'draft' (pending lawyer review) until an admin marks this version reviewed.
+  reviewStatus: varchar('review_status', { length: 10 }).notNull().default('draft'),
+  reviewedAt: timestamp('reviewed_at'),
+  reviewedBy: integer('reviewed_by').references(() => users.id),
+  effectiveDate: varchar('effective_date', { length: 10 }),
+  changeSummary: text('change_summary'),
 });
+
+/** Every published version of a legal document (bodies are kept so a diff and an audit trail exist). */
+export const legalDocumentVersions = pgTable(
+  'legal_document_versions',
+  {
+    id: serial('id').primaryKey(),
+    slug: varchar('slug', { length: 40 }).notNull(),
+    version: integer('version').notNull(),
+    title: varchar('title', { length: 160 }).notNull(),
+    body: text('body').notNull(),
+    material: boolean('material').notNull().default(false),
+    changeSummary: text('change_summary'),
+    effectiveDate: varchar('effective_date', { length: 10 }),
+    publishedBy: integer('published_by').references(() => users.id),
+    publishedAt: timestamp('published_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('legal_document_versions_uq').on(t.slug, t.version)],
+);
 
 export const settingsHistory = pgTable(
   'settings_history',

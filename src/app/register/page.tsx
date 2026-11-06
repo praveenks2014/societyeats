@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { Button, Field, Input, Select, Textarea } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { DisclaimerClient } from '@/components/disclaimer-client';
 
 function RegisterForm() {
   const router = useRouter();
@@ -80,6 +81,7 @@ function RegisterForm() {
   return (
     <div className="mx-auto mt-10 max-w-sm">
       <h1 className="text-2xl font-bold">Join PadosiPlate</h1>
+      <DisclaimerClient id="marketplace" className="mt-3" />
       <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-rice-deep p-1.5">
         {(['buyer', 'seller'] as const).map((r) => (
           <button

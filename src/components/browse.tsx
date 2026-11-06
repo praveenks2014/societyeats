@@ -6,6 +6,7 @@ import { DishCard } from '@/components/dish-card';
 import { CartBar } from '@/components/cart-bar';
 import { useLocation } from '@/components/providers';
 import type { ListingCard } from '@/lib/browse';
+import { DisclaimerClient } from '@/components/disclaimer-client';
 
 export function Browse() {
   const { loc, openPicker } = useLocation();
@@ -57,6 +58,7 @@ export function Browse() {
 
   return (
     <section id="browse">
+      <DisclaimerClient id="pricing" className="mb-2" />
       {/* sticky search + filters */}
       <div className="sticky top-14 z-30 -mx-4 bg-rice/90 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6">
         {hasSociety && (

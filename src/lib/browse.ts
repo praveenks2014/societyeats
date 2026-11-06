@@ -332,9 +332,11 @@ export async function getListingDetail(id: number, loc?: GeoPoint | null) {
   const latestApplication = (await latestApplicationsBySeller([row.listing.sellerId])).get(row.listing.sellerId) ?? null;
 
   const gate = await kitchenGate(row.listing.sellerId);
+  const tierSettings = await getPlatformSettings();
 
   return {
     ...row,
+    fssaiTier: fssaiTier(row.profile, latestApplication, { deemedDays: tierSettings.fssaiDeemedGrantDaysRegistration, provisionalMaxDays: tierSettings.provisionalMaxDays }),
     /** False when the kitchen/dish is not currently orderable (shown as "unavailable"). */
     listable: gate.ok && row.listing.moderationStatus === 'approved' && row.listing.isActive,
     distanceKm,
@@ -404,6 +406,7 @@ export async function getKitchenProfile(sellerId: number) {
 
   return {
     ...row,
+    fssaiTier: fssaiTier(row.profile, latestApplication, { deemedDays: settings.fssaiDeemedGrantDaysRegistration, provisionalMaxDays: settings.provisionalMaxDays }),
     kitchenLive: gate.ok,
     activeListings: gate.ok ? activeListings : [],
     activeListingsHidden: !gate.ok,

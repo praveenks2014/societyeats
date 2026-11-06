@@ -4,6 +4,8 @@ import { getListingDetail } from '@/lib/browse';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { DEFAULTS } from '@/lib/config';
 import { DishDetail } from './dish-detail';
+import { DishFacts } from '@/components/dish-facts';
+import { Disclaimer } from '@/components/disclaimer';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +41,7 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
         : null;
 
   return (
+    <>
     <DishDetail
       listing={{
         id: detail.listing.id,
@@ -93,5 +96,8 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
       }))}
       slotSoldOut={detail.slotSoldOut}
     />
+    <DishFacts listing={detail.listing} provisional={detail.fssaiTier === 'provisional'} />
+    <Disclaimer id="pricing" className="mt-3" />
+    </>
   );
 }

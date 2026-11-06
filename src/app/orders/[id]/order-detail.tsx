@@ -9,6 +9,7 @@ import { COMPLETED_STATUSES, FINISHED_STATUSES, OrderTimeline, STATUS_META, Stat
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 import { COMPLAINT_CATEGORIES, COMPLAINT_OUTCOME_LABELS, type ComplaintCategory, type ComplaintOutcome } from '@/lib/complaints';
+import { DisclaimerClient } from '@/components/disclaimer-client';
 
 type FulfillmentType = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
 
@@ -155,6 +156,14 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
           upi={data.upi}
           onChanged={load}
         />
+      )}
+
+      {data.viewerIsBuyer && order.type === 'home_delivery' && (
+        <div className="mt-4 space-y-2" data-testid="order-disclaimers">
+          <DisclaimerClient id="pay-at-door" />
+          <DisclaimerClient id="off-platform" />
+          <DisclaimerClient id="cancellation" />
+        </div>
       )}
 
       {data.viewerIsBuyer && data.actions.includes('buyer_cancel') && <BuyerCancel orderId={order.id} status={order.status} onDone={load} />}

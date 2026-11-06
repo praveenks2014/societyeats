@@ -5,6 +5,7 @@ import { Badge, Button, Card, Input, Skeleton } from '@/components/ui';
 import { MockCheckoutSheet } from '@/components/mock-checkout';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
+import { DisclaimerClient } from '@/components/disclaimer-client';
 
 type Upi = { vpa: string; registeredName: string; payeeName: string; uri: string; qrSvg: string; amountInPaise: number };
 
@@ -74,6 +75,7 @@ export function AtDoorPaymentCard({
         {done ? <Badge tone="green">Paid</Badge> : status === 'payment_claimed' ? <Badge tone="amber">Waiting for kitchen</Badge> : status === 'payment_disputed' ? <Badge tone="red">Under review</Badge> : null}
       </div>
       <div className="mt-2 text-2xl font-bold" data-testid="door-amount">{formatINR(foodTotalInPaise)}</div>
+      {upi && <DisclaimerClient id="qr-check" vars={{ 'registered name': upi.registeredName }} className="mt-2" />}
 
       {status === 'at_door' && (
         <>
@@ -243,6 +245,7 @@ export function OrderThread({ orderId, onRefund }: { orderId: number; onRefund?:
           </button>
         )}
       </div>
+      <DisclaimerClient id="chat" className="mt-2" />
       <div className="mt-2 max-h-64 space-y-2 overflow-y-auto" aria-live="polite">
         {t.messages.length === 0 && <p className="py-3 text-center text-xs text-ink-faint">No messages yet. Names and phone numbers stay private.</p>}
         {t.messages.map((m) => (

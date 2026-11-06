@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getKitchenProfile } from '@/lib/browse';
 import { KitchenProfile } from './kitchen-client';
+import { Disclaimer } from '@/components/disclaimer';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,7 @@ export default async function KitchenPage({ params }: { params: Promise<{ id: st
   if (!kitchen) notFound();
 
   return (
+    <>
     <KitchenProfile
       seller={{
         id: kitchen.seller.id,
@@ -67,5 +69,10 @@ export default async function KitchenPage({ params }: { params: Promise<{ id: st
         sellerReplyText: r.review.sellerReplyText,
       }))}
     />
+    <div className="mt-4 space-y-2">
+      <Disclaimer id="marketplace" />
+      {kitchen.fssaiTier === 'provisional' && <Disclaimer id="fssai-provisional" />}
+    </div>
+    </>
   );
 }

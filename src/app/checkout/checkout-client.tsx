@@ -9,6 +9,7 @@ import '@/components/razorpay';
 import { useCart, useLocation, useToast } from '@/components/providers';
 import { formatINR, quoteOrder, type FeeConfig } from '@/lib/money';
 import { formatDistance } from '@/lib/geo';
+import { DisclaimerClient } from '@/components/disclaimer-client';
 
 type FulfillmentType = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
 
@@ -314,8 +315,14 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
             <li>The kitchen cooks and brings your food to your door (or you collect it).</li>
             <li>Only then do you pay <strong>{quote.kitchenName}</strong> the food amount by UPI{quote.acceptsCash ? ' or cash' : ''}. You&apos;ll see their QR at the door.</li>
           </ol>
+          <DisclaimerClient id="pay-at-door" className="mt-2" />
         </Card>
       )}
+      <div className="mt-3 space-y-2" data-testid="checkout-disclaimers">
+        <DisclaimerClient id="pricing" />
+        <DisclaimerClient id="cancellation" />
+        <p className="text-xs text-ink-faint"><Link href="/legal/terms#liability" className="inline-flex min-h-[44px] items-center underline">Limit of liability</Link></p>
+      </div>
 
       {/* bill — two clearly separate parts */}
       {isDelivery ? (
