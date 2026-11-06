@@ -13,7 +13,7 @@ export const GET = api(async () => {
   const session = await requireSession(['seller']);
   const c = await kitchenChecklist(session.uid);
   if (!c) throw new ApiError(404, 'Seller profile not found');
-  return ok({ items: c.items, requestReady: c.requestReady, state: c.state, reviewNote: c.reviewNote, live: c.gate.ok, gateReasons: c.gate.reasons });
+  return ok({ items: c.items, requestReady: c.requestReady, requiredCount: c.requiredCount, state: c.state, reviewNote: c.reviewNote, live: c.gate.ok, gateReasons: c.gate.reasons });
 });
 
 /** Submit (or resubmit after "changes requested") the listing request for admin review. */

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Skeleton } from '@/components/ui';
 import { MockCheckoutSheet } from '@/components/mock-checkout';
 import '@/components/razorpay';
@@ -30,12 +30,17 @@ export default function PaymentDetailsPage() {
   const [start, setStart] = useState<Start | null>(null);
   const [sheet, setSheet] = useState(false);
 
+  const seeded = useRef(false);
   const load = useCallback(async () => {
     const r = await fetch('/api/seller/payment-details');
     const data: Details = await r.json();
     setD(data);
-    setVpa(data.upiVpa ?? '');
-    setCash(data.acceptsCash);
+    // Only the first load seeds the form: a later (or StrictMode-duplicated) load must never overwrite what the seller is typing.
+    if (!seeded.current) {
+      seeded.current = true;
+      setVpa(data.upiVpa ?? '');
+      setCash(data.acceptsCash);
+    }
   }, []);
   useEffect(() => {
     load();
@@ -48,6 +53,7 @@ export default function PaymentDetailsPage() {
     setBusy(false);
     if (!res.ok) return toast(body.error || 'Could not save', 'err');
     toast(body.needsVerification ? 'Saved — now verify it with the ₹1 check' : 'Saved ✅');
+    seeded.current = false;
     load();
   }
 

@@ -389,7 +389,7 @@ export const fssaiApplications = pgTable('fssai_applications', {
   filingMode: fssaiFilingModeEnum('filing_mode').notNull().default('facilitator'),
   // Phase 1 Pilot: the Form A (Basic Registration) answers collected by the assistant.
   formAJson: jsonb('form_a_json').$type<{
-    eligibility: { sales: 'under_12l' | '12l_to_20cr' | 'above_20cr'; homeKitchen: boolean; onlyTelangana: boolean };
+    eligibility: { sales: 'up_to_1_5cr' | '1_5cr_to_50cr' | 'above_50cr'; homeKitchen: boolean; onlyTelangana: boolean };
     foodCategories: string[];
     years: number;
     feeInPaise: number;

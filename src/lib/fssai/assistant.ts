@@ -5,7 +5,12 @@
  * application themselves on foscos.fssai.gov.in and pay government fees
  * directly to FSSAI. We never ask for or store FoSCoS passwords/OTPs.
  */
-export type SalesBand = 'under_12l' | '12l_to_20cr' | 'above_20cr';
+/**
+ * 2026 thresholds (FSS Licensing & Registration Amendment Regulations 2026; FSSAI order of 13 Mar 2026, effective 1 Apr 2026):
+ * Basic Registration covers annual turnover up to ₹1.5 crore (it was ₹12 lakh); a State licence covers ₹1.5 crore – ₹50 crore;
+ * above that, or for multi-state operation, a Central licence. Rules verified Nov 2026 — check FoSCoS for changes.
+ */
+export type SalesBand = 'up_to_1_5cr' | '1_5cr_to_50cr' | 'above_50cr';
 export type Eligibility = { sales: SalesBand; homeKitchen: boolean; onlyTelangana: boolean };
 
 export type EligibilityResult =
@@ -13,19 +18,24 @@ export type EligibilityResult =
   | { route: 'licence'; kind: 'state' | 'central'; title: string; message: string };
 
 export const SALES_LABELS: Record<SalesBand, string> = {
-  under_12l: 'Under ₹12 lakh a year',
-  '12l_to_20cr': '₹12 lakh – ₹20 crore a year',
-  above_20cr: 'Above ₹20 crore a year',
+  up_to_1_5cr: 'Up to ₹1.5 crore a year',
+  '1_5cr_to_50cr': '₹1.5 crore – ₹50 crore a year',
+  above_50cr: 'Above ₹50 crore a year',
 };
 
-/** Under ₹12 lakh + a home kitchen selling only within Telangana → Basic Registration (Form A); everything else needs a licence. */
+export const RULES_VERIFIED_NOTE = 'Rules verified Nov 2026; check FoSCoS for changes.';
+/** Shown at every step of the assistant and on the compliance page. */
+export const ANTI_SCAM_NOTICE =
+  'PadosiPlate never charges for FSSAI and never files for you. Never pay agents claiming to “fast-track” your registration — the only fee is the government fee, paid on the official FoSCoS portal.';
+
+/** Up to ₹1.5 crore + a home kitchen selling only within Telangana → Basic Registration (Form A); everything else needs a licence. */
 export function checkEligibility(e: Eligibility): EligibilityResult {
-  if (e.sales === 'under_12l' && e.homeKitchen && e.onlyTelangana) {
-    return { route: 'form_a', title: 'FSSAI Basic Registration (Form A)', message: 'Good news — a home kitchen with sales under ₹12 lakh selling within Telangana can apply for Basic Registration using Form A. We’ll prepare everything for you to file.' };
+  if (e.sales === 'up_to_1_5cr' && e.homeKitchen && e.onlyTelangana) {
+    return { route: 'form_a', title: 'FSSAI Basic Registration (Form A)', message: 'Good news — a home kitchen with sales up to ₹1.5 crore selling within Telangana can apply for Basic Registration using Form A. We’ll prepare everything for you to file.' };
   }
-  const central = e.sales === 'above_20cr' || !e.onlyTelangana;
+  const central = e.sales === 'above_50cr' || !e.onlyTelangana;
   const why: string[] = [];
-  if (e.sales !== 'under_12l') why.push(`annual food sales of ${SALES_LABELS[e.sales].toLowerCase()}`);
+  if (e.sales !== 'up_to_1_5cr') why.push(`annual food sales of ${SALES_LABELS[e.sales].toLowerCase()}`);
   if (!e.homeKitchen) why.push('operating outside a home kitchen');
   if (!e.onlyTelangana) why.push('selling beyond Telangana');
   return {
@@ -68,7 +78,7 @@ export const DECLARATIONS = [
 export const MIN_YEARS = 1;
 export const MAX_YEARS = 5;
 
-/** Government fee for Basic Registration: ₹/year × years (default ₹100/year), in paise. */
+/** Government fee for Basic Registration: ₹/year × years (₹100/year), in paise. Paid ONLY on the FoSCoS portal — never to PadosiPlate. */
 export function basicRegistrationFeePaise(years: number, perYearRupees: number): number {
   if (!Number.isInteger(years) || years < MIN_YEARS || years > MAX_YEARS) throw new RangeError(`years must be ${MIN_YEARS}–${MAX_YEARS}`);
   return perYearRupees * 100 * years;
@@ -88,7 +98,7 @@ export type FormAAnswers = {
 
 /** Validates wizard input; returns the first problem or null. */
 export function validateFormA(a: Partial<FormAAnswers>): string | null {
-  if (!a.eligibility || checkEligibility(a.eligibility).route !== 'form_a') return 'Basic Registration (Form A) is only for home kitchens under ₹12 lakh selling within Telangana';
+  if (!a.eligibility || checkEligibility(a.eligibility).route !== 'form_a') return 'Basic Registration (Form A) is only for home kitchens with sales up to ₹1.5 crore selling within Telangana';
   if (!Array.isArray(a.foodCategories) || a.foodCategories.length === 0) return 'Choose at least one food category';
   if (a.foodCategories.some((c) => !(FOOD_CATEGORIES as readonly string[]).includes(c))) return 'Unknown food category';
   if (!Number.isInteger(a.years) || (a.years as number) < MIN_YEARS || (a.years as number) > MAX_YEARS) return `Choose 1–5 years`;

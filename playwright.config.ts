@@ -16,6 +16,9 @@ const chromium = process.env.PW_CHROMIUM_PATH || (fs.existsSync('/opt/pw-browser
  */
 export default defineConfig({
   testDir: './tests/e2e',
+  globalSetup: './tests/e2e/global-setup.ts',
+  // Artifacts live outside the project: Turbopack's dev server full-reloads pages when files in the tree change, and Playwright clears this folder at start.
+  outputDir: path.join(os.tmpdir(), 'padosiplate-pw-results'),
   fullyParallel: false,
   workers: 1,
   timeout: 90_000,

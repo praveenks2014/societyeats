@@ -306,7 +306,7 @@ function SubmitCard({ list, onDone }: { list: Checklist; onDone: () => void }) {
 
 function Chip({ on, onClick, children, radio }: { on: boolean; onClick: () => void; children: React.ReactNode; radio?: boolean }) {
   return (
-    <button type="button" role={radio ? 'radio' : 'checkbox'} aria-checked={on} onClick={onClick} className={`min-h-[44px] rounded-pill border-2 px-4 text-sm font-medium transition-colors ${on ? 'border-leaf bg-leaf text-white' : 'border-rice-line bg-white text-ink-soft'}`}>
+    <button type="button" role={radio ? 'radio' : 'checkbox'} aria-checked={on} data-testid={`chip-${String(children)}`} onClick={onClick} className={`min-h-[44px] rounded-pill border-2 px-4 text-sm font-medium transition-colors ${on ? 'border-leaf bg-leaf text-white' : 'border-rice-line bg-white text-ink-soft'}`}>
       {children}
     </button>
   );

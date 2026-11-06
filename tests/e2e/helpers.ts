@@ -1,5 +1,9 @@
 import { expect, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import zlib from 'node:zlib';
+import { totpAt } from '../../src/lib/auth/totp';
 
 export const ADMIN_EMAIL = 'e2e-admin@example.com';
 export const ADMIN_FIRST_PASSWORD = 'E2e-first-pass-1';
@@ -65,7 +69,7 @@ export async function api(request: APIRequestContext, method: 'get' | 'post' | '
 }
 
 export async function register(request: APIRequestContext, u: { phone: string; email: string; name: string; role?: 'buyer' | 'seller'; code?: string; kitchenName?: string }) {
-  const r = await api(request, 'post', '/api/auth/register', { password: 'Sturdy-pass-42', inviteCode: u.code ?? 'E2E-ONE', role: u.role ?? 'buyer', ...u });
+  const r = await api(request, 'post', '/api/auth/register', { password: 'Sturdy-pass-42', inviteCode: u.code ?? 'E2E-ONE', role: u.role ?? 'buyer', age18: true, acceptTerms: true, tower: 'B', flat: '1204', ...u });
   expect(r.status, JSON.stringify(r.json)).toBe(200);
 }
 
@@ -88,4 +92,46 @@ export async function timeTravel(request: APIRequestContext, kind: 'subscription
 /** Pay through the styled mock Razorpay sheet (the "Pay ₹X (test)" button). */
 export async function payMockSheet(page: Page) {
   await page.getByRole('button', { name: /^Pay .* \(test\)$/ }).click();
+}
+
+// ---------- admin two-factor ----------
+const SECRET_FILE = path.join(os.tmpdir(), 'padosiplate-e2e-admin-totp.json');
+export function saveAdminTotp(secret: string) {
+  fs.writeFileSync(SECRET_FILE, JSON.stringify({ secret }));
+}
+export function adminTotpSecret(): string {
+  return JSON.parse(fs.readFileSync(SECRET_FILE, 'utf8')).secret;
+}
+/** A currently valid code (waits for the next 30-second window if the current one was already used for this account this step). */
+export const adminCode = () => totpAt(adminTotpSecret(), Date.now());
+
+/** Password login, then the TOTP step — a fresh admin context in one call. */
+export async function loginAdmin(browser: Browser): Promise<{ ctx: BrowserContext; page: Page }> {
+  const { ctx, page } = await newUserContext(browser);
+  await page.goto('/login');
+  await page.getByLabel('Email or phone number').fill(ADMIN_EMAIL);
+  await page.locator('input[type=password]').fill(ADMIN_PASSWORD);
+  await page.getByRole('button', { name: 'Log in' }).click();
+  await page.waitForURL(/\/auth\/2fa/);
+  await page.getByTestId('totp-code').fill(adminCode());
+  await page.getByTestId('verify-2fa').click();
+  await page.waitForURL(/\/admin/);
+  return { ctx, page };
+}
+
+export async function seedKitchen(request: APIRequestContext, b: { n: number; societyId?: number; fssai?: 'verified' | 'provisional'; price?: number; qty?: number; cash?: boolean }) {
+  const r = await api(request, 'post', '/api/dev/seed-kitchen', b);
+  expect(r.status, JSON.stringify(r.json)).toBe(200);
+  return r.json as { sellerId: number; email: string; dishId: number; kitchenName: string };
+}
+
+export async function orderAction(request: APIRequestContext, orderId: number, action: string, extra: Record<string, unknown> = {}) {
+  const r = await api(request, 'post', `/api/orders/${orderId}/action`, { action, ...extra });
+  expect(r.status, `${action}: ${JSON.stringify(r.json)}`).toBe(200);
+  return r.json;
+}
+
+export async function timeTravelOrder(request: APIRequestContext, kind: 'order_accept_deadline' | 'order_age', orderId: number, minutes = 0) {
+  const r = await api(request, 'post', '/api/dev/time-travel', { kind, orderId, minutes, sellerId: 0, days: 0 });
+  expect(r.status, JSON.stringify(r.json)).toBe(200);
 }

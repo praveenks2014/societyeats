@@ -205,7 +205,7 @@ function RegisterForm() {
           </label>
           <label className="flex min-h-[44px] items-start gap-3 text-sm">
             <input type="checkbox" className="mt-0.5 h-5 w-5 accent-leaf" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} data-testid="accept-terms" />
-            <span>I accept the <Link href="/legal/terms" className="font-semibold text-leaf underline" target="_blank">Terms</Link> and the <Link href="/legal/privacy" className="font-semibold text-leaf underline" target="_blank">Privacy Notice</Link>.</span>
+            <span>I accept the <Link href="/legal/terms" className="inline-flex min-h-[44px] items-center font-semibold text-leaf underline" target="_blank">Terms</Link> and the <Link href="/legal/privacy" className="inline-flex min-h-[44px] items-center font-semibold text-leaf underline" target="_blank">Privacy Notice</Link>.</span>
           </label>
         </div>
         <Button type="submit" size="lg" className="w-full" loading={busy} disabled={!age18 || !acceptTerms}>
