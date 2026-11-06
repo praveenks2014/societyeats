@@ -15,7 +15,7 @@ import { haversineKm, type GeoPoint } from '@/lib/geo';
 import { fssaiFiledEligible, isFssaiEligibleToPublish } from '@/lib/fssai/gate';
 import { fssaiTier, type FssaiTier } from '@/lib/fssai/tier';
 import { neighbourOrderCount, sellerBadgeTier, sellerCompletedOrderCount } from '@/lib/reputation';
-import { kitchenGate } from '@/lib/kitchen/gate';
+import { isClosedToday, kitchenGate } from '@/lib/kitchen/gate';
 import { buyerHandle } from '@/lib/handles';
 import { currentSlot, isSlotSoldOut, slotOrderCount } from '@/lib/slots';
 
@@ -408,6 +408,7 @@ export async function getKitchenProfile(sellerId: number) {
     ...row,
     fssaiTier: fssaiTier(row.profile, latestApplication, { deemedDays: settings.fssaiDeemedGrantDaysRegistration, provisionalMaxDays: settings.provisionalMaxDays }),
     kitchenLive: gate.ok,
+    closedToday: isClosedToday(row.profile.closedUntil),
     activeListings: gate.ok ? activeListings : [],
     activeListingsHidden: !gate.ok,
     sellerReviews,

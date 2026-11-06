@@ -32,6 +32,7 @@ export default async function KitchenPage({ params }: { params: Promise<{ id: st
   return (
     <>
     <KitchenProfile
+      closedToday={kitchen.closedToday}
       seller={{
         id: kitchen.seller.id,
         kitchenName: kitchen.profile.kitchenName,

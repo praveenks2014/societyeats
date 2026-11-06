@@ -48,7 +48,7 @@ type Props = {
   }[];
 };
 
-export function KitchenProfile({ seller, listings, reviews }: Props) {
+export function KitchenProfile({ seller, listings, reviews, closedToday = false }: Props & { closedToday?: boolean }) {
   return (
     <div className="mx-auto max-w-2xl pt-4">
       {seller.isFeatured && (
@@ -109,7 +109,11 @@ export function KitchenProfile({ seller, listings, reviews }: Props) {
       <section className="mt-8">
         <SectionTitle eyebrow="ON THE MENU" title={`Dishes from ${seller.kitchenName}`} />
         {listings.length === 0 ? (
+          closedToday ? (
+          <EmptyState emoji="🌙" title="Closed today" body="This kitchen is not taking orders today. It reopens tomorrow." />
+        ) : (
           <EmptyState emoji="🍳" title="Nothing on sale right now" body="Check back at the next meal slot." />
+        )
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {listings.map((d) => (

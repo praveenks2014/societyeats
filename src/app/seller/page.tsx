@@ -16,6 +16,7 @@ type Summary = {
     fssaiNumber: string | null;
     rating: number;
     ratingCount: number;
+    closedUntil: string | null;
   };
   fssaiDeemedGrant: { thresholdDays: number; daysElapsed: number; daysRemaining: number | null; eligible: boolean } | null;
   subscription: { status: string; daysLeft: number | null; inGrace: boolean; endsAt: string | null };
@@ -36,6 +37,15 @@ export default function SellerDashboard() {
     fetch('/api/seller/listing-request').then((r) => r.json()).then(setReq).catch(() => {});
   };
   useEffect(load, []);
+
+  async function setClosed(closed: boolean) {
+    setBusy(true);
+    const res = await fetch('/api/seller/closed-today', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ closed }) });
+    setBusy(false);
+    if (!res.ok) return toast('Could not update', 'err');
+    toast(closed ? 'Closed for today. You reopen at midnight.' : 'You are open again ✅');
+    load();
+  }
 
   async function submit() {
     setBusy(true);
@@ -69,6 +79,18 @@ export default function SellerDashboard() {
         {profile.fssaiStatus === 'awaiting_admin_check' && <Badge tone="amber">Verification in progress</Badge>}
         <Badge tone={req.live ? 'green' : 'neutral'}>{req.live ? 'Live to neighbours' : 'Not live yet'}</Badge>
       </div>
+
+      {req.live || (data.profile.closedUntil && new Date(data.profile.closedUntil) > new Date()) ? (
+        <Card className="mt-4 flex items-center justify-between gap-3 p-4" data-testid="closed-today-card">
+          <div className="text-sm">
+            <div className="font-semibold">{data.profile.closedUntil && new Date(data.profile.closedUntil) > new Date() ? 'Closed today' : 'Open for orders'}</div>
+            <div className="text-xs text-ink-faint">{data.profile.closedUntil && new Date(data.profile.closedUntil) > new Date() ? 'Buyers see “Closed today”. You reopen automatically at midnight.' : 'Not cooking today? Close the kitchen so you do not miss orders.'}</div>
+          </div>
+          <Button size="sm" variant="secondary" loading={busy} onClick={() => setClosed(!(data.profile.closedUntil && new Date(data.profile.closedUntil) > new Date()))} data-testid="closed-today-toggle">
+            {data.profile.closedUntil && new Date(data.profile.closedUntil) > new Date() ? 'Reopen now' : 'Not taking orders today'}
+          </Button>
+        </Card>
+      ) : null}
 
       {/* onboarding checklist → listing request */}
       {!req.live && (

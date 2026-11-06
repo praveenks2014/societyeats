@@ -43,6 +43,8 @@ export const SETTING_DEFS = {
   sellerConfirmPaymentHours: { kind: 'int', unit: 'count', min: 1, max: 72, def: 12, group: 'Orders', label: 'Kitchen payment-confirmation window (hours)', hint: 'If the kitchen neither confirms nor disputes a claimed payment in this time the order auto-completes.' },
   buyerLateCancelFeeRetained: { kind: 'bool', def: true, group: 'Orders', label: 'Keep the platform fee when a buyer cancels after acceptance' },
   strikeWindowDays: { kind: 'int', unit: 'days', min: 1, max: 365, def: 30, group: 'Orders', label: 'Strike window (days)', hint: 'Strikes count inside this rolling window.' },
+  sellerDeclineNudgeCount: { kind: 'int', unit: 'count', min: 1, max: 100, def: 5, group: 'Orders', label: 'Declines in the nudge window before admins are told', hint: 'A kitchen declining MORE than this many booked orders inside the window is flagged to admins (declines carry no strike).' },
+  sellerDeclineNudgeDays: { kind: 'int', unit: 'days', min: 1, max: 60, def: 7, group: 'Orders', label: 'Decline nudge window (days)' },
   sellerStrikeLimit: { kind: 'int', unit: 'count', min: 1, max: 50, def: 3, group: 'Orders', label: 'Kitchen strikes before auto-pause', hint: 'Reaching it pauses the kitchen and sends it to admin review.' },
   buyerLateCancelsBeforeStrike: { kind: 'int', unit: 'count', min: 1, max: 20, def: 3, group: 'Orders', label: 'Buyer late cancellations before a strike', hint: 'Cancelling after the kitchen accepted. Counted inside the strike window.' },
   buyerStrikeLimit: { kind: 'int', unit: 'count', min: 1, max: 50, def: 3, group: 'Orders', label: 'Buyer strikes before an ordering block' },

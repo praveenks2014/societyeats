@@ -357,6 +357,8 @@ export const sellerProfiles = pgTable('seller_profiles', {
   capOverrideJson: jsonb('cap_override_json').$type<{ maxOrdersPerDay?: number; maxFoodValuePerDayPaise?: number; maxFoodValueTotalPaise?: number; expiresAt?: string }>(),
   provisionalStartedAt: timestamp('provisional_started_at'),
   listingsPausedReason: varchar('listings_paused_reason', { length: 40 }),
+  // 'Not taking orders today': closed to buyers until this instant (next 00:00 IST), then reopens by itself.
+  closedUntil: timestamp('closed_until'),
   listingsPausedAt: timestamp('listings_paused_at'),
   foundingGrantedAt: timestamp('founding_granted_at'),
   fssaiAnnualFeeRemindedAt: timestamp('fssai_annual_fee_reminded_at'),

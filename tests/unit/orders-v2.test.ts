@@ -448,3 +448,52 @@ describe('platform fee', () => {
     expect((await q(50000, 10)).o.onlineChargeInPaise).toBe(2500);
   });
 });
+
+describe('A7: not taking orders today, and the decline nudge', () => {
+  test('closed today hides the kitchen and blocks booking; it reopens at the next 00:00 IST', async () => {
+    const { evaluateGate, isClosedToday } = await import('@/lib/kitchen/gate');
+    const { istStartOfDay, DAY_MS } = await import('@/lib/time');
+    const until = new Date(istStartOfDay().getTime() + DAY_MS);
+    expect(isClosedToday(until, new Date())).toBe(true);
+    expect(isClosedToday(until, new Date(until.getTime() + 1))).toBe(false);
+    expect(isClosedToday(null)).toBe(false);
+
+    const k = await makeLiveKitchen(db, { societyId, qty: 20 });
+    const { POST } = await import('@/app/api/seller/closed-today/route');
+    await loginAs(k.seller.id);
+    const r = await call(POST, jsonReq('/x', { closed: true }));
+    expect(r.status).toBe(200);
+    expect(new Date(r.json.closedUntil as string).getTime()).toBe(until.getTime());
+
+    const { kitchenGate } = await import('@/lib/kitchen/gate');
+    const g = await kitchenGate(k.seller.id);
+    expect(g.ok).toBe(false);
+    expect(g.checks.openToday).toBe(false);
+    expect(g.reasons.join()).toMatch(/Closed today/);
+    expect((await kitchenGate(k.seller.id, new Date(until.getTime() + 1000))).ok).toBe(true); // reopened by itself
+
+    const { createHomeOrder } = await import('@/lib/orders/create');
+    const buyer = await makeUser(db, 'buyer', { societyId });
+    await expect(createHomeOrder({ buyerId: buyer.id, sellerId: k.seller.id, items: [{ id: k.dish.id, qty: 1 }], fulfillmentType: 'self_pickup' })).rejects.toThrow();
+
+    await call(POST, jsonReq('/x', { closed: false }));
+    expect((await kitchenGate(k.seller.id)).ok).toBe(true);
+    void evaluateGate;
+  });
+
+  test('the 6th decline in 7 days nudges admins once; declines carry no strike', async () => {
+    const k = await makeLiveKitchen(db, { societyId, qty: 100 });
+    const admin = await makeUser(db, 'admin');
+    let nudges = 0;
+    for (let i = 0; i < 7; i++) {
+      const ctx = await booked({ kitchen: k, qty: 1 });
+      const r = await act(ctx, 'seller', 'seller_cancel', { reason: 'out of gas' });
+      expect(r.strike).toBe(false);
+      const inbox = await db.select().from(s.notifications).where(eq(s.notifications.userId, admin.id));
+      nudges = inbox.filter((n) => n.title === 'Kitchen declining many orders').length;
+      if (i < 5) expect(nudges).toBe(0);
+    }
+    expect(nudges).toBe(1);
+    expect((await db.select().from(s.strikes).where(eq(s.strikes.userId, k.seller.id))).length).toBe(0);
+  });
+});

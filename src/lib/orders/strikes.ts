@@ -1,4 +1,4 @@
-import { and, eq, gte, isNull, sql } from 'drizzle-orm';
+import { and, eq, gte, isNull, isNotNull, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { notify } from '@/lib/db/notify';
 import { getPlatformSettings } from '@/lib/db/platform';
@@ -58,4 +58,22 @@ export async function notifyAdmins(title: string, body: string, href: string): P
   const db = await getDb();
   const admins = await db.select({ id: users.id }).from(users).where(eq(users.role, 'admin'));
   for (const a of admins) await notify(a.id, title, body, href);
+}
+
+/**
+ * Declining a booked order costs no strike, but it counts against the kitchen's acceptance rate and a pattern is
+ * flagged: the moment declines in the window pass `sellerDeclineNudgeCount`, admins get one nudge (not one per decline).
+ */
+export async function maybeNudgeDeclines(sellerId: number, now: Date = new Date()): Promise<boolean> {
+  const db = await getDb();
+  const settings = await getPlatformSettings();
+  const since = new Date(now.getTime() - settings.sellerDeclineNudgeDays * DAY_MS);
+  const [r] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(orders)
+    .where(and(eq(orders.sellerId, sellerId), eq(orders.cancelledBy, 'seller'), isNull(orders.acceptedAt), isNotNull(orders.cancelledAt), gte(orders.cancelledAt, since)));
+  if (r.n !== settings.sellerDeclineNudgeCount + 1) return false; // exactly crossing the line: one nudge
+  const [kitchen] = await db.select({ name: sellerProfiles.kitchenName }).from(sellerProfiles).where(eq(sellerProfiles.userId, sellerId));
+  await notifyAdmins('Kitchen declining many orders', `${kitchen?.name ?? `Kitchen #${sellerId}`} declined ${r.n} booked orders in ${settings.sellerDeclineNudgeDays} days.`, `/admin/kitchens/${sellerId}`);
+  return true;
 }

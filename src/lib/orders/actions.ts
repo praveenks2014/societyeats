@@ -20,7 +20,7 @@ import {
   type OrderAction,
   type OrderStatus,
 } from './state';
-import { recordStrike, notifyAdmins } from './strikes';
+import { recordStrike, notifyAdmins, maybeNudgeDeclines } from './strikes';
 import { checkTdsThresholds } from './tds';
 
 export type ActionInput = {
@@ -189,6 +189,7 @@ export async function performOrderAction(orderId: number, input: ActionInput): P
       result.creditIssuedPaise = result.refundedFeePaise;
       await db.update(orders).set({ creditIssuedInPaise: result.refundedFeePaise }).where(eq(orders.id, orderId));
     }
+    if (cancelKind === 'seller_decline') await maybeNudgeDeclines(moved.sellerId!, now);
     if (policy.strike) {
       const userId = policy.strike.role === 'seller' ? moved.sellerId! : moved.buyerId;
       result.strike = await recordStrike({ userId, role: policy.strike.role, kind: policy.strike.kind, orderId, reason: moved.cancelReason ?? undefined }, now);
