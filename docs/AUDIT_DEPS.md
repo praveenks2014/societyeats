@@ -1,6 +1,6 @@
 # Dependency audit
 
-Goal: zero critical and zero high findings in `npm audit` (production and dev). Result: **0 critical, 0 high**, 10 moderate (listed below, all transitive/dev-only).
+Goal: zero critical and zero high findings in `npm audit` (production and dev). Result: **0 critical, 0 high**, 18 moderate (listed below).
 
 ## Before (2026-10-23, `npm audit`)
 
@@ -199,7 +199,9 @@ a different dependency.
 
 framer-motion 11.18.2 already declares React 19 as a peer and needed no change; razorpay, sharp, jose, zod and the other dependencies have no React/Next coupling. Node requirement is now `>=22.12` (vitest 5; Next 16 itself needs >=20.9), and `.replit` uses `nodejs-22`.
 
-## After (`npm audit`, re-run 2026-10-27)
+## After (`npm audit`, re-run 2026-11-06)
+
+A later pass found `follow-redirects 1.16.0–1.16.1` (GHSA-mrwp-f3q8-3g9p, high; path `razorpay → axios → follow-redirects`). `npm audit fix` moved it to 1.16.2 (lockfile only; no `package.json` change).
 
 ```
 # npm audit report
@@ -219,6 +221,40 @@ node_modules/@esbuild-kit/core-utils/node_modules/esbuild
       drizzle-kit  0.19.0 - 1.0.0-beta.1-fd8bfcc
       Depends on vulnerable versions of @esbuild-kit/esm-loader
       node_modules/drizzle-kit
+
+minimatch  7.0.0 - 11.0.0
+Severity: moderate
+minimatch has potential denial of service via globparts amplification - https://github.com/advisories/GHSA-g3hv-75wg-m249
+fix available via `npm audit fix --force`
+Will install eslint-config-next@15.5.29, which is a breaking change
+node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch
+  @typescript-eslint/typescript-estree  >=6.16.0
+  Depends on vulnerable versions of minimatch
+  node_modules/@typescript-eslint/typescript-estree
+    @typescript-eslint/parser  >=6.16.0
+    Depends on vulnerable versions of @typescript-eslint/typescript-estree
+    node_modules/@typescript-eslint/parser
+      @typescript-eslint/eslint-plugin  >=6.16.0
+      Depends on vulnerable versions of @typescript-eslint/parser
+      Depends on vulnerable versions of @typescript-eslint/type-utils
+      Depends on vulnerable versions of @typescript-eslint/utils
+      node_modules/@typescript-eslint/eslint-plugin
+      typescript-eslint  *
+      Depends on vulnerable versions of @typescript-eslint/eslint-plugin
+      Depends on vulnerable versions of @typescript-eslint/parser
+      Depends on vulnerable versions of @typescript-eslint/typescript-estree
+      Depends on vulnerable versions of @typescript-eslint/utils
+      node_modules/typescript-eslint
+        eslint-config-next  >=15.6.0-canary.0
+        Depends on vulnerable versions of typescript-eslint
+        node_modules/eslint-config-next
+    @typescript-eslint/type-utils  >=6.16.0
+    Depends on vulnerable versions of @typescript-eslint/typescript-estree
+    Depends on vulnerable versions of @typescript-eslint/utils
+    node_modules/@typescript-eslint/type-utils
+    @typescript-eslint/utils  >=6.16.0
+    Depends on vulnerable versions of @typescript-eslint/typescript-estree
+    node_modules/@typescript-eslint/utils
 
 uuid  <11.1.1
 Severity: moderate
@@ -242,7 +278,7 @@ node_modules/uuid
     Depends on vulnerable versions of teeny-request
     node_modules/retry-request
 
-10 moderate severity vulnerabilities
+18 moderate severity vulnerabilities
 
 To address issues that do not require attention, run:
   npm audit fix
@@ -254,8 +290,10 @@ Some issues need review, and may require choosing
 a different dependency.
 ```
 
-## Remaining moderate findings (not fixable without breaking changes or upstream releases)
+## Remaining moderate findings (0 critical, 0 high)
 
-- `esbuild <=0.24.2` via `drizzle-kit` → `@esbuild-kit/*` (dev-time CLI only; the dev-server request issue does not apply, drizzle-kit does not run a dev server).
-- `postcss-selector-parser <7.1.6` via `tailwindcss@3` → `postcss-nested` (build time only; the fix is Tailwind 4, a separate migration).
-- `uuid <11.1.1` via `@replit/object-storage` → `@google-cloud/storage` → `gaxios`/`teeny-request` (no upstream fix; only affects `uuid` v3/v5/v6 called with a caller-supplied buffer, which these packages do not do).
+| Package(s) | Path | Scope | Why it remains |
+| --- | --- | --- | --- |
+| `esbuild <=0.24.2`, `@esbuild-kit/core-utils`, `@esbuild-kit/esm-loader` | `drizzle-kit` → `@esbuild-kit/esm-loader` → `@esbuild-kit/core-utils` → `esbuild@0.18` | dev (migration CLI) | The advisory is about a dev server reachable from websites; drizzle-kit runs no dev server. The only "fix" npm offers is downgrading drizzle-kit to 0.18.1. |
+| `minimatch 7–11`, `typescript-eslint`, `@typescript-eslint/*` | `eslint-config-next@16` → `typescript-eslint` → `@typescript-eslint/typescript-estree` → `minimatch` | dev (lint) | ReDoS in glob parsing of patterns, not of untrusted input; the only "fix" is downgrading eslint-config-next to 15.5.29, which does not match Next 16. |
+| `uuid <11.1.1`, `gaxios`, `teeny-request`, `retry-request`, `@google-cloud/storage`, `@replit/object-storage` | `@replit/object-storage` → `@google-cloud/storage` → `teeny-request`/`gaxios` → `uuid@9` | production | No upstream fix. Affects `uuid` v3/v5/v6 called with a caller-supplied buffer, which these packages do not do. |
