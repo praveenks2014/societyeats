@@ -19,7 +19,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!session.totpEnabled || !session.mfaVerifiedAt) redirect('/auth/2fa?next=/admin');
   const settings = await getPlatformSettings();
   const unread = await adminUnreadCount();
-  const cron = await getCronStatus();
+  const cron = await getCronStatus(new Date(), Number(settings.cronStaleMinutes) * 60_000);
   return (
     <>
       <RoleNav
@@ -49,7 +49,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       )}
       {cron.stale && (
         <div className="mt-4 rounded-2xl bg-chili-tint px-4 py-3 text-sm font-medium text-chili-dark" role="alert" data-testid="cron-warning">
-          ⚠️ Scheduled jobs have not run {cron.lastRunAt ? `since ${cron.lastRunAt.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })} IST (over 3 hours)` : 'yet'}. Subscription expiry and grace, reminders, unpaid-order expiry and document retention are paused. Schedule <code>POST /api/cron/run</code> hourly — see the README (“Scheduled jobs on Autoscale”).
+          ⚠️ Scheduled jobs have not run {cron.lastRunAt ? `since ${cron.lastRunAt.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })} IST (over 15 minutes)` : 'yet'}. Subscription expiry and grace, reminders, unpaid-order expiry and document retention are paused. Schedule <code>POST /api/cron/run</code> every 5 minutes — see the README (“Scheduled jobs on Autoscale”).
         </div>
       )}
       <AdminReauth />

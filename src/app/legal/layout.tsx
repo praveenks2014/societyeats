@@ -13,6 +13,11 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
         <a href="/legal/refunds">Refund policy</a>
         <a href="/legal/privacy">Privacy</a>
         <a href="/legal/food-safety">Food safety</a>
+        <a href="/legal/grievance">Grievances</a>
+        <a href="/legal/prohibited-items">Prohibited items</a>
+        <a href="/legal/community-guidelines">Community guidelines</a>
+        <a href="/legal/how-ranking-works">How ranking works</a>
+        <a href="/legal/fssai-help">FSSAI help</a>
       </nav>
       <p className="mt-6 rounded-2xl bg-rice-deep px-4 py-3 text-xs">
         These pages are working drafts for the pilot and are not legal advice. Have counsel review before wider launch.

@@ -257,3 +257,18 @@ Every ambiguous call made while turning the codebase into the PadosiPlate pilot.
 - Turbopack is now the default for `next dev` and `next build`. The e2e database moved to the OS temp dir because Turbopack's dev server full-reloads pages when files in the project tree change.
 - verify-email posts its single-use token once (a ref guard) because React dev StrictMode runs effects twice.
 - zod 3 → 4.6.7: a new high advisory (memory exhaustion on oversized constrained collections) landed against zod <4.6.6. Only the error-option names changed in our schemas (`invalid_type_error`/`required_error`/`errorMap` → `error`).
+
+## Pilot v2
+
+- **Order status enum rewritten.** Migration `0015_pilot_v2.sql` is hand-patched to map old values (`placed→fee_pending`, `fee_paid→booked`, `out_for_delivery→on_the_way`) because drizzle-kit drops and recreates enums.
+- **Food money never touches the platform.** The buyer pays the kitchen's verified UPI at the door. The VPA, registered name and QR are shown only in `at_door`/`collected`/`payment_claimed`/`payment_disputed`, only to the buyer or an admin.
+- **Seller declines a booked order:** fee refunded plus equal credit, no strike. Seller cancels after accepting: refund, credit and a strike.
+- **TOTP is hand-written to RFC 6238** (no new dependency) with 10 hashed recovery codes, a 12 h non-sliding admin session and a 10-minute recent-MFA window for sensitive actions.
+- **Google sign-in never auto-links** to an existing email account.
+- **OTP stays for Mall orders only.** Home orders use pay-at-door.
+- **Founding kitchen** is granted as a `waived` 90-day subscription on approval. Reminders send only the tightest threshold (7, 3, 1 days).
+- **PAN** is AES-GCM encrypted at rest and returned masked.
+- **FSSAI** tier is derived, never stored. The Basic registration limit is ₹1.5 crore (2026 rules), and rules text carries "verified Nov 2026".
+- **E2E data and artifacts live in `os.tmpdir()`.** Turbopack full-reloads the page when files in the project tree change.
+- **Security headers** are applied to production builds only. CSP keeps `'unsafe-inline'` for scripts because Next injects inline bootstrap scripts; a nonce-based CSP is follow-up.
+- **Cron heartbeat** warns at `cronStaleMinutes` (default 15). Schedule `POST /api/cron/run` every 5 minutes.

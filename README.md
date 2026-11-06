@@ -60,6 +60,9 @@ Demo accounts (development only, password `demo1234`): buyer `9999999901`, selle
 | `STORAGE_ADAPTER` + `REPLIT_OBJECT_STORAGE_BUCKET` | yes on Autoscale | alternatives: `s3` (+ `S3_*`), `local` (dev only) |
 | `EMAIL_ADAPTER` + `RESEND_API_KEY` + `EMAIL_FROM` | for real e-mail | `mock` writes to the outbox only. Verification and reset links need real e-mail in the pilot |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | when `MOCK_MODE=false` | platform fees only |
+| `ADMIN_EMAILS` (pilot list) | yes | `praveenece.mit@gmail.com,rsaralipriya@gmail.com`; admins must enrol two-factor on first login |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional | enables "Continue with Google" (never auto-links an existing email account) |
+| `RAZORPAYX_ACCOUNT_NUMBER` | optional | needed only for the `razorpayx_rpd` UPI verification provider |
 | `DOC_ENCRYPTION_KEY` | optional | 32-byte hex key for the AES-GCM encryption of id/address-proof uploads (derived from `JWT_SECRET` when absent — set it separately so rotating `JWT_SECRET` does not orphan stored documents) |
 | `GEOCODE_API_KEY` | optional | society/kitchen geocoding; mock otherwise |
 | `FSSAI_VERIFY_API_KEY` | optional | live licence lookup; mock otherwise |
@@ -126,3 +129,10 @@ Do **not** add Razorpay Route, Smart Collect or anything that receives food mone
 ## Legal
 
 The legal pages under `/legal/*` are **drafts, to be reviewed by a lawyer**. `BRAND.gstin`, the registered address and the grievance officer are placeholders until you fill them in `/admin/settings`.
+
+## Pilot v2 operations
+
+- Cron: call `POST /api/cron/run` every 5 minutes (the admin banner appears after 15 minutes of silence; `/api/health` shows `cronAgeMinutes` and `mockMode`).
+- `npm run db:bootstrap` — production-safe setup. `npm run db:seed:demo` — demo data, refuses in production. `npm run db:backup` — gzip `pg_dump` into `./backups`.
+- Webhook events handled at `/api/webhooks/razorpay`: payments, refunds, `fund_account.validation.*` and the ₹1 UPI check orders.
+- Docs: [ADMIN_RUNBOOK](docs/ADMIN_RUNBOOK.md), [SELLER_GUIDE](docs/SELLER_GUIDE.md), [BUYER_FAQ](docs/BUYER_FAQ.md), [DECISIONS](DECISIONS.md#pilot-v2).
