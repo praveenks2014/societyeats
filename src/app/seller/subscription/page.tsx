@@ -83,6 +83,7 @@ export default function SubscriptionPage() {
   }
 
   if (!data) return <Skeleton className="mx-auto h-64 w-full max-w-2xl" />;
+  const founding = data.history.find((h) => h.planNameSnapshot === 'Founding kitchen' && h.effectiveStatus === 'waived');
   const renewing = ['active', 'waived', 'grace'].includes(data.status);
 
   return (
@@ -100,6 +101,7 @@ export default function SubscriptionPage() {
           <Badge tone={TONE[data.status] ?? 'neutral'}>{data.status === 'none' ? 'No plan' : data.status === 'waived' ? 'complimentary' : data.status}</Badge>
           {data.daysLeft != null && data.status !== 'expired' && <span className="text-sm text-ink-soft">{data.daysLeft} day(s) left</span>}
         </div>
+        {founding && <p className="mt-2 text-sm font-semibold text-leaf" data-testid="founding-status">Founding kitchen: free until {fmt(founding.endsAt)}</p>}
         {data.status === 'grace' && <p className="mt-2 text-sm text-turmeric-deep">Grace period: your dishes are still visible for {data.graceDays} days after expiry. Renew to avoid being hidden.</p>}
         {data.status === 'expired' && <p className="mt-2 text-sm text-chili-dark">Your dishes are hidden from buyers. Renewing restores them straight away.</p>}
         {renewing && <p className="mt-2 text-xs text-ink-faint">Renewing early stacks: the new period starts when the current one ends.</p>}

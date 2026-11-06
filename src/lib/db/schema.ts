@@ -566,6 +566,9 @@ export const orders = pgTable('orders', {
   // ---- Pilot v2 lifecycle ----
   // The VPA + UPI-verified registered name in force at booking. NEVER sent to the buyer before `at_door`.
   sellerVpaSnapshot: varchar('seller_vpa_snapshot', { length: 80 }),
+  // Platform-fee tax invoice number: PP/2026-27/000123, sequential and gap-free per financial year.
+  invoiceNumber: varchar('invoice_number', { length: 24 }).unique(),
+  invoiceIssuedAt: timestamp('invoice_issued_at'),
   sellerRegisteredNameSnapshot: varchar('seller_registered_name_snapshot', { length: 160 }),
   gstModeSnapshot: varchar('gst_mode_snapshot', { length: 30 }).notNull().default('unregistered'),
   bookedAt: timestamp('booked_at'),
@@ -1400,3 +1403,9 @@ export const menuPosts = pgTable(
   },
   (t) => [uniqueIndex('menu_posts_day_idx').on(t.sellerId, t.forDate)],
 );
+
+/** One row per financial year; `last` is the last invoice serial issued. Updated inside the issuing transaction, so a rollback gives the number back (gap-free). */
+export const invoiceCounters = pgTable('invoice_counters', {
+  fy: varchar('fy', { length: 7 }).primaryKey(),
+  last: integer('last').notNull().default(0),
+});

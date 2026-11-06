@@ -1,7 +1,7 @@
 import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { api, ApiError, ok, readJson } from '@/lib/api';
-import { requireSession } from '@/lib/auth';
+import { requireRecentMfa, requireSession } from '@/lib/auth';
 import { recordAudit } from '@/lib/audit';
 import { getDb } from '@/lib/db';
 import { getPlatformSettings } from '@/lib/db/platform';
@@ -38,11 +38,12 @@ const schema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('extend'), subscriptionId: z.number().int(), days: z.number().int().min(1).max(366), reason: z.string().trim().min(1, 'A reason is required').max(500) }),
   z.object({ action: z.literal('cancel'), subscriptionId: z.number().int(), reason: z.string().trim().min(1, 'A reason is required').max(500) }),
   z.object({ action: z.literal('refund'), subscriptionId: z.number().int(), amountInPaise: z.number().int().positive().optional(), reason: z.string().trim().min(1, 'A reason is required').max(500) }),
-  z.object({ action: z.literal('plan_save'), id: z.number().int().optional(), name: z.string().trim().min(2).max(80), durationMonths: z.number().int().min(1).max(12), pricePaise: z.number().int().min(100).max(10_000_000), active: z.boolean(), sort: z.number().int().min(0).max(999).optional() }),
+  z.object({ action: z.literal('plan_save'), id: z.number().int().optional(), name: z.string().trim().min(2).max(80), durationMonths: z.number().int().min(1).max(12), pricePaise: z.number().int().min(0).max(10_000_000), active: z.boolean(), sort: z.number().int().min(0).max(999).optional() }),
 ]);
 
 export const POST = api(async (req) => {
   const admin = await requireSession(['admin']);
+  requireRecentMfa(admin); // grants, refunds and plan prices move money: a fresh 2FA check every time
   const parsed = schema.safeParse(await readJson(req));
   if (!parsed.success) throw new ApiError(400, parsed.error.issues[0].message);
   const a = parsed.data;
@@ -58,6 +59,7 @@ export const POST = api(async (req) => {
       await recordAudit({ actorId: admin.uid, action: 'subscription.refund', targetType: 'subscription', targetId: a.subscriptionId, meta: { amount: a.amountInPaise, reason: a.reason } });
       return ok({ refund: await refundSubscriptionPayment({ subscriptionId: a.subscriptionId, amountInPaise: a.amountInPaise, reason: a.reason, adminId: admin.uid }) });
     case 'plan_save': {
+      if (a.active && a.pricePaise < 100) throw new ApiError(400, 'A purchasable plan must cost at least ₹1 (the Founding plan is granted, not sold, and stays inactive)');
       const values = { name: a.name, durationMonths: a.durationMonths, pricePaise: a.pricePaise, active: a.active, sort: a.sort ?? 0 };
       const [plan] = a.id ? await db.update(subscriptionPlans).set(values).where(eq(subscriptionPlans.id, a.id)).returning() : await db.insert(subscriptionPlans).values(values).returning();
       await recordAudit({ actorId: admin.uid, action: 'plan.save', targetType: 'plan', targetId: plan.id, meta: values });

@@ -20,6 +20,7 @@ import {
   type OrderAction,
   type OrderStatus,
 } from './state';
+import { ensureInvoiceNumber } from '@/lib/invoices/order-invoice';
 import { recordStrike, notifyAdmins, maybeNudgeDeclines } from './strikes';
 import { checkTdsThresholds } from './tds';
 
@@ -255,6 +256,7 @@ async function afterTransition(order: typeof orders.$inferSelect, action: OrderA
     case 'auto_complete':
     case 'resolve_paid':
       await buyer(`Order #${id} complete 🎉`, 'Thanks! Tell your neighbours — and rate the kitchen.');
+      await ensureInvoiceNumber(id).catch((e) => log.error('invoice.issue_failed', { orderId: id, err: e }));
       await maybeGrantReferralCredit({ id, buyerId: order.buyerId });
       if (order.sellerId) await checkTdsThresholds(order.sellerId);
       break;

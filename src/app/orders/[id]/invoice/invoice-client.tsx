@@ -4,10 +4,14 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Button, Card, Skeleton } from '@/components/ui';
 import { formatINR } from '@/lib/money';
+import { DisclaimerClient } from '@/components/disclaimer-client';
 
 type Invoice = {
   model: 'home' | 'mall';
-  invoiceNumber: string;
+  invoiceNumber: string | null;
+  pending?: boolean;
+  bestWithinHours?: number | null;
+  foodBill?: { issuedBy: string; fssaiLabel: string | null; fssaiNumber: string | null; paidDirectly: boolean; method: string | null; utr: string | null; status: string | null; billRef: string } | null;
   invoiceDate: string;
   isTaxInvoice: boolean;
   platform: { name: string; legalName: string; gstin: string; address: string };
@@ -102,7 +106,7 @@ export function InvoiceView({ orderId }: { orderId: number }) {
             <div className="text-sm font-bold uppercase tracking-wide">
               {data.isTaxInvoice ? 'Tax Invoice' : 'Bill'}
             </div>
-            <div className="mt-0.5 text-xs text-ink-faint">{data.invoiceNumber}</div>
+            <div className="mt-0.5 text-xs text-ink-faint" data-testid="invoice-number">{data.invoiceNumber ?? 'Number issued when the order completes'}</div>
             <div className="text-xs text-ink-faint">
               {new Date(data.invoiceDate).toLocaleDateString('en-IN', {
                 day: 'numeric',
@@ -134,11 +138,10 @@ export function InvoiceView({ orderId }: { orderId: number }) {
         {data.model === 'home' ? (
           <>
             <p className="mt-3 rounded-xl bg-rice px-3 py-2 text-xs text-ink-faint">
-              Order #{order.id}. This invoice is for {data.platform.name}&apos;s own service only — the platform fee. The food was
-              sold by <strong>{data.fulfilledBy.label}</strong> and paid to them directly
-              {order.foodPaymentMode === 'upi_now' ? ' by UPI' : order.foodPaymentMode === 'pay_at_pickup' ? ' at pickup' : ''}; it is not part of this invoice.
+              Order #{order.id}. <strong>Part 1</strong> is {data.platform.name}&apos;s own invoice for the platform fee. <strong>Part 2</strong> is the food bill issued by <strong>{data.fulfilledBy.label}</strong>, paid to them directly; it is not part of the platform&apos;s invoice.
             </p>
-            <div className="mt-4 ml-auto max-w-[320px] space-y-1 text-sm" data-testid="invoice-lines">
+            <div className="eyebrow mt-4" data-testid="part-1">PART 1 · PLATFORM-FEE TAX INVOICE ({data.platform.name.toUpperCase()})</div>
+            <div className="mt-2 ml-auto max-w-[320px] space-y-1 text-sm" data-testid="invoice-lines">
               <div className="flex justify-between">
                 <span className="text-ink-soft">Platform fee ({order.feeBps / 100}% of food)</span>
                 <span>{formatINR(order.platformFeeBeforeCreditInPaise)}</span>
@@ -157,8 +160,8 @@ export function InvoiceView({ orderId }: { orderId: number }) {
               )}
               {order.ecoGstInPaise > 0 && (
                 <>
-                  <div className="flex justify-between"><span className="text-ink-soft">CGST on food (e-commerce operator)</span><span>{formatINR(order.ecoCgstInPaise)}</span></div>
-                  <div className="flex justify-between"><span className="text-ink-soft">SGST on food (e-commerce operator)</span><span>{formatINR(order.ecoSgstInPaise)}</span></div>
+                  <div className="flex justify-between"><span className="text-ink-soft">CGST on food (Sec 9(5), paid via the platform)</span><span>{formatINR(order.ecoCgstInPaise)}</span></div>
+                  <div className="flex justify-between"><span className="text-ink-soft">SGST on food (Sec 9(5), paid via the platform)</span><span>{formatINR(order.ecoSgstInPaise)}</span></div>
                 </>
               )}
               <div className="flex justify-between border-t border-rice-line pt-1.5 text-base font-bold">
@@ -169,14 +172,21 @@ export function InvoiceView({ orderId }: { orderId: number }) {
                 <div className="flex justify-between text-leaf"><span>Refunded</span><span>−{formatINR(order.refundInPaise)}</span></div>
               )}
             </div>
-            <div className="mt-5 rounded-xl border border-dashed border-rice-line px-3 py-2 text-sm">
-              <div className="eyebrow mb-1">FOOD — PAID DIRECTLY TO {data.fulfilledBy.label.toUpperCase()}</div>
+            <div className="mt-5 rounded-xl border border-dashed border-rice-line px-3 py-2 text-sm" data-testid="food-bill">
+              <div className="eyebrow mb-1" data-testid="part-2">PART 2 · FOOD BILL ISSUED BY {data.fulfilledBy.label.toUpperCase()}</div>
+              <div className="text-xs text-ink-faint">{data.foodBill?.billRef}{data.foodBill?.fssaiLabel ? ` · ${data.foodBill.fssaiLabel}` : data.fulfilledBy.fssaiNumber ? ` · FSSAI ${data.fulfilledBy.fssaiNumber}` : ''}</div>
               {data.items.map((i, idx) => (
-                <div key={idx} className="flex justify-between text-ink-soft"><span>{i.title} × {i.qty}</span><span>{formatINR(i.amountInPaise)}</span></div>
+                <div key={idx} className="mt-1 flex justify-between text-ink-soft"><span>{i.title} × {i.qty}</span><span>{formatINR(i.amountInPaise)}</span></div>
               ))}
               {order.deliveryFeeInPaise > 0 && <div className="flex justify-between text-ink-soft"><span>Delivery (kept by the kitchen)</span><span>{formatINR(order.deliveryFeeInPaise)}</span></div>}
               <div className="mt-1 flex justify-between border-t border-rice-line pt-1 font-semibold"><span>Food total</span><span>{formatINR(order.foodTotalInPaise)}</span></div>
+              <p className="mt-2 text-xs text-ink-soft" data-testid="paid-directly">
+                Paid directly to the kitchen{data.foodBill?.method === 'cash' ? ' in cash' : data.foodBill?.method === 'upi' ? ' by UPI' : ''}
+                {data.foodBill?.utr ? <> · UTR {data.foodBill.utr}</> : null}
+                {data.foodBill?.status && !['confirmed', 'auto_confirmed'].includes(data.foodBill.status) ? ' · payment not yet confirmed by the kitchen' : ''}.
+              </p>
             </div>
+            {data.bestWithinHours ? <DisclaimerClient id="consume-by" vars={{ N: data.bestWithinHours }} className="mt-3" /> : null}
           </>
         ) : (
           <>
