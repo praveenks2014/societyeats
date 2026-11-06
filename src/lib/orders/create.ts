@@ -3,7 +3,7 @@ import { ApiError, otp4 } from '@/lib/api';
 import { assertBuyerCanOrder } from '@/lib/access';
 import { getDb } from '@/lib/db';
 import { getPlatformSettings } from '@/lib/db/platform';
-import { listings, orderEvents, orderItems, orders, referralCredits, sellerProfiles, societies, users, type DeliveryAddress } from '@/lib/db/schema';
+import { listings, orderEvents, orderItems, orders, referralCredits, sellerProfiles, societies, userBlocks, users, type DeliveryAddress } from '@/lib/db/schema';
 import { effectiveCaps, checkCaps, fssaiTierInfo } from '@/lib/fssai/tier';
 import { haversineKm, type GeoPoint } from '@/lib/geo';
 import { kitchenGate } from '@/lib/kitchen/gate';
@@ -50,6 +50,9 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
   if (input.scheduledFor && !settings.preOrdersEnabled) throw new ApiError(400, 'Pre-orders are not enabled');
   await assertLiveModeReady(settings);
 
+  // A kitchen that blocked this buyer in chat can refuse new orders from them.
+  const [blockedByKitchen] = await db.select({ id: userBlocks.id }).from(userBlocks).where(and(eq(userBlocks.blockerId, input.sellerId), eq(userBlocks.blockedId, input.buyerId)));
+  if (blockedByKitchen) throw new ApiError(403, 'This kitchen is not taking orders from you');
   const gate = await kitchenGate(input.sellerId);
   const profile = gate.profile;
   if (!profile || !gate.ok) throw new ApiError(400, 'This kitchen is not accepting orders right now');

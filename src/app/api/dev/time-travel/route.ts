@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
  */
 export const POST = api(async (req) => {
   if (process.env.NODE_ENV === 'production' || process.env.E2E !== 'true') throw new ApiError(404, 'Not found');
-  const body = await readJson<{ kind: 'subscription' | 'fssai_filed' | 'order_accept_deadline' | 'order_age'; sellerId: number; days: number; orderId?: number; minutes?: number }>(req);
+  const body = await readJson<{ kind: 'subscription' | 'fssai_filed' | 'order_accept_deadline' | 'order_age' | 'order_completed_ago'; sellerId: number; days: number; orderId?: number; minutes?: number }>(req);
   const db = await getDb();
   const shift = body.days * DAY_MS;
   if (body.kind === 'order_accept_deadline' && body.orderId) {
@@ -27,6 +27,11 @@ export const POST = api(async (req) => {
     const back = (d: Date | null) => (d ? new Date(d.getTime() - (body.minutes ?? 0) * 60_000) : d);
     if (o) await db.update(orders).set({ atDoorAt: back(o.atDoorAt), collectedAt: back(o.collectedAt), foodPaymentClaimedAt: back(o.foodPaymentClaimedAt) }).where(eq(orders.id, o.id));
     return ok({ jobs: await runScheduledJobs(new Date()) });
+  }
+  if (body.kind === 'order_completed_ago' && body.orderId) {
+    // Make the order look completed N minutes ago (chat read-only window).
+    await db.update(orders).set({ status: 'completed', completedAt: new Date(Date.now() - (body.minutes ?? 0) * 60_000) }).where(eq(orders.id, body.orderId));
+    return ok({ ok: true });
   }
   if (body.kind === 'subscription') {
     const subs = await db.select().from(kitchenSubscriptions).where(eq(kitchenSubscriptions.sellerId, body.sellerId));

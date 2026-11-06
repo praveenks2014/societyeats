@@ -69,6 +69,7 @@ export const SETTING_DEFS = {
   chatImagesEnabled: { kind: 'bool', def: true, group: 'Chat', label: 'Allow one image per chat message' },
   chatRetentionDays: { kind: 'int', unit: 'days', min: 30, max: 730, def: 180, group: 'Chat', label: 'Chat retention after order closure (days)' },
   chatReadOnlyHours: { kind: 'int', unit: 'count', min: 1, max: 720, def: 48, group: 'Chat', label: 'Chat stays open this many hours after completion' },
+  chatBadWords: { kind: 'text', def: 'fuck,shit,bitch,asshole,bastard,madarchod,behenchod,chutiya,bhosdi,randi,harami,gaandu,kutta,saala', maxLen: 2000, group: 'Chat', label: 'Abusive words (comma-separated)', hint: 'A message containing one triggers a warning before sending. Reports and strikes handle repeat abuse.' },
   chatMaxLength: { kind: 'int', unit: 'count', min: 100, max: 4000, def: 1000, group: 'Chat', label: 'Max characters per message' },
   // ---- pilot ----
   pilotSocietiesOnly: { kind: 'bool', def: true, group: 'Pilot', label: 'Invite-only pilot', hint: 'Only members of active pilot societies can browse, order or sell.' },

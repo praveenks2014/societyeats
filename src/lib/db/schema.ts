@@ -1113,6 +1113,8 @@ export const orderMessages = pgTable(
     body: text('body').notNull(),
     quickReplyKey: varchar('quick_reply_key', { length: 30 }),
     imageKey: varchar('image_key', { length: 120 }),
+    // Soft-filter findings kept with the message, e.g. ['payment_request'] — the recipient is shown the pay-at-door reminder.
+    flagsJson: jsonb('flags_json').$type<string[]>(),
     reportedAt: timestamp('reported_at'),
     reportedById: integer('reported_by_id').references(() => users.id),
     createdAt: timestamp('created_at').notNull().defaultNow(),

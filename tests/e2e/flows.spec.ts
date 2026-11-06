@@ -718,3 +718,65 @@ test('9b. founding-kitchen plan expiry: past ends_at + grace the listings hide a
   await expect(page.getByTestId('sub-status')).toContainText('active');
   expect(await inFeedAs()).toBe(true);
 });
+
+test('13. chat: live between two browsers, quick reply, soft-filter warning, report opens a grievance, read-only after 48 hours, admin read is gated and logged', async ({ browser, request }) => {
+  const k = await seedKitchen(request, { n: ++kitchenN });
+  const b = await newBuyer(browser, 13);
+  const { orderId } = await bookApi(b.page, { sellerId: k.sellerId, dishId: k.dishId, qty: 1, fulfillment: 'self_pickup' });
+  const { ctx: sctx, page: seller } = await newUserContext(browser);
+  await login(seller.request, k.email);
+
+  // the buyer opens the order; the kitchen opens its orders list and its chat
+  await b.page.goto(`/orders/${orderId}`);
+  const bChat = b.page.getByTestId('chat');
+  await expect(bChat).toBeVisible();
+  await seller.goto('/seller/orders');
+  await seller.getByTestId(`seller-order-${orderId}`).getByText(/Message buyer/).click();
+  const sChat = seller.getByTestId('chat');
+  await expect(sChat).toBeVisible();
+
+  // quick reply from the kitchen arrives in the buyer's browser without a reload (SSE)
+  await sChat.getByTestId('quick-at_gate').click();
+  await expect(bChat.getByText('At your gate')).toBeVisible({ timeout: 15_000 });
+
+  // the buyer types a payment request: warned first, nothing is sent until "Send anyway"
+  await bChat.getByTestId('chat-input').fill('please send ₹500 first');
+  await bChat.getByTestId('chat-send').click();
+  await expect(bChat.getByTestId('chat-warning')).toBeVisible();
+  expect((await orderJson(b.page, orderId)).order.id).toBe(orderId);
+  const before = (await api(b.page.request, 'get', `/api/orders/${orderId}/messages`)).json.messages.length;
+  expect(before).toBe(1); // only the kitchen's quick reply so far
+  await bChat.getByTestId('chat-send-anyway').click();
+  await expect(sChat.getByText('please send ₹500 first')).toBeVisible({ timeout: 15_000 });
+  // before the door, the recipient sees the pay-at-door reminder next to it
+  await expect(sChat.locator('[data-disclaimer="pay-at-door"]')).toBeVisible();
+
+  // a normal message needs no warning
+  await sChat.getByTestId('chat-input').fill('Order is almost ready');
+  await sChat.getByTestId('chat-send').click();
+  await expect(bChat.getByText('Order is almost ready')).toBeVisible({ timeout: 15_000 });
+
+  // the buyer reports the kitchen's message → a grievance ticket carries the message id
+  await bChat.getByText('Order is almost ready').locator('..').getByTestId('chat-report-msg').click();
+  await expect(bChat.getByText('reported')).toBeVisible();
+
+  // admin: opening the chat needs a reason + fresh 2FA, and is logged
+  const { ctx: actx, page: admin } = await loginAdmin(browser);
+  const gate = await api(admin.request, 'get', `/api/admin/chat/${orderId}`);
+  expect(gate.json.mayRead).toBe(true);
+  const noReason = await api(admin.request, 'post', `/api/admin/chat/${orderId}`, { reason: '' });
+  expect(noReason.status).toBe(400);
+  const read = await api(admin.request, 'post', `/api/admin/chat/${orderId}`, { reason: 'reported message review' });
+  expect(read.status, JSON.stringify(read.json)).toBe(200);
+  expect(read.json.messages.length).toBe(3);
+
+  // 48 hours after the order ends, the chat is read-only
+  await timeTravelOrder(request, 'order_completed_ago', orderId, 49 * 60);
+  await b.page.reload();
+  await expect(b.page.getByTestId('chat').getByText(/close 48 hours after an order ends/i)).toBeVisible();
+  await expect(b.page.getByTestId('chat-input')).toHaveCount(0);
+
+  await actx.close();
+  await sctx.close();
+  await b.ctx.close();
+});

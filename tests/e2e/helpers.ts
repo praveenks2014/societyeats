@@ -131,7 +131,7 @@ export async function orderAction(request: APIRequestContext, orderId: number, a
   return r.json;
 }
 
-export async function timeTravelOrder(request: APIRequestContext, kind: 'order_accept_deadline' | 'order_age', orderId: number, minutes = 0) {
+export async function timeTravelOrder(request: APIRequestContext, kind: 'order_accept_deadline' | 'order_age' | 'order_completed_ago', orderId: number, minutes = 0) {
   const r = await api(request, 'post', '/api/dev/time-travel', { kind, orderId, minutes, sellerId: 0, days: 0 });
   expect(r.status, JSON.stringify(r.json)).toBe(200);
 }

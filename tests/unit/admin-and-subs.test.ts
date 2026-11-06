@@ -324,51 +324,16 @@ describe('CSRF origin check (proxy)', () => {
   });
 });
 
-describe('buyer ↔ kitchen threads', () => {
-  test('handles only, quick replies, profanity & phone filters, read-only after 7 days, admin only with a complaint (audited), block', async () => {
-    const { readThread, postMessage, threadState, hasProfanity, blockOther } = await import('@/lib/messaging/order-thread');
-    const { createHomeOrder } = await import('@/lib/orders/create');
-    const { markOrderPaid } = await import('@/lib/payments');
-    const { seller, dish } = await makeLiveKitchen(db, { societyId });
-    const buyer = await makeUser(db, 'buyer', { societyId });
-    const r = await createHomeOrder({ buyerId: buyer.id, sellerId: seller.id, items: [{ id: dish.id, qty: 1 }], fulfillmentType: 'self_pickup' });
-    const { resolveSession } = await import('@/lib/auth');
-    const sess = async (u: number) => { await loginAs(u); const [row] = await db.select().from(s.sessions).where(eq(s.sessions.userId, u)); return (await resolveSession(row.id))!; };
-    const buyerS = await sess(buyer.id);
-    await expect(readThread(r.orderId, buyerS)).rejects.toMatchObject({ status: 404 }); // not open until the fee is paid
-    await markOrderPaid(r.orderId);
-    const sellerS = await sess(seller.id);
-    await postMessage(r.orderId, buyerS, { quickReplyKey: 'late5' });
-    await postMessage(r.orderId, sellerS, { body: 'No problem, see you soon' });
-    await expect(postMessage(r.orderId, buyerS, { body: 'call me on 9876543210' })).rejects.toMatchObject({ status: 400 });
-    await expect(postMessage(r.orderId, buyerS, { body: 'what the fuck' })).rejects.toMatchObject({ status: 400 });
-    expect(hasProfanity('you b1tch')).toBe(true);
-    expect(hasProfanity('scunthorpe class')).toBe(false);
-    const t = await readThread(r.orderId, buyerS);
-    expect(t.messages.map((m) => m.label)).toEqual([expect.stringMatching(/^Buyer #[A-Z]\d$/), expect.stringMatching(/^Kitchen: /)]);
-    const blob = JSON.stringify(t);
-    expect(blob).not.toContain(buyer.phone);
-    expect(blob).not.toContain(buyer.name);
-    // admin: blocked until a complaint exists, then audited
-    const adminS = await sess(admin.id);
-    await expect(readThread(r.orderId, adminS)).rejects.toMatchObject({ status: 403 });
-    await db.insert(s.complaints).values({ orderId: r.orderId, buyerId: buyer.id, sellerId: seller.id, category: 'quality', description: 'x' });
-    await readThread(r.orderId, adminS);
-    expect((await db.select().from(s.auditLog).where(eq(s.auditLog.action, 'thread.read'))).length).toBe(1);
-    await expect(postMessage(r.orderId, adminS, { body: 'hi' })).rejects.toMatchObject({ status: 403 });
-    // read-only 7 days after completion
-    const done = new Date('2026-01-01T00:00:00Z');
-    expect(threadState({ status: 'picked_up', completedAt: done, updatedAt: done }, new Date('2026-01-07T23:00:00Z')).open).toBe(true);
-    expect(threadState({ status: 'picked_up', completedAt: done, updatedAt: done }, new Date('2026-01-08T00:00:01Z')).open).toBe(false);
-    // block
-    await blockOther(r.orderId, sellerS);
-    await expect(postMessage(r.orderId, buyerS, { body: 'hello?' })).rejects.toMatchObject({ status: 403 });
-  });
-});
-
 describe('revenue report and CSV', () => {
   test('sums platform fee + subscription revenue and counts risk items', async () => {
     const { revenueReport, revenueCsv } = await import('@/lib/revenue');
+    // own data: one paid order (this test used to rely on an earlier chat test creating it)
+    const { createHomeOrder } = await import('@/lib/orders/create');
+    const { markOrderPaid } = await import('@/lib/payments');
+    const k = await makeLiveKitchen(db, { societyId });
+    const b = await makeUser(db, 'buyer', { societyId });
+    const placed = await createHomeOrder({ buyerId: b.id, sellerId: k.seller.id, items: [{ id: k.dish.id, qty: 1 }], fulfillmentType: 'self_pickup' });
+    await markOrderPaid(placed.orderId);
     const r = await revenueReport('30d');
     expect(r.fee.orders).toBeGreaterThan(0);
     expect(r.subscriptions.count).toBeGreaterThan(0);

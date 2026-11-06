@@ -54,12 +54,17 @@ const NEEDS_ACTION = ['booked', 'paid', 'payment_claimed', 'at_door', 'collected
 
 export default function SellerOrders() {
   const [orders, setOrders] = useState<SellerOrder[] | null>(null);
+  const [unread, setUnread] = useState<Record<number, number>>({});
   const toast = useToast();
 
   const load = useCallback(() => {
     fetch('/api/seller/orders')
       .then((r) => r.json())
       .then((d) => setOrders(d.orders))
+      .catch(() => {});
+    fetch('/api/chat/unread')
+      .then((r) => (r.ok ? r.json() : { byOrder: {} }))
+      .then((d) => setUnread(d.byOrder ?? {}))
       .catch(() => {});
   }, []);
 
@@ -93,7 +98,7 @@ export default function SellerOrders() {
         ) : (
           <div className="space-y-3">
             {needsAction.map((o) => (
-              <OrderCard key={o.id} order={o} onReload={load} toast={toast} />
+              <OrderCard key={o.id} order={o} onReload={load} toast={toast} unread={unread[o.id] ?? 0} />
             ))}
           </div>
         )}
@@ -106,7 +111,7 @@ export default function SellerOrders() {
         ) : (
           <div className="space-y-3">
             {inProgress.map((o) => (
-              <OrderCard key={o.id} order={o} onReload={load} toast={toast} />
+              <OrderCard key={o.id} order={o} onReload={load} toast={toast} unread={unread[o.id] ?? 0} />
             ))}
           </div>
         )}
@@ -119,7 +124,7 @@ export default function SellerOrders() {
         ) : (
           <div className="space-y-3">
             {past.slice(0, 10).map((o) => (
-              <OrderCard key={o.id} order={o} onReload={load} toast={toast} />
+              <OrderCard key={o.id} order={o} onReload={load} toast={toast} unread={unread[o.id] ?? 0} />
             ))}
           </div>
         )}
@@ -128,7 +133,7 @@ export default function SellerOrders() {
   );
 }
 
-function OrderCard({ order, onReload, toast }: { order: SellerOrder; onReload: () => void; toast: (t: string, k?: 'ok' | 'err') => void }) {
+function OrderCard({ order, onReload, toast, unread = 0 }: { order: SellerOrder; onReload: () => void; toast: (t: string, k?: 'ok' | 'err') => void; unread?: number }) {
   const fMeta = FULFILLMENT_META[order.fulfillmentType];
   const [chat, setChat] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -211,7 +216,7 @@ function OrderCard({ order, onReload, toast }: { order: SellerOrder; onReload: (
       {!finished && (
         <div className="mt-2">
           <button className="min-h-[44px] text-xs font-semibold text-leaf underline" onClick={() => setChat((c) => !c)}>
-            {chat ? 'Hide messages' : '💬 Message buyer'}
+            {chat ? 'Hide messages' : `💬 Message buyer${unread > 0 ? ` (${unread} new)` : ''}`}
           </button>
           {chat && <OrderThread orderId={order.id} />}
         </div>

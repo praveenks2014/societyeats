@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { DisclaimerText } from '@/components/disclaimer';
+import { DisclaimerText } from '@/components/disclaimer-text';
 import { DISCLAIMER_DEFAULTS, type DisclaimerId } from '@/lib/disclaimers/defs';
 import { fillDisclaimer } from '@/lib/disclaimers/fill';
 
