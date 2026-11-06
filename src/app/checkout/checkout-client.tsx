@@ -9,6 +9,7 @@ import '@/components/razorpay';
 import { useCart, useLocation, useToast } from '@/components/providers';
 import { formatINR, quoteOrder, type FeeConfig } from '@/lib/money';
 import { formatDistance } from '@/lib/geo';
+import { FssaiLabel } from '@/components/fssai-label';
 import { DisclaimerClient } from '@/components/disclaimer-client';
 
 type FulfillmentType = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
@@ -236,6 +237,7 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
   return (
     <div className="mx-auto max-w-lg pt-6">
       <h1 className="text-2xl font-bold">Checkout</h1>
+      {vendor?.kind === 'seller' && <FssaiLabel sellerId={vendor.id} className="mt-1" />}
       <p className="text-sm text-ink-soft">
         {isDelivery ? `Order from ${vendor?.name}` : `Counter pickup · ${vendor?.name}`}
       </p>

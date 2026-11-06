@@ -15,6 +15,7 @@ export type FssaiTier = 'none' | 'applied' | 'provisional' | 'verified' | 'block
 
 type Profile = Pick<typeof sellerProfiles.$inferSelect, 'fssaiStatus'> & {
   fssaiExpiry?: string | null;
+  fssaiBlockedReason?: string | null;
   provisionalStartedAt?: Date | null;
 };
 type Application = Pick<typeof fssaiApplications.$inferSelect, 'status' | 'foscosRefNumber' | 'filedAt' | 'licenseType'> | null;
@@ -42,6 +43,8 @@ export function fssaiTierInfo(profile: Profile, app: Application, opts: TierOpti
   const now = opts.now ?? new Date();
   const none = (tier: FssaiTier, reason: string): TierInfo => ({ tier, provisionalSince: null, provisionalEndsAt: null, reason });
 
+  // An admin block overrides everything else (e.g. a certificate found to be forged).
+  if (profile.fssaiBlockedReason) return none('blocked', `FSSAI blocked by PadosiPlate: ${profile.fssaiBlockedReason}`);
   if (profile.fssaiStatus === 'verified') {
     // Registrations are perpetual; only a certificate that shows an explicit expiry date can lapse.
     if (profile.fssaiExpiry && profile.fssaiExpiry < istDateString(now)) return none('blocked', 'FSSAI certificate expired');

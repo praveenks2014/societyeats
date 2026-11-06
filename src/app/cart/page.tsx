@@ -6,6 +6,7 @@ import { Button, EmptyState, VegDot } from '@/components/ui';
 import { FoodImage } from '@/components/food-image';
 import { useCart } from '@/components/providers';
 import { formatINR } from '@/lib/money';
+import { FssaiLabel } from '@/components/fssai-label';
 import { PriceLines } from '@/components/price-lines';
 import { DisclaimerClient } from '@/components/disclaimer-client';
 
@@ -32,6 +33,7 @@ export default function CartPage() {
     <div className="mx-auto max-w-lg pt-6">
       <div className="eyebrow">YOUR BASKET FROM</div>
       <h1 className="mt-1 text-2xl font-bold">{vendor?.name}</h1>
+      {vendor?.kind === 'seller' && <FssaiLabel sellerId={vendor.id} className="mt-1" />}
       {vendor?.kind === 'restaurant' && vendor.counterNumber && (
         <p className="text-sm text-ink-soft">Counter {vendor.counterNumber} · pickup order</p>
       )}

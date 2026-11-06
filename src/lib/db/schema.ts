@@ -359,6 +359,9 @@ export const sellerProfiles = pgTable('seller_profiles', {
   listingsPausedReason: varchar('listings_paused_reason', { length: 40 }),
   // 'Not taking orders today': closed to buyers until this instant (next 00:00 IST), then reopens by itself.
   closedUntil: timestamp('closed_until'),
+  // Admin FSSAI block: while set, the kitchen's tier is 'blocked' (hidden) whatever its application says.
+  fssaiBlockedReason: varchar('fssai_blocked_reason', { length: 200 }),
+  fssaiBlockedAt: timestamp('fssai_blocked_at'),
   listingsPausedAt: timestamp('listings_paused_at'),
   foundingGrantedAt: timestamp('founding_granted_at'),
   fssaiAnnualFeeRemindedAt: timestamp('fssai_annual_fee_reminded_at'),
@@ -387,6 +390,11 @@ export const fssaiApplications = pgTable('fssai_applications', {
   // window from. Left null for every other status.
   filedAt: timestamp('filed_at'),
   timelineJson: jsonb('timeline_json').$type<{ at: string; event: string }[]>(),
+  // When FoSCoS interrupted the deemed window (inspection / notice), as told to us by the seller or found by an admin.
+  interruptionAt: timestamp('interruption_at'),
+  interruptionNote: text('interruption_note'),
+  changesRequestedNote: text('changes_requested_note'),
+  changesRequestedAt: timestamp('changes_requested_at'),
   // Pilot Hardening v2 — Phase 4 (DECISIONS.md #62+). See fssaiFilingModeEnum.
   filingMode: fssaiFilingModeEnum('filing_mode').notNull().default('facilitator'),
   // Phase 1 Pilot: the Form A (Basic Registration) answers collected by the assistant.

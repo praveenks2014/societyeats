@@ -435,3 +435,29 @@ export async function getFeaturedKitchen() {
   if (!profile || profile.activeListings.length === 0) return null;
   return profile;
 }
+
+export type ComingSoonKitchen = { sellerId: number; kitchenName: string; societyName: string | null };
+
+/**
+ * “Coming soon”: kitchens whose FSSAI application is filed and still inside the deemed window. Shown ONLY to
+ * residents of the kitchen's own society, only when `showComingSoon` is on, with no menu and no ordering.
+ */
+export async function comingSoonKitchens(viewerSocietyId: number | null | undefined): Promise<ComingSoonKitchen[]> {
+  const settings = await getPlatformSettings();
+  if (!settings.showComingSoon || !viewerSocietyId) return [];
+  const db = await getDb();
+  const rows = await db
+    .select({ profile: sellerProfiles, society: societies })
+    .from(sellerProfiles)
+    .innerJoin(users, eq(sellerProfiles.userId, users.id))
+    .leftJoin(societies, eq(users.societyId, societies.id))
+    .where(and(eq(users.societyId, viewerSocietyId), eq(sellerProfiles.listingState, 'approved')));
+  if (!rows.length) return [];
+  const apps = await latestApplicationsBySeller(rows.map((r) => r.profile.userId));
+  const out: ComingSoonKitchen[] = [];
+  for (const r of rows) {
+    const tier = fssaiTier(r.profile, apps.get(r.profile.userId) ?? null, { deemedDays: settings.fssaiDeemedGrantDaysRegistration, provisionalMaxDays: settings.provisionalMaxDays });
+    if (tier === 'applied') out.push({ sellerId: r.profile.userId, kitchenName: r.profile.kitchenName, societyName: r.society?.name ?? null });
+  }
+  return out;
+}

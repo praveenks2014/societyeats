@@ -1,7 +1,7 @@
 import { api, ApiError, ok } from '@/lib/api';
 import { isPilotMember } from '@/lib/access';
 import { getSession } from '@/lib/auth';
-import { browseListings } from '@/lib/browse';
+import { browseListings, comingSoonKitchens } from '@/lib/browse';
 import { getPlatformSettings } from '@/lib/db/platform';
 
 export const dynamic = 'force-dynamic';
@@ -25,5 +25,5 @@ export const GET = api(async (req) => {
     cuisine: sp.get('cuisine') || undefined,
     q: sp.get('q') || undefined,
   });
-  return ok(result);
+  return ok({ ...result, comingSoon: await comingSoonKitchens(session?.societyId) });
 });

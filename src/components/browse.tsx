@@ -10,7 +10,7 @@ import { DisclaimerClient } from '@/components/disclaimer-client';
 
 export function Browse() {
   const { loc, openPicker } = useLocation();
-  const [data, setData] = useState<{ listings: ListingCard[]; cuisines: string[]; radiusKm: number } | null>(null);
+  const [data, setData] = useState<{ listings: ListingCard[]; cuisines: string[]; radiusKm: number; comingSoon?: { sellerId: number; kitchenName: string; societyName: string | null }[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [veg, setVeg] = useState(false);
   const [cuisine, setCuisine] = useState<string | null>(null);
@@ -160,6 +160,20 @@ export function Browse() {
                 vendor={{ kind: 'seller', id: dish.sellerId, name: dish.kitchenName }}
               />
             ))}
+          </div>
+        )}
+        {data?.comingSoon && data.comingSoon.length > 0 && (
+          <div className="mt-8" data-testid="coming-soon">
+            <SectionTitle eyebrow="IN YOUR SOCIETY" title="Coming soon" />
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {data.comingSoon.map((k) => (
+                <div key={k.sellerId} className="rounded-card border border-dashed border-rice-line bg-white p-3 text-sm" data-testid="coming-soon-card">
+                  <div className="font-semibold">{k.kitchenName}</div>
+                  <div className="text-xs text-ink-faint">{k.societyName}</div>
+                  <div className="mt-2 inline-block rounded-pill bg-turmeric-tint px-2.5 py-1 text-xs font-semibold text-turmeric-deep">Coming soon</div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

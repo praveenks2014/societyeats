@@ -21,7 +21,29 @@ type AppRow = {
   filingMode: 'facilitator' | 'self';
   facilitationCostInPaise: number;
   sponsoredByPlatform: boolean;
+  sellerId: number;
+  tier: 'none' | 'applied' | 'provisional' | 'verified' | 'blocked';
+  tierReason: string | null;
+  daysSinceApplication: number;
+  daysSinceFiled: number | null;
+  deemedWindow: 'not_filed' | 'inside' | 'passed' | 'interrupted';
+  deemedWindowEndsAt: string | null;
+  interruptionAt: string | null;
+  interruptionNote: string | null;
+  changesRequestedNote: string | null;
+  blockedReason: string | null;
+  fssaiNumber: string | null;
+  lookup: { source: string; found: boolean; status: string; businessName?: string; validTill?: string };
 };
+
+const TIER_BADGE: Record<string, { label: string; tone: 'amber' | 'green' | 'red' | 'neutral' }> = {
+  none: { label: 'No tier', tone: 'neutral' },
+  applied: { label: 'Applied (waiting out the window)', tone: 'amber' },
+  provisional: { label: 'Provisional', tone: 'amber' },
+  verified: { label: 'Verified', tone: 'green' },
+  blocked: { label: 'Blocked', tone: 'red' },
+};
+const WINDOW_TEXT: Record<string, string> = { not_filed: 'Not filed yet', inside: 'Inside the deemed window', passed: 'Deemed window passed', interrupted: 'Interrupted by FoSCoS' };
 
 const STATUS_BADGE: Record<string, { label: string; tone: 'amber' | 'green' | 'red' | 'neutral' }> = {
   submitted_to_backoffice: { label: 'To file on FoSCoS', tone: 'amber' },
@@ -131,6 +153,19 @@ function ApplicationsQueue() {
                   <Badge tone={badge.tone}>{badge.label}</Badge>
                 </div>
                 <p className="mt-2 text-sm text-ink-soft">📍 {a.kitchenAddress}</p>
+                <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs" data-testid={`fssai-facts-${a.id}`}>
+                  <dt className="text-ink-faint">Tier</dt>
+                  <dd><Badge tone={(TIER_BADGE[a.tier] ?? TIER_BADGE.none).tone}>{(TIER_BADGE[a.tier] ?? TIER_BADGE.none).label}</Badge></dd>
+                  <dt className="text-ink-faint">Applied</dt>
+                  <dd>{a.daysSinceApplication} day(s) ago{a.daysSinceFiled != null ? `, filed ${a.daysSinceFiled} day(s) ago` : ''}</dd>
+                  <dt className="text-ink-faint">Deemed window</dt>
+                  <dd data-testid="deemed-window">{WINDOW_TEXT[a.deemedWindow]}{a.deemedWindowEndsAt && a.deemedWindow === 'inside' ? ` · ends ${new Date(a.deemedWindowEndsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}` : ''}</dd>
+                  {a.interruptionAt && (<><dt className="text-ink-faint">Interruption</dt><dd>{a.status.replace('_', ' ')} on {new Date(a.interruptionAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}{a.interruptionNote ? ` — ${a.interruptionNote}` : ''}</dd></>)}
+                  {a.fssaiNumber && (<><dt className="text-ink-faint">Lookup</dt><dd data-testid="fssai-lookup">{a.lookup.found ? `${a.lookup.status} · ${a.lookup.businessName ?? ''} · valid till ${a.lookup.validTill ?? '?'}` : 'not found'} <span className="text-ink-faint">({a.lookup.source}, advisory only)</span></dd></>)}
+                  {a.blockedReason && (<><dt className="text-ink-faint">Blocked</dt><dd className="text-chili-dark">{a.blockedReason}</dd></>)}
+                  {a.changesRequestedNote && (<><dt className="text-ink-faint">Changes asked</dt><dd>{a.changesRequestedNote}</dd></>)}
+                </dl>
+                <ExtraActions app={a} onDone={load} toast={toast} />
                 {a.documentsJson && a.documentsJson.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {a.documentsJson.map((d) => (
@@ -449,5 +484,63 @@ function VerifyRowCard({
         </Button>
       </div>
     </Card>
+  );
+}
+
+
+/** Interruption (with date), request changes, block / unblock. Each needs a fresh 2FA check (the admin re-auth prompt appears) and is audit-logged. */
+function ExtraActions({ app, onDone, toast }: { app: AppRow; onDone: () => void; toast: (msg: string, tone?: 'ok' | 'err') => void }) {
+  const [open, setOpen] = useState<'interrupt' | 'changes' | 'block' | null>(null);
+  const [kind, setKind] = useState<'inspection_ordered' | 'inadequacy_notice'>('inspection_ordered');
+  const [date, setDate] = useState('');
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function send(body: Record<string, unknown>) {
+    setBusy(true);
+    const res = await fetch(`/api/admin/fssai/${app.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const d = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) return toast(d.error || 'Could not update', 'err');
+    toast('Done ✅');
+    setOpen(null);
+    setText('');
+    onDone();
+  }
+  return (
+    <div className="mt-3 border-t border-rice-line pt-2" data-testid={`fssai-actions-${app.id}`}>
+      <div className="flex flex-wrap gap-3 text-xs font-semibold">
+        {app.status === 'filed_on_foscos' && <button className="min-h-[44px] underline" onClick={() => setOpen('interrupt')} data-testid="act-interrupt">Record an interruption</button>}
+        <button className="min-h-[44px] underline" onClick={() => setOpen('changes')} data-testid="act-changes">Request changes</button>
+        {app.blockedReason ? (
+          <button className="min-h-[44px] text-leaf underline" onClick={() => send({ action: 'unblock' })} data-testid="act-unblock">Lift the block</button>
+        ) : (
+          <button className="min-h-[44px] text-chili-dark underline" onClick={() => setOpen('block')} data-testid="act-block">Block</button>
+        )}
+      </div>
+      {open === 'interrupt' && (
+        <div className="mt-2 space-y-2">
+          <select className="w-full rounded-xl border border-rice-line px-3 py-2 text-sm" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+            <option value="inspection_ordered">FoSCoS ordered an inspection</option>
+            <option value="inadequacy_notice">FoSCoS issued an inadequacy notice</option>
+          </select>
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date FoSCoS responded" data-testid="interrupt-date" />
+          <Input placeholder="Note (optional)" value={text} onChange={(e) => setText(e.target.value)} />
+          <Button size="sm" loading={busy} disabled={!date} onClick={() => send({ action: kind, date, note: text || undefined })} data-testid="interrupt-save">Save interruption</Button>
+        </div>
+      )}
+      {open === 'changes' && (
+        <div className="mt-2 space-y-2">
+          <Input placeholder="What should the kitchen change?" value={text} onChange={(e) => setText(e.target.value)} data-testid="changes-note" />
+          <Button size="sm" loading={busy} disabled={text.trim().length < 5} onClick={() => send({ action: 'request_changes', note: text })} data-testid="changes-send">Send to the kitchen</Button>
+        </div>
+      )}
+      {open === 'block' && (
+        <div className="mt-2 space-y-2">
+          <Input placeholder="Reason (the kitchen will see it)" value={text} onChange={(e) => setText(e.target.value)} data-testid="block-reason" />
+          <Button size="sm" variant="danger" loading={busy} disabled={text.trim().length < 5} onClick={() => send({ action: 'block', reason: text })} data-testid="block-confirm">Block this kitchen</Button>
+        </div>
+      )}
+    </div>
   );
 }

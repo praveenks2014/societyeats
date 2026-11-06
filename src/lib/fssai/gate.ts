@@ -21,7 +21,7 @@ export const FSSAI_DEEMED_GRANT_DAYS = {
   state: DEFAULTS.fssaiDeemedGrantDaysState,
 } as const;
 
-type Profile = Pick<typeof sellerProfiles.$inferSelect, 'fssaiStatus'> & { fssaiExpiry?: string | null };
+type Profile = Pick<typeof sellerProfiles.$inferSelect, 'fssaiStatus'> & { fssaiExpiry?: string | null; fssaiBlockedReason?: string | null };
 type Application = Pick<
   typeof fssaiApplications.$inferSelect,
   'status' | 'foscosRefNumber' | 'filedAt' | 'licenseType'

@@ -1,6 +1,6 @@
 import { desc, eq } from 'drizzle-orm';
 import { api, ApiError, ok, readJson } from '@/lib/api';
-import { requireSession } from '@/lib/auth';
+import { requireRecentMfa, requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { fssaiApplications, sellerProfiles } from '@/lib/db/schema';
 import { notify } from '@/lib/db/notify';
@@ -23,6 +23,7 @@ type Body =
  */
 export const PATCH = api<{ params: { userId: string } }>(async (req, { params }) => {
   const admin = await requireSession(['admin']);
+  requireRecentMfa(admin);
   const body = await readJson<Body>(req);
   const sellerId = Number(params.userId);
   const db = await getDb();

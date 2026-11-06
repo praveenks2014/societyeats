@@ -20,7 +20,7 @@ export type GateResult = {
   reasons: string[];
 };
 
-type ProfileLike = Pick<typeof sellerProfiles.$inferSelect, 'listingState' | 'fssaiStatus' | 'fssaiExpiry' | 'upiVpa' | 'upiVerifyStatus' | 'upiVerifiedVpa' | 'listingsPausedReason'> & { provisionalStartedAt?: Date | null; closedUntil?: Date | null };
+type ProfileLike = Pick<typeof sellerProfiles.$inferSelect, 'listingState' | 'fssaiStatus' | 'fssaiExpiry' | 'upiVpa' | 'upiVerifyStatus' | 'upiVerifiedVpa' | 'listingsPausedReason'> & { provisionalStartedAt?: Date | null; closedUntil?: Date | null; fssaiBlockedReason?: string | null };
 
 /**
  * Pilot v2: food is paid at the door by UPI to the VPA that passed the ₹1 ownership check. The VPA on the
