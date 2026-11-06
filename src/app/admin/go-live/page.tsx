@@ -24,7 +24,7 @@ export default function GoLivePage() {
     load();
   }, [load]);
   async function save(keys: string[]) {
-    const patch = Object.fromEntries(keys.map((k) => [k, values[k]]));
+    const patch = { ...Object.fromEntries(keys.map((k) => [k, values[k]])), reason: 'Go-live checklist' };
     const res = await fetch('/api/admin/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) return toast(d.error || 'Could not save', 'err');

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Modal } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { StrikeAppeals } from '@/app/account/strike-appeals';
 
 type Sess = { key: string; createdAt: string; lastSeenAt: string; userAgent: string | null; ip: string | null; current: boolean };
 
@@ -73,6 +74,7 @@ export function AccountClient({ name, email, role }: { name: string; email: stri
         <a href="/api/auth/google/start?link=1" className="flex min-h-[44px] items-center text-sm font-semibold text-leaf underline">Link my Google account</a>
       </Card>
 
+      {role !== 'admin' && <StrikeAppeals />}
       <Card className="space-y-3 p-4">
         <div className="eyebrow">YOUR DATA</div>
         <p className="text-sm text-ink-soft">You can download everything PadosiPlate holds about you, or delete your account. Order and tax records we must keep by law stay, with your personal details removed.</p>

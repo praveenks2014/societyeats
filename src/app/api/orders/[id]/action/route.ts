@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { api, ApiError, ok, readJson } from '@/lib/api';
-import { requireSession } from '@/lib/auth';
+import { requireRecentMfa, requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { orders } from '@/lib/db/schema';
 import { performOrderAction } from '@/lib/orders/actions';
@@ -41,6 +41,7 @@ export const POST = api<{ params: { id: string } }>(async (req, { params }) => {
   if (!order) throw new ApiError(404, 'Order not found');
   const actor = viewerActor(order, { uid: session.uid, role: session.role });
   if (!actor) throw new ApiError(403, 'Not your order');
+  if (actor === 'admin') requireRecentMfa(session); // an admin moving an order (resolve, cancel) needs a fresh 2FA check
   await applyOrderTimers(orderId);
   const r = await performOrderAction(orderId, { ...parsed.data, actor, actorId: session.uid, utr: parsed.data.utr || undefined });
   return ok({ ok: true, ...r });

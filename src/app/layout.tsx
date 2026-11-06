@@ -10,6 +10,7 @@ import { VerifyBanner } from '@/components/verify-banner';
 import { SwRegister } from '@/components/sw-register';
 import { SiteFooter } from '@/components/site-footer';
 import { PilotBanner } from '@/components/pilot-banner';
+import { VisitPing } from '@/components/visit-ping';
 import { listDisclaimers } from '@/lib/disclaimers';
 import { ReconsentGate } from '@/components/reconsent-gate';
 import { pendingReconsent } from '@/lib/legal/docs';
@@ -72,6 +73,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Providers>
           <Header session={session} />
           {session && !session.emailVerified && !session.mustChangePassword && <VerifyBanner />}
+          <VisitPing />
           <PilotBanner version={pilotVersion} />
           <main className="mx-auto w-full max-w-5xl px-4 pb-6 sm:px-6">{children}</main>
           <SiteFooter />

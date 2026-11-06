@@ -1374,6 +1374,9 @@ export const settingsHistory = pgTable(
     newValue: text('new_value'),
     changedBy: integer('changed_by').references(() => users.id),
     changedAt: timestamp('changed_at').notNull().defaultNow(),
+    // Why the change was made (required by the admin UI), and, for a restore, which history row it restored.
+    reason: text('reason'),
+    restoredFromId: integer('restored_from_id'),
   },
   (t) => [index('settings_history_key_idx').on(t.key, t.changedAt)],
 );
@@ -1446,4 +1449,42 @@ export const messageOutbox = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (t) => [index('message_outbox_user_idx').on(t.userId, t.createdAt)],
+);
+
+/** Notes, assignments and status changes on a ticket: the audit trail an admin (and a regulator) can read. */
+export const grievanceEvents = pgTable(
+  'grievance_events',
+  {
+    id: serial('id').primaryKey(),
+    grievanceId: integer('grievance_id').notNull().references(() => grievances.id, { onDelete: 'cascade' }),
+    actorId: integer('actor_id').references(() => users.id),
+    kind: varchar('kind', { length: 12 }).notNull(), // created | note | assigned | status | alert
+    body: text('body'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('grievance_events_idx').on(t.grievanceId, t.createdAt)],
+);
+
+/** Messages an admin sent to a group (kitchens, societies, everyone). A service message reaches everyone; marketing only people who opted in. */
+export const broadcasts = pgTable('broadcasts', {
+  id: serial('id').primaryKey(),
+  adminId: integer('admin_id').references(() => users.id),
+  audienceJson: jsonb('audience_json').$type<{ type: 'all' | 'kitchens' | 'societies'; societyIds?: number[] }>().notNull(),
+  kind: varchar('kind', { length: 10 }).notNull(), // service | marketing
+  title: varchar('title', { length: 120 }).notNull(),
+  body: text('body').notNull(),
+  recipients: integer('recipients').notNull().default(0),
+  skippedNoOptIn: integer('skipped_no_opt_in').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+/** Anonymous visit counts per day (and per society invite page): numbers only, no cookies, no IPs, no people. */
+export const visitCounters = pgTable(
+  'visit_counters',
+  {
+    day: varchar('day', { length: 10 }).notNull(),
+    societyId: integer('society_id').notNull().default(0), // 0 = the public site, otherwise that society's invite page
+    count: integer('count').notNull().default(0),
+  },
+  (t) => [uniqueIndex('visit_counters_pk').on(t.day, t.societyId)],
 );

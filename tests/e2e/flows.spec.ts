@@ -65,11 +65,21 @@ async function orderJson(page: Page, orderId: number) {
 
 /** Fills the cart in localStorage and opens checkout (faster and steadier than clicking the dish page). */
 async function openCheckout(page: Page, k: { sellerId: number; dishId: number; kitchenName: string }, qty = 2, price = 10000) {
-  await page.goto('/');
-  await page.evaluate(([vendor, item]) => {
-    localStorage.setItem('padosi_cart', JSON.stringify({ vendor, items: [item] }));
-    localStorage.setItem('padosi_loc', JSON.stringify({ lat: 17.465, lng: 78.31, label: 'E2E Heights' }));
-  }, [{ kind: 'seller', id: k.sellerId, name: k.kitchenName }, { id: k.dishId, title: 'Dish', pricePaise: price, isVeg: true, photoUrl: null, maxQty: 50, qty }] as const);
+  // An init script runs before the app's own code on the next navigation, so the cart provider reads it on hydration
+  // (writing localStorage from the page after load can lose a race with the provider's own first write).
+  const vendor = { kind: 'seller', id: k.sellerId, name: k.kitchenName };
+  const item = { id: k.dishId, title: 'Dish', pricePaise: price, isVeg: true, photoUrl: null, maxQty: 50, qty };
+  const stamp = `${k.dishId}-${qty}-${price}-${Date.now()}`;
+  await page.addInitScript(([v, it, st]) => {
+    try {
+      if (sessionStorage.getItem('e2e_cart_stamp') === st) return;
+      sessionStorage.setItem('e2e_cart_stamp', st);
+      localStorage.setItem('padosi_cart', JSON.stringify({ vendor: v, items: [it] }));
+      localStorage.setItem('padosi_loc', JSON.stringify({ lat: 17.465, lng: 78.31, label: 'E2E Heights' }));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [vendor, item, stamp] as const);
   await page.goto('/checkout');
 }
 
@@ -281,9 +291,16 @@ test('2. seller onboards: wizard, ₹1 UPI check, FSSAI "help me apply", dish �
   await admin.goto('/admin/dishes/review');
   await admin.getByTestId('approve-dish').first().click();
   await expect(admin.getByText('Approved ✅')).toBeVisible();
-  await admin.goto(`/admin/kitchens/${sellerId}`);
-  await admin.getByTestId('approve').click();
-  await expect(admin.getByText('Kitchen approved ✅')).toBeVisible();
+  // approve from the onboarding queue: the checklist shows every requirement, then one tap approves (flags ask for a confirmation)
+  admin.on('dialog', (d) => d.accept());
+  await admin.goto('/admin/applications');
+  const card = admin.getByTestId(`application-${sellerId}`);
+  await expect(card).toBeVisible();
+  await expect(card.locator('[data-check="upi"]')).toHaveAttribute('data-status', 'pass');
+  await expect(card.locator('[data-check="fssai"]')).toHaveAttribute('data-status', 'flag');
+  await expect(card.locator('[data-check="photos"]')).toHaveAttribute('data-status', 'pass');
+  await card.getByTestId('app-approve').click();
+  await expect(admin.getByText(/Approved\. The founding plan was granted/)).toBeVisible();
 
   // still hidden while "applied"; 8 days with no FoSCoS response → provisional → visible with the badge
   expect(((await api(resident.page.request, 'get', '/api/listings')).json.listings as { id: number }[]).some((l) => l.id === dishId)).toBe(false);
@@ -565,11 +582,13 @@ test('12b. admin changes the platform fee 10% → 8%: new orders snapshot 8%, th
   await admin.goto('/admin/settings');
   await expect(admin.getByTestId('setting-buyerPlatformFeeBps')).toHaveValue('10');
   await admin.getByTestId('setting-buyerPlatformFeeBps').fill('30'); // above the 25% cap
+  await admin.getByTestId('settings-reason').fill('test: above the cap');
   await expect(async () => {
     await admin.getByTestId('save-settings').click();
     await expect(admin.getByText(/must be at most/i).first()).toBeVisible({ timeout: 3000 });
   }).toPass({ timeout: 20_000 });
   await admin.getByTestId('setting-buyerPlatformFeeBps').fill('8');
+  await admin.getByTestId('settings-reason').fill('pilot discount');
   await expect(async () => {
     await admin.getByTestId('save-settings').click();
     await expect(admin.getByText(/Settings saved|Nothing changed/)).toBeVisible({ timeout: 3000 });
@@ -582,15 +601,21 @@ test('12b. admin changes the platform fee 10% → 8%: new orders snapshot 8%, th
   expect([o2.feeBpsSnapshot, o2.platformFeeInPaise]).toEqual([800, 1600]);
   await b.page.goto(`/orders/${before.orderId}`);
   await expect(b.page.getByTestId('order-bill')).toContainText('Platform fee (10%)');
-
-  // put it back
+  // the change is in the history with old → new, who and why; a restore puts it back
   await admin.goto('/admin/settings');
-  await expect(admin.getByTestId('setting-buyerPlatformFeeBps')).toHaveValue('8');
-  await admin.getByTestId('setting-buyerPlatformFeeBps').fill('10');
-  await expect(async () => {
-    await admin.getByTestId('save-settings').click();
-    await expect(admin.getByText(/Settings saved|Nothing changed/)).toBeVisible({ timeout: 3000 });
-  }).toPass({ timeout: 20_000 });
+  const hist = admin.getByTestId('settings-history');
+  await expect(hist).toContainText('Buyer platform fee');
+  await expect(hist).toContainText('1000');
+  await expect(hist).toContainText('800');
+  await expect(hist).toContainText('pilot discount');
+
+  // put it back with the history's Restore (a fresh 2FA check is already satisfied by this session)
+  const row = admin.getByTestId('settings-history').locator('li', { hasText: 'Buyer platform fee' }).filter({ hasText: '800' }).first();
+  await row.getByRole('button', { name: /Restore the previous value/ }).click();
+  await admin.getByTestId('restore-reason').fill('back to the standard fee');
+  await admin.getByTestId('restore-confirm').click();
+  await expect(admin.getByText('Restored')).toBeVisible();
+  await expect(admin.getByTestId('setting-buyerPlatformFeeBps')).toHaveValue('10');
   await ctx.close();
   await b.ctx.close();
 });
@@ -618,7 +643,7 @@ test('15. GST mode registered_eco_9_5: the upfront lines show fee GST and food G
   const b = await newBuyer(browser, 15);
   const { ctx, page: admin } = await loginAdmin(browser);
   const set = async (values: Record<string, unknown>) => {
-    const r = await api(admin.request, 'patch', '/api/admin/settings', values);
+    const r = await api(admin.request, 'patch', '/api/admin/settings', { ...values, reason: 'e2e GST mode scenario' });
     expect(r.status, JSON.stringify(r.json)).toBe(200);
   };
   await set({ platformGstin: '36ABCDE1234F1Z5', gstMode: 'registered_eco_9_5', gstPositionConfirmedAt: '2026-11-10', gstPositionNote: 'CA confirmed registered_eco_9_5 (e2e)' });
@@ -778,5 +803,45 @@ test('13. chat: live between two browsers, quick reply, soft-filter warning, rep
 
   await actx.close();
   await sctx.close();
+  await b.ctx.close();
+});
+
+test('20. grievance: raised from the legal page, acknowledged automatically, flagged after 48 hours, picked up, noted and resolved by an admin', async ({ browser, request }) => {
+  const b = await newBuyer(browser, 20);
+  await b.page.goto('/legal/grievance');
+  await expect(b.page.getByTestId('grievance-form')).toBeVisible();
+  await b.page.getByTestId('grievance-subject').fill('Packet leaked in my bag');
+  await b.page.getByTestId('grievance-body').fill('The curry packet leaked and the raita was missing from my order.');
+  await b.page.getByTestId('grievance-submit').click();
+  await expect(b.page.getByTestId('grievance-done')).toContainText('#');
+
+  // the automatic acknowledgement: an email in the (mock) outbox and an in-app notification
+  const mail = (await mockOutbox(request, b.email)).find((m) => /We received your complaint/.test(m.subject));
+  expect(mail).toBeTruthy();
+  const notes = (await api(b.page.request, 'get', '/api/notifications')).json.notifications as { title: string }[];
+  expect(notes.some((n) => /We received your complaint/.test(n.title))).toBe(true);
+
+  // 49 hours pass with nobody picking it up → admins are alerted and the board shows it overdue
+  await timeTravelOrder(request, 'grievance_age', 0, 49 * 60);
+  const { ctx: actx, page: admin } = await loginAdmin(browser);
+  await admin.goto('/admin/grievances');
+  await expect(admin.getByTestId('overdue-banner')).toBeVisible();
+  const row = admin.getByTestId('ticket-list').locator('[data-overdue="true"]', { hasText: 'Packet leaked in my bag' });
+  await expect(row).toBeVisible();
+  await row.getByRole('button').first().click();
+
+  // pick up, add a note, resolve: each lands in the history and the buyer is told the outcome
+  await admin.getByTestId('g-ack').click();
+  await admin.getByTestId('g-note').fill('Called the kitchen, they confirmed the leak');
+  await admin.getByTestId('g-note-add').click();
+  await expect(admin.getByTestId('g-history')).toContainText('Called the kitchen');
+  await admin.getByTestId('g-resolution').fill('The kitchen apologised and we credited the fee');
+  await admin.getByTestId('g-resolve').click();
+  await expect(admin.getByText('Resolved', { exact: true })).toBeVisible();
+  await expect(async () => {
+    const after = (await api(b.page.request, 'get', '/api/notifications')).json.notifications as { title: string; body: string }[];
+    expect(after.some((n) => /is resolved/.test(n.title) && /apologised/.test(n.body))).toBe(true);
+  }).toPass({ timeout: 10_000 });
+  await actx.close();
   await b.ctx.close();
 });

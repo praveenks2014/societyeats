@@ -3,6 +3,7 @@ import { requireRecentMfa, requireSession } from '@/lib/auth';
 import { recordAudit } from '@/lib/audit';
 import { isMockMode } from '@/lib/config';
 import { getPlatformSettings, setPlatformSetting } from '@/lib/db/platform';
+import { recordSettingChanges } from '@/lib/settings/history';
 import { SETTING_DEFS, crossCheck, parseSettingsPatch, type PlatformSettings } from '@/lib/settings/defs';
 
 export const dynamic = 'force-dynamic';
@@ -33,7 +34,11 @@ export const GET = api(async () => {
 export const PATCH = api(async (req) => {
   const admin = await requireSession(['admin']);
   requireRecentMfa(admin);
-  const { values, errors } = parseSettingsPatch(await readJson(req));
+  const raw = await readJson<Record<string, unknown>>(req);
+  const { reason: rawReason, ...patch } = raw;
+  const reason = typeof rawReason === 'string' ? rawReason.trim() : '';
+  if (reason.length < 3) throw new ApiError(400, 'Say why you are changing this (it is kept in the history)');
+  const { values, errors } = parseSettingsPatch(patch);
   if (errors.length) throw new ApiError(400, errors[0]);
   const before = await getPlatformSettings();
   const merged = { ...before, ...values } as PlatformSettings;
@@ -42,6 +47,7 @@ export const PATCH = api(async (req) => {
   for (const [key, value] of Object.entries(values)) await setPlatformSetting(key, String(value));
   const changed = Object.entries(values).filter(([k, v]) => (before as Record<string, unknown>)[k] !== v);
   if (changed.length) {
+    await recordSettingChanges(Object.fromEntries(changed.map(([k, v]) => [k, { from: (before as Record<string, unknown>)[k], to: v }])), admin.uid, reason);
     await recordAudit({ actorId: admin.uid, action: 'settings.update', targetType: 'settings', meta: { changed: Object.fromEntries(changed.map(([k, v]) => [k, { from: (before as Record<string, unknown>)[k], to: v }])) } });
   }
   return ok({ settings: await getPlatformSettings() });

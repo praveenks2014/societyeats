@@ -1,5 +1,6 @@
 'use client';
 
+import { KitchenControls } from './kitchen-controls';
 import Link from 'next/link';
 import { use, useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Modal, Select, Skeleton, Textarea, VegDot } from '@/components/ui';
@@ -8,6 +9,9 @@ import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 
 type Detail = {
+  strikes?: { id: number; kind: string; reason: string | null; createdAt: string; liftedAt: string | null }[];
+  capOverride?: { maxOrdersPerDay?: number; maxFoodValuePerDayPaise?: number; maxFoodValueTotalPaise?: number; expiresAt?: string } | null;
+  pausedReason?: string | null;
   kitchen: {
     userId: number;
     kitchenName: string;
@@ -121,6 +125,8 @@ export default function KitchenDetail({ params }: { params: Promise<{ id: string
         <Button variant="ghost" onClick={() => act({ action: d.isFeatured ? 'unfeature' : 'feature' }, d.isFeatured ? 'Unfeatured' : 'Featured ⭐')}>{d.isFeatured ? 'Unfeature' : '⭐ Feature'}</Button>
       </Card>
       {k.listingReviewNote && <p className="rounded-xl bg-turmeric-tint px-3 py-2 text-sm"><strong>Last note:</strong> {k.listingReviewNote}</p>}
+
+      <KitchenControls sellerId={id} strikes={d.strikes ?? []} capOverride={d.capOverride ?? null} pausedReason={d.pausedReason ?? null} onDone={load} />
 
       {/* go-live checks */}
       <Card className="p-4">

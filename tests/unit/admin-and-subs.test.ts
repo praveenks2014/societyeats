@@ -52,16 +52,16 @@ describe('settings validation bounds', () => {
     const { GET, PATCH } = await import('@/app/api/admin/settings/route');
     const buyer = await makeUser(db, 'buyer');
     await loginAs(buyer.id);
-    expect((await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 500 }, { method: 'PATCH' }))).status).toBe(403);
+    expect((await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 500, reason: 'test change' }, { method: 'PATCH' }))).status).toBe(403);
     await loginAs(admin.id);
     const def = await call(GET, jsonReq('/api/admin/settings', undefined, { method: 'GET' }));
     expect(def.json.settings).toMatchObject({ buyerPlatformFeeBps: 1000, buyerPlatformFeeMinPaise: 1000, buyerPlatformFeeMaxPaise: 2500, platformFeeGstBps: 1800, gstMode: 'unregistered', sellerAcceptWindowMinutes: 20, provisionalMaxOrdersPerDay: 8, provisionalMaxFoodValuePerDayPaise: 250000, provisionalMaxFoodValueTotalPaise: 2500000, provisionalMaxDays: 45, tdsWarnPaise: 40000000, tdsPausePaise: 50000000, atDoorWaitMinutes: 15, paymentClaimMinutes: 30, sellerConfirmPaymentHours: 12, pilotSocietiesOnly: true, upiNameMatchMinScore: 70, upiVerifyRefund: true, sellerDeliveryFeeEnabled: false, packagedFoodsEnabled: false, subscriptionGraceDays: 3, dishModerationEnabled: true, restaurantConsoleEnabled: false, mallModeEnabled: false, fssaiBasicFeePerYear: 100, fssaiDocRetentionDays: 30 });
-    expect((await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 9000 }, { method: 'PATCH' }))).status).toBe(400);
-    const ok = await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 1200 }, { method: 'PATCH' }));
+    expect((await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 9000, reason: 'test change' }, { method: 'PATCH' }))).status).toBe(400);
+    const ok = await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 1200, reason: 'test change' }, { method: 'PATCH' }));
     expect(ok.status).toBe(200);
     expect((await getPlatformSettings()).buyerPlatformFeeBps).toBe(1200);
     expect((await db.select().from(s.auditLog).where(eq(s.auditLog.action, 'settings.update'))).length).toBe(1);
-    await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 1000 }, { method: 'PATCH' }));
+    await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 1000, reason: 'test change' }, { method: 'PATCH' }));
   });
   test('GST is only charged once a GSTIN is on file', async () => {
     const { feeConfigFromSettings, quoteOrder } = await import('@/lib/money');

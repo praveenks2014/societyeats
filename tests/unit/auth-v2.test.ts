@@ -141,14 +141,14 @@ describe('admin two-factor', () => {
     // the settings route enforces it
     await db.update(s.sessions).set({ mfaVerifiedAt: new Date(Date.now() - 11 * 60_000) }).where(eq(s.sessions.userId, admin.id));
     const { PATCH } = await import('@/app/api/admin/settings/route');
-    const r = await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 900 }, { method: 'PATCH' }));
+    const r = await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 900, reason: 'test change' }, { method: 'PATCH' }));
     expect(r.status).toBe(403);
     expect(r.json.code).toBe('reauth_required');
     const [u] = await db.select().from(s.users).where(eq(s.users.id, admin.id));
     const secret = (await import('@/lib/storage/files')).decryptBytes(Buffer.from(u.totpSecretEnc!, 'base64')).toString();
     const reauth = await import('@/app/api/auth/2fa/reauth/route');
     expect((await call(reauth.POST, jsonReq('/api/auth/2fa/reauth', { code: totpAt(secret, Date.now()) }))).status).toBe(200);
-    expect((await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 1000 }, { method: 'PATCH' }))).status).toBe(200);
+    expect((await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 1000, reason: 'test change' }, { method: 'PATCH' }))).status).toBe(200);
   });
 
   test('login response tells an admin they still need 2FA; a normal user is unaffected', async () => {

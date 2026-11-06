@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { BRAND } from '@/config/brand';
 import { societyForInvite } from '@/lib/join';
 import { Disclaimer } from '@/components/disclaimer';
+import { VisitPing } from '@/components/visit-ping';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +22,7 @@ export default async function JoinPage({ params }: { params: Promise<{ code: str
   const code = encodeURIComponent(r.society.inviteCode!);
   return (
     <div className="mx-auto max-w-md pt-10 text-center">
+      <VisitPing code={r.society.inviteCode ?? undefined} />
       <div className="text-5xl" aria-hidden>🍛</div>
       <div className="eyebrow mt-4">{BRAND.appName.toUpperCase()} · {BRAND.tagline.toUpperCase()}</div>
       <h1 className="mt-2 text-3xl font-bold" data-testid="join-society">{r.society.name}</h1>

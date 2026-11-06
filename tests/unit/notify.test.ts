@@ -31,7 +31,7 @@ describe('event catalogue', () => {
   test('has every event the brief lists, and each template renders clean copy', () => {
     for (const k of ['order_booked', 'order_accepted', 'order_cancelled', 'order_on_the_way', 'order_at_door', 'order_payment_claimed', 'order_payment_received', 'order_payment_disputed', 'chat_message', 'strike_issued', 'onboarding_decision', 'fssai_tier_change', 'provisional_cap_reached', 'plan_expiring', 'listing_paused', 'grievance_acknowledged', 'grievance_resolved']) expect(EVENT_KEYS).toContain(k);
     for (const k of EVENT_KEYS) {
-      const full = { orderId: 7, role: 'buyer', cause: 'seller_cancel', refundPaise: 2000, creditPaise: 2000, foodPaise: 20000, days: 3, grievanceId: 9, preview: 'hello', decision: 'approved', tier: 'verified' };
+      const full = { orderId: 7, role: 'buyer', cause: 'seller_cancel', refundPaise: 2000, creditPaise: 2000, foodPaise: 20000, days: 3, grievanceId: 9, preview: 'hello', decision: 'approved', tier: 'verified', title: 'Maintenance tonight', body: 'We will be down for ten minutes.', kind: 'service' };
       for (const ctx of [full, { ...full, role: 'seller', cause: 'auto_cancel' }, { ...full, role: 'admin', cause: 'admin', decision: 'changes' }]) {
         const m = EVENTS[k].build(ctx);
         expect(m.title.length, k).toBeGreaterThan(3);
