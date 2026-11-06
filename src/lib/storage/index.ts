@@ -6,6 +6,7 @@ import { log } from '@/lib/log';
  *   STORAGE_ADAPTER=local   dev default — files under ./.data/uploads
  *   STORAGE_ADAPTER=replit  Replit Object Storage (bucket via env)
  *   STORAGE_ADAPTER=s3      S3-compatible (AWS S3, R2, MinIO)
+ *   STORAGE_ADAPTER=memory  mock-mode smoke tests only (refused when MOCK_MODE=false)
  * In production the default is `replit`.
  */
 export interface StorageAdapter {
@@ -28,6 +29,7 @@ export async function getStorage(): Promise<StorageAdapter> {
   let adapter: StorageAdapter;
   if (name === 'replit') adapter = new (await import('./replit')).ReplitStorage();
   else if (name === 's3') adapter = new (await import('./s3')).S3Storage();
+  else if (name === 'memory') adapter = new (await import('./memory')).MemoryStorage();
   else adapter = new (await import('./local')).LocalStorage();
   log.info('storage.init', { adapter: adapter.name });
   g.__padosiStorage = adapter;

@@ -9,7 +9,9 @@ export async function runScheduledJobs(now: Date = new Date()) {
   const subs = await syncSubscriptions(now);
   const { runFssaiJobs } = await import('@/lib/fssai/jobs');
   const fssai = await runFssaiJobs(now);
+  const { runRetention } = await import('@/lib/retention');
+  const retention = await runRetention(now);
   await pruneRateLimits();
   await recordCronRun(now);
-  return { orderTimers, subscriptions: subs, fssai };
+  return { orderTimers, subscriptions: subs, fssai, retention };
 }

@@ -40,6 +40,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           { href: '/admin/metrics', label: 'Pilot metrics' },
           { href: '/admin/outbox', label: 'Email outbox' },
           { href: '/admin/legal', label: 'Legal' },
+          { href: '/admin/go-live', label: 'Go-live' },
           { href: '/admin/settings', label: 'Settings' },
         ]}
       />

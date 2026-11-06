@@ -32,7 +32,7 @@ const envSchema = z
       .optional(),
     DATABASE_URL: z.string().optional(),
     ADMIN_EMAILS: z.string().optional(),
-    STORAGE_ADAPTER: z.enum(['local', 'replit', 's3']).optional(),
+    STORAGE_ADAPTER: z.enum(['local', 'replit', 's3', 'memory']).optional(),
     EMAIL_ADAPTER: z.enum(['mock', 'resend']).optional(),
     RAZORPAY_KEY_ID: z.string().optional(),
     RAZORPAY_KEY_SECRET: z.string().optional(),
@@ -48,7 +48,7 @@ const envSchema = z
         message: 'DATABASE_URL is required in production (add the PostgreSQL tool on Replit)',
       });
     }
-    if (env.NODE_ENV === 'production' && env.STORAGE_ADAPTER === 'local') {
+    if (env.NODE_ENV === 'production' && (env.STORAGE_ADAPTER === 'local' || (env.STORAGE_ADAPTER === 'memory' && env.MOCK_MODE === 'false'))) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['STORAGE_ADAPTER'],
@@ -56,6 +56,9 @@ const envSchema = z
       });
     }
     const liveMode = env.MOCK_MODE === 'false';
+    if (liveMode && (env.STORAGE_ADAPTER === 'memory' || env.STORAGE_ADAPTER === 'local')) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['STORAGE_ADAPTER'], message: 'STORAGE_ADAPTER must be replit or s3 when MOCK_MODE=false (memory/local lose uploads)' });
+    }
     if (!liveMode) return;
     const required = ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'] as const;
     if ((env.EMAIL_ADAPTER ?? 'resend') === 'resend' && !env.RESEND_API_KEY) {

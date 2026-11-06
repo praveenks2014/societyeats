@@ -81,6 +81,9 @@ export const SETTING_DEFS = {
   adminSessionHours: { kind: 'int', unit: 'count', min: 1, max: 72, def: 12, group: 'Security', label: 'Admin session length (hours)' },
   loginLockMaxFailures: { kind: 'int', unit: 'count', min: 3, max: 50, def: 10, group: 'Security', label: 'Failed logins before lockout' },
   loginLockWindowMinutes: { kind: 'int', unit: 'minutes', min: 1, max: 240, def: 15, group: 'Security', label: 'Lockout window (minutes)' },
+  verificationRetentionDays: { kind: 'int', unit: 'days', min: 30, max: 730, def: 180, group: 'Retention', label: 'Verification screenshots retention (days)', hint: '₹1-check evidence screenshots are deleted this long after the decision.' },
+  loginCodeRetentionHours: { kind: 'int', unit: 'count', min: 1, max: 168, def: 24, group: 'Retention', label: 'Sign-in code retention (hours)', hint: 'Used or expired email codes are deleted after this long.' },
+  accessLogMinRetentionDays: { kind: 'int', unit: 'days', min: 365, max: 3650, def: 365, group: 'Retention', label: 'Audit / access log minimum retention (days)', hint: 'DPDP Rules: keep processing logs at least 1 year. The audit log is never purged before this.' },
   cronStaleMinutes: { kind: 'int', unit: 'minutes', min: 5, max: 1440, def: 15, group: 'Security', label: 'Cron heartbeat warning (minutes)', hint: 'Admin banner when the scheduled jobs have not run for this long.' },
   // ---- revenue features (built, off for the pilot unless noted) ----
   mealPlansEnabled: { kind: 'bool', def: false, group: 'Feature flags', label: 'Meal plans (tiffin subscriptions)' },

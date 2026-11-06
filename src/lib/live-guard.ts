@@ -18,10 +18,10 @@ export function liveModeMissing(s: Pick<PlatformSettings, 'platformFssaiCentralL
   return missing;
 }
 
-/** Throws 503 for real-money operations while live mode is not yet cleared. */
+/** Throws 503 for real-money operations while live mode is not yet cleared. Uses the same list as /admin/go-live. */
 export async function assertLiveModeReady(settings?: PlatformSettings): Promise<void> {
   if (isMockMode()) return;
-  const s = settings ?? (await getPlatformSettings());
-  const missing = liveModeMissing(s);
-  if (missing.length) throw new ApiError(503, `Live orders are paused until these are recorded in admin settings: ${missing.join('; ')}.`);
+  const { collectGoLive } = await import('@/lib/go-live');
+  const { blockers } = await collectGoLive(settings);
+  if (blockers.length) throw new ApiError(503, `Live orders are paused until these are done (Admin → Go-live): ${blockers.map((b) => b.label).join('; ')}.`);
 }
