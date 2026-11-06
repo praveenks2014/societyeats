@@ -1,7 +1,7 @@
 import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { api, ApiError, ok, readJson } from '@/lib/api';
-import { requireSession } from '@/lib/auth';
+import { requireRecentMfa, requireSession } from '@/lib/auth';
 import { recordAudit } from '@/lib/audit';
 import { getDb } from '@/lib/db';
 import { getPlatformSettings, setPlatformSetting } from '@/lib/db/platform';
@@ -69,6 +69,7 @@ export const POST = api<{ params: { id: string } }>(async (req, { params }) => {
   const parsed = actionSchema.safeParse(await readJson(req));
   if (!parsed.success) throw new ApiError(400, parsed.error.issues[0].message);
   const a = parsed.data;
+  if (a.action === 'delist') requireRecentMfa(admin); // delisting a kitchen is a sensitive action
   const actor = { id: admin.uid, role: 'admin' as const };
   switch (a.action) {
     case 'approve':

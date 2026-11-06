@@ -16,7 +16,7 @@ export async function makeUser(db: Db, role: 'buyer' | 'seller' | 'admin' = 'buy
   const i = n();
   const [u] = await db
     .insert(schema.users)
-    .values({ phone: `98${String(10000000 + i).padStart(8, '0')}`, email: `u${i}@t.example`, emailVerifiedAt: new Date(), age18ConfirmedAt: new Date(), name: `User ${i}`, passwordHash: 'x', role, lat: 17.465, lng: 78.31, ...over })
+    .values({ phone: `98${String(10000000 + i).padStart(8, '0')}`, email: `u${i}@t.example`, emailVerifiedAt: new Date(), age18ConfirmedAt: new Date(), ...(role === 'admin' ? { totpEnabledAt: new Date(), totpSecretEnc: 'test' } : {}), name: `User ${i}`, passwordHash: 'x', role, lat: 17.465, lng: 78.31, ...over })
     .returning();
   // Pilot v2: invite-only — a user with a society is an approved member of it.
   if (u.societyId) await db.insert(schema.societyMemberships).values({ userId: u.id, societyId: u.societyId, status: 'approved', tower: 'A', flat: '101' });

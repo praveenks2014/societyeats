@@ -20,13 +20,13 @@ export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => 
   const id = Number(params.id);
   const parsed = patch.safeParse(await readJson(req));
   if (!parsed.success) throw new ApiError(400, parsed.error.issues[0].message);
-  const { rotateInviteCode, pincode, ...rest } = parsed.data;
+  const { rotateInviteCode, pincode, waGroupName, ...rest } = parsed.data;
   const db = await getDb();
   const [existing] = await db.select().from(societies).where(eq(societies.id, id));
   if (!existing) throw new ApiError(404, 'Society not found');
   const [s] = await db
     .update(societies)
-    .set({ ...rest, ...(pincode !== undefined ? { pincode: pincode || null } : {}), ...(rotateInviteCode ? { inviteCode: newInviteCode(existing.name) } : {}) })
+    .set({ ...rest, ...(pincode !== undefined ? { pincode: pincode || null } : {}), ...(waGroupName !== undefined ? { waGroupName: waGroupName || null } : {}), ...(rotateInviteCode ? { inviteCode: newInviteCode(existing.name) } : {}) })
     .where(eq(societies.id, id))
     .returning();
   await recordAudit({ actorId: admin.uid, action: 'society.update', targetType: 'society', targetId: id, meta: { ...rest, rotateInviteCode } });

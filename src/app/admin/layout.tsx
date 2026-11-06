@@ -6,6 +6,7 @@ import { getPlatformSettings } from '@/lib/db/platform';
 import { adminUnreadCount } from '@/lib/messaging/admin-threads';
 import { getCronStatus } from '@/lib/cron-status';
 import { BRAND } from '@/config/brand';
+import { AdminReauth } from '@/components/admin-reauth';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!session) redirect('/login?next=/admin');
   if (session.role !== 'admin') redirect('/');
   if (session.mustChangePassword) redirect('/change-password');
+  // Two-factor is mandatory for admins: no admin page renders on a session that has not passed it.
+  if (!session.totpEnabled || !session.mfaVerifiedAt) redirect('/auth/2fa?next=/admin');
   const settings = await getPlatformSettings();
   const unread = await adminUnreadCount();
   const cron = await getCronStatus();
@@ -49,6 +52,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           ⚠️ Scheduled jobs have not run {cron.lastRunAt ? `since ${cron.lastRunAt.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })} IST (over 3 hours)` : 'yet'}. Subscription expiry and grace, reminders, unpaid-order expiry and document retention are paused. Schedule <code>POST /api/cron/run</code> hourly — see the README (“Scheduled jobs on Autoscale”).
         </div>
       )}
+      <AdminReauth />
       <div className="pt-5">{children}</div>
     </>
   );

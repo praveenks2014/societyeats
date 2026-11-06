@@ -16,4 +16,7 @@ export const societyInput = z.object({
   isLive: z.boolean().optional(),
   requireApproval: z.boolean().optional(),
   targetHouseholds: z.number().int().min(1).max(100000).optional(),
+  isPilot: z.boolean().optional(),
+  towersJson: z.array(z.string().trim().min(1).max(40)).max(80).optional(),
+  waGroupName: z.string().trim().max(120).optional().or(z.literal('')),
 });

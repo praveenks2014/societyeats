@@ -54,6 +54,8 @@ async function seedSeller(
     isApproved: true,
     listingState: 'approved',
     fssaiStatus: 'verified',
+    upiVerifyStatus: 'verified',
+    upiVerifiedVpa: 'x@bank',
   });
   await db.insert(schema.kitchenSubscriptions).values({
     sellerId: user.id,

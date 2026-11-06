@@ -5,6 +5,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** Machine-readable reason the client can act on (e.g. 'mfa_required', 'reauth_required'). */
+    public code?: string,
   ) {
     super(message);
   }
@@ -23,7 +25,7 @@ export function api<Ctx = unknown>(fn: Handler<Ctx>): Handler<RouteCtx<Ctx>> {
       return await fn(req, ctx);
     } catch (err) {
       if (err instanceof ApiError) {
-        return NextResponse.json({ error: err.message }, { status: err.status });
+        return NextResponse.json({ error: err.message, ...(err.code ? { code: err.code } : {}) }, { status: err.status });
       }
       log.error('api.unhandled', { path: req.nextUrl?.pathname, method: req.method, err });
       return NextResponse.json({ error: 'Something went wrong' }, { status: 500 });

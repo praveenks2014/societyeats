@@ -35,7 +35,7 @@ export default async function JoinPage({ params }: { params: Promise<{ code: str
         </Link>
         <Link href="/login" className="inline-flex min-h-[44px] items-center text-sm font-semibold text-leaf underline">Already have an account? Log in</Link>
       </div>
-      <p className="mt-8 text-xs text-ink-faint">You pay kitchens directly (UPI or at pickup). {BRAND.appName} charges only a small platform fee.</p>
+      <p className="mt-8 text-xs text-ink-faint">You pay kitchens directly at your door, after the food arrives. {BRAND.appName} charges only a small platform fee.</p>
     </div>
   );
 }

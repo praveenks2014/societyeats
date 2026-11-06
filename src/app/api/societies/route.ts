@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { api, ok } from '@/lib/api';
 import { getDb } from '@/lib/db';
 import { societies } from '@/lib/db/schema';
+import { getPlatformSettings } from '@/lib/db/platform';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,8 @@ export const dynamic = 'force-dynamic';
  */
 export const GET = api(async (req) => {
   const db = await getDb();
+  // Invite-only pilot: the society list is not public (residents arrive through an invite link).
+  if ((await getPlatformSettings()).pilotSocietiesOnly) return ok({ societies: [] });
   const onlyLive = new URL(req.url).searchParams.get('live') === '1';
   const rows = onlyLive
     ? await db.select().from(societies).where(eq(societies.isLive, true))

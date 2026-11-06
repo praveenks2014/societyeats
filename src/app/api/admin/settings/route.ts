@@ -1,5 +1,5 @@
 import { api, ApiError, ok, readJson } from '@/lib/api';
-import { requireSession } from '@/lib/auth';
+import { requireRecentMfa, requireSession } from '@/lib/auth';
 import { recordAudit } from '@/lib/audit';
 import { isMockMode } from '@/lib/config';
 import { getPlatformSettings, setPlatformSetting } from '@/lib/db/platform';
@@ -32,6 +32,7 @@ export const GET = api(async () => {
  */
 export const PATCH = api(async (req) => {
   const admin = await requireSession(['admin']);
+  requireRecentMfa(admin);
   const { values, errors } = parseSettingsPatch(await readJson(req));
   if (errors.length) throw new ApiError(400, errors[0]);
   const before = await getPlatformSettings();

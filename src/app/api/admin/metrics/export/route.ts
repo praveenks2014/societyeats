@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ApiError } from '@/lib/api';
-import { requireSession } from '@/lib/auth';
+import { requireRecentMfa, requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { societies } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -15,9 +15,9 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(req: Request) {
   try {
-    await requireSession(['admin']);
+    requireRecentMfa(await requireSession(['admin'])); // exports are sensitive: fresh two-factor check
   } catch (err) {
-    if (err instanceof ApiError) return NextResponse.json({ error: err.message }, { status: err.status });
+    if (err instanceof ApiError) return NextResponse.json({ error: err.message, ...(err.code ? { code: err.code } : {}) }, { status: err.status });
     throw err;
   }
   const societyId = Number(new URL(req.url).searchParams.get('societyId'));

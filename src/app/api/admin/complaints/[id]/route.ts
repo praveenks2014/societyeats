@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { api, ApiError, ok, readJson } from '@/lib/api';
-import { requireSession } from '@/lib/auth';
+import { requireRecentMfa, requireSession } from '@/lib/auth';
 import { DEFAULTS } from '@/lib/config';
 import { COMPLAINT_OUTCOME_LABELS, isUpheldOutcome, type ComplaintOutcome } from '@/lib/complaints';
 import { getDb } from '@/lib/db';
@@ -33,6 +33,7 @@ type Body = {
  */
 export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => {
   const session = await requireSession(['admin']);
+  requireRecentMfa(session);
   const body = await readJson<Body>(req);
   const id = Number(params.id);
   if (!OUTCOMES.includes(body.outcome)) throw new ApiError(400, 'Invalid outcome');
