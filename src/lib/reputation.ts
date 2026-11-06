@@ -1,3 +1,4 @@
+import { COMPLETED_STATES, type OrderStatus } from '@/lib/orders/state';
 import { and, count, countDistinct, eq, inArray } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { orders } from '@/lib/db/schema';
@@ -15,7 +16,7 @@ export async function neighbourOrderCount(sellerId: number): Promise<number> {
   const [row] = await db
     .select({ count: countDistinct(orders.buyerId) })
     .from(orders)
-    .where(and(eq(orders.sellerId, sellerId), inArray(orders.status, ['delivered', 'picked_up'])));
+    .where(and(eq(orders.sellerId, sellerId), inArray(orders.status, COMPLETED_STATES)));
   return row?.count ?? 0;
 }
 
@@ -31,7 +32,7 @@ export async function sellerCompletedOrderCount(sellerId: number): Promise<numbe
   const [row] = await db
     .select({ count: count() })
     .from(orders)
-    .where(and(eq(orders.sellerId, sellerId), inArray(orders.status, ['delivered', 'picked_up'])));
+    .where(and(eq(orders.sellerId, sellerId), inArray(orders.status, COMPLETED_STATES)));
   return row?.count ?? 0;
 }
 

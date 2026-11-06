@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Modal, Select, Skeleton, Textarea } from '@/components/ui';
 import { FoodImage } from '@/components/food-image';
-import { FeeRetryCard, FoodPaymentCard, OrderThread } from '@/components/order-extras';
-import { OrderTimeline, STATUS_META, StatusPill } from '@/components/order-status';
+import { AtDoorPaymentCard, FeeRetryCard, OrderThread } from '@/components/order-extras';
+import { COMPLETED_STATUSES, FINISHED_STATUSES, OrderTimeline, STATUS_META, StatusPill } from '@/components/order-status';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 import { COMPLAINT_CATEGORIES, COMPLAINT_OUTCOME_LABELS, type ComplaintCategory, type ComplaintOutcome } from '@/lib/complaints';
@@ -31,6 +31,8 @@ type Detail = {
     expiresAt: string | null;
     cancelReason: string | null;
     refundInPaise: number;
+    feeRefundedInPaise: number;
+    creditIssuedInPaise: number;
     referralCreditAppliedInPaise: number;
     otpCode: string | null;
     deliveryAddressJson: { flat: string; addressText: string; lat: number; lng: number } | null;
@@ -38,25 +40,20 @@ type Detail = {
   };
   items: { id: number; titleSnapshot: string; qty: number; unitPriceInPaise: number }[];
   events: { id: number; status: string; note: string | null; createdAt: string }[];
-  delivery: {
-    provider: string;
-    status: string;
-    riderName: string | null;
-    riderPhone: string | null;
-    attemptsJson: { provider: string; at: string; outcome: string; detail?: string }[] | null;
-  } | null;
-  tracking: { status: string; etaMins?: number; note?: string } | null;
   review: { rating: number; text: string | null; sellerReplyText: string | null } | null;
   vendor:
-    | { kind: 'seller'; name: string | null }
+    | { kind: 'seller'; name: string | null; acceptsCash?: boolean }
     | { kind: 'restaurant'; name: string; counterNumber: string; mallName?: string };
   pickup: { tower: string | null; instructions: string | null } | null;
-  upi: { vpa: string; payeeName: string; uri: string; qrSvg: string; amountInPaise: number } | null;
-  foodPayment: { mode: string | null; status: string | null; utr: string | null };
+  upi: { vpa: string; registeredName: string; payeeName: string; uri: string; qrSvg: string; amountInPaise: number } | null;
+  foodPayment: { mode: string | null; status: string | null; utr: string | null; method: string | null };
+  fssai: { tier: string; number: string | null } | null;
+  actions: string[];
+  statusLabel: string;
+  timers: { acceptBy: string | null; noShowAfter: string | null; confirmBy: string | null };
   viewerIsBuyer: boolean;
 };
 
-const ACTIVE = ['placed', 'fee_paid', 'awaiting_kitchen_payment_confirmation', 'paid', 'accepted', 'preparing', 'ready', 'out_for_delivery', 'delivery_unassigned'];
 
 export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: boolean }) {
   const [data, setData] = useState<Detail | null>(null);
@@ -83,7 +80,7 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
 
   // poll while the order is active
   useEffect(() => {
-    if (!data || !ACTIVE.includes(data.order.status)) return;
+    if (!data || FINISHED_STATUSES.includes(data.order.status)) return;
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
   }, [data, load]);
@@ -107,7 +104,7 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
     );
   }
 
-  const { order, vendor, delivery, tracking } = data;
+  const { order, vendor } = data;
   const meta = STATUS_META[order.status];
 
   return (
@@ -129,40 +126,38 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
       <Card className="mt-4 p-5 text-center">
         <div className="text-4xl">{meta?.emoji}</div>
         <div className="mt-1 text-lg font-bold">{meta?.label}</div>
-        {tracking?.note && <p className="mt-1 text-sm text-ink-soft">{tracking.note}</p>}
-        {tracking?.etaMins != null && tracking.etaMins > 0 && (
-          <p className="mt-1 text-sm font-semibold text-leaf">~{tracking.etaMins} min away</p>
-        )}
-        {order.status === 'delivery_unassigned' && (
-          <p className="mt-1 text-sm text-ink-soft">
-            All delivery partners are busy — our team has been alerted and is assigning a rider.
-          </p>
-        )}
+        {order.status === 'booked' && data.timers.acceptBy && <Countdown to={data.timers.acceptBy} label="The kitchen has until" />}
+        {data.fssai?.tier === 'provisional' && <p className="mt-2 text-xs text-turmeric-deep">FSSAI applied: provisional</p>}
+        {data.fssai?.tier === 'verified' && data.fssai.number && <p className="mt-2 text-xs text-leaf">FSSAI registered · {data.fssai.number}</p>}
       </Card>
 
-      {order.cancelReason && ['cancelled', 'expired'].includes(order.status) && (
-        <p className="mt-3 rounded-xl bg-chili-tint px-4 py-3 text-sm text-chili-dark" role="status">
-          {order.cancelReason}.{order.refundInPaise > 0 ? ` Your platform fee of ${formatINR(order.refundInPaise)} has been refunded.` : ''}
+      {order.cancelReason && !COMPLETED_STATUSES.includes(order.status) && FINISHED_STATUSES.includes(order.status) && (
+        <p className="mt-3 rounded-xl bg-chili-tint px-4 py-3 text-sm text-chili-dark" role="status" data-testid="cancel-banner">
+          {order.cancelReason}.
+          {order.feeRefundedInPaise > 0 ? ` Your platform fee of ${formatINR(order.feeRefundedInPaise)} has been refunded.` : ''}
+          {order.creditIssuedInPaise > 0 ? ` We added ${formatINR(order.creditIssuedInPaise)} PadosiPlate credit for your next order.` : ''}
         </p>
       )}
 
-      {data.viewerIsBuyer && order.type === 'home_delivery' && order.status === 'placed' && (
+      {data.viewerIsBuyer && order.type === 'home_delivery' && order.status === 'fee_pending' && (
         <FeeRetryCard orderId={order.id} amountInPaise={order.onlineChargeInPaise} expiresAt={order.expiresAt} mockMode={mockMode} onPaid={load} />
       )}
 
       {data.viewerIsBuyer && order.type === 'home_delivery' && vendor.kind === 'seller' && (
-        <FoodPaymentCard
+        <AtDoorPaymentCard
           orderId={order.id}
           status={order.status}
-          mode={data.foodPayment.mode}
           paymentStatus={data.foodPayment.status}
           utr={data.foodPayment.utr}
           foodTotalInPaise={order.foodTotalInPaise}
           kitchenName={vendor.name ?? 'the kitchen'}
+          acceptsCash={!!vendor.acceptsCash}
           upi={data.upi}
           onChanged={load}
         />
       )}
+
+      {data.viewerIsBuyer && data.actions.includes('buyer_cancel') && <BuyerCancel orderId={order.id} status={order.status} onDone={load} />}
 
       {data.pickup && data.viewerIsBuyer && (
         <Card className="mt-4 p-4">
@@ -171,70 +166,13 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
         </Card>
       )}
 
-      {/* OTP + rider panel */}
-      {order.otpCode && ['out_for_delivery', 'ready'].includes(order.status) && data.viewerIsBuyer && (
+      {/* Mall (legacy) pickup OTP */}
+      {order.otpCode && order.type === 'mall_pickup' && order.status === 'ready' && data.viewerIsBuyer && (
         <Card className="mt-4 p-5">
-          <div className="eyebrow">
-            {order.type === 'mall_pickup'
-              ? 'SHOW AT THE COUNTER'
-              : order.fulfillmentType === 'platform_delivery'
-                ? 'SHARE WITH YOUR RIDER'
-                : order.fulfillmentType === 'seller_delivery'
-                  ? 'SHARE WITH THE KITCHEN AT DELIVERY'
-                  : 'SHOW TO THE KITCHEN'}
-          </div>
+          <div className="eyebrow">SHOW AT THE COUNTER</div>
           <div className="mt-2 flex justify-center gap-2">
             {order.otpCode.split('').map((d, i) => (
-              <span
-                key={i}
-                className="flex h-12 w-10 items-center justify-center rounded-xl bg-leaf font-display text-xl font-bold text-white"
-              >
-                {d}
-              </span>
-            ))}
-          </div>
-          {delivery && order.fulfillmentType === 'platform_delivery' && (
-            <div className="mt-4 flex items-center justify-between rounded-2xl bg-rice px-4 py-3">
-              <div>
-                <div className="text-sm font-semibold">🛵 {delivery.riderName ?? 'Assigning rider…'}</div>
-                <div className="text-xs capitalize text-ink-faint">
-                  via {delivery.provider} {delivery.riderPhone ? `· ${delivery.riderPhone}` : ''}
-                </div>
-              </div>
-            </div>
-          )}
-          {mockMode && order.status === 'out_for_delivery' && order.fulfillmentType === 'platform_delivery' && (
-            <MockRiderEntry orderId={order.id} onDone={load} />
-          )}
-          {mockMode && order.status === 'out_for_delivery' && order.fulfillmentType === 'seller_delivery' && (
-            <p className="mt-3 text-center text-xs text-ink-faint">
-              (Demo: the kitchen verifies this OTP from their orders page when they hand it over)
-            </p>
-          )}
-          {mockMode && order.status === 'ready' && order.type === 'mall_pickup' && (
-            <p className="mt-3 text-center text-xs text-ink-faint">
-              (Demo: counter staff verifies this OTP from the restaurant console)
-            </p>
-          )}
-          {mockMode && order.status === 'ready' && order.type === 'home_delivery' && order.fulfillmentType === 'self_pickup' && (
-            <p className="mt-3 text-center text-xs text-ink-faint">
-              (Demo: the kitchen verifies this OTP from their orders page when you collect)
-            </p>
-          )}
-        </Card>
-      )}
-
-      {/* failover attempts log */}
-      {delivery?.attemptsJson && delivery.attemptsJson.length > 1 && (
-        <Card className="mt-4 p-4">
-          <div className="eyebrow mb-2">DELIVERY DISPATCH LOG</div>
-          <div className="space-y-1.5">
-            {delivery.attemptsJson.map((a, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs">
-                <span>{a.outcome === 'success' ? '✅' : '❌'}</span>
-                <span className="font-semibold capitalize">{a.provider}</span>
-                <span className="text-ink-faint">{a.detail ?? a.outcome}</span>
-              </div>
+              <span key={i} className="flex h-12 w-10 items-center justify-center rounded-xl bg-leaf font-display text-xl font-bold text-white">{d}</span>
             ))}
           </div>
         </Card>
@@ -288,14 +226,14 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
             {order.platformFeeGstInPaise > 0 && <div className="flex justify-between"><span>GST on platform fee</span><span>{formatINR(order.platformFeeGstInPaise)}</span></div>}
             {order.gstInPaise > 0 && <div className="flex justify-between"><span>GST on food (e-commerce operator)</span><span>{formatINR(order.gstInPaise)}</span></div>}
             <div className="flex justify-between pt-1 text-base font-bold">
-              <span>Platform fee {order.status === 'placed' ? 'to pay' : 'paid'}</span>
+              <span>Platform fee {order.status === 'fee_pending' ? 'to pay' : 'paid'}</span>
               <span>{formatINR(order.onlineChargeInPaise)}</span>
             </div>
             {order.refundInPaise > 0 && (
               <div className="flex justify-between text-leaf"><span>Platform fee refunded</span><span>−{formatINR(order.refundInPaise)}</span></div>
             )}
           </div>
-          {!['placed', 'expired'].includes(order.status) && (
+          {!['fee_pending', 'expired'].includes(order.status) && (
             <Link href={`/orders/${order.id}/invoice`} className="mt-3 block text-center text-sm font-semibold text-leaf underline">
               🧾 View invoice
             </Link>
@@ -314,7 +252,7 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
       )}
 
       {/* anonymous messages with the kitchen */}
-      {data.viewerIsBuyer && order.type === 'home_delivery' && order.status !== 'placed' && (
+      {data.viewerIsBuyer && order.type === 'home_delivery' && order.status !== 'fee_pending' && (
         <OrderThread
           orderId={order.id}
           onRefund={() => document.getElementById('complaint-block')?.scrollIntoView({ behavior: 'smooth' })}
@@ -322,12 +260,12 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
       )}
 
       {/* review */}
-      {data.viewerIsBuyer && ['delivered', 'picked_up'].includes(order.status) && (
+      {data.viewerIsBuyer && COMPLETED_STATUSES.includes(order.status) && (
         <ReviewBlock orderId={order.id} review={data.review} onDone={load} />
       )}
 
       {/* complaint (DECISIONS.md #73+) */}
-      {data.viewerIsBuyer && ['delivered', 'picked_up'].includes(order.status) && (
+      {data.viewerIsBuyer && COMPLETED_STATUSES.includes(order.status) && (
         <div id="complaint-block">
           <ComplaintBlock orderId={order.id} />
         </div>
@@ -342,47 +280,51 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
   );
 }
 
-/** MOCK_MODE: simulate the rider's OTP entry from the buyer's tracking screen. */
-function MockRiderEntry({ orderId, onDone }: { orderId: number; onDone: () => void }) {
-  const [otp, setOtp] = useState('');
+function Countdown({ to, label }: { to: string; label: string }) {
+  const [left, setLeft] = useState('');
+  useEffect(() => {
+    const tick = () => {
+      const ms = new Date(to).getTime() - Date.now();
+      setLeft(ms <= 0 ? 'any moment' : `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`);
+    };
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [to]);
+  return <p className="mt-2 text-xs text-ink-soft">{label} {left} to accept — otherwise your platform fee is refunded automatically.</p>;
+}
+
+function BuyerCancel({ orderId, status, onDone }: { orderId: number; status: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
-
-  async function submit() {
+  async function cancel() {
     setBusy(true);
-    const res = await fetch(`/api/orders/${orderId}/verify-otp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ otp }),
-    });
-    const d = await res.json();
+    const res = await fetch(`/api/orders/${orderId}/action`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'buyer_cancel' }) });
+    const d = await res.json().catch(() => ({}));
     setBusy(false);
-    if (!res.ok) {
-      toast(d.error || 'Wrong OTP', 'err');
-      return;
-    }
-    toast('Delivered! 🎉');
+    if (!res.ok) return toast(d.error || 'Could not cancel', 'err');
+    setOpen(false);
+    toast(d.refundedFeePaise ? 'Order cancelled — platform fee refunded' : 'Order cancelled');
     onDone();
   }
-
   return (
-    <div className="mt-4 rounded-2xl border border-dashed border-turmeric bg-turmeric-tint/60 p-3">
-      <div className="flex items-center gap-1.5 text-xs font-semibold text-turmeric-deep">
-        <Badge tone="amber">MOCK</Badge> Rider&apos;s handset — enter buyer&apos;s OTP
-      </div>
-      <div className="mt-2 flex gap-2">
-        <Input
-          inputMode="numeric"
-          maxLength={4}
-          placeholder="4-digit OTP"
-          value={otp}
-          onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-        />
-        <Button onClick={submit} loading={busy} disabled={otp.length !== 4}>
-          Deliver
-        </Button>
-      </div>
-    </div>
+    <>
+      <button className="mt-4 min-h-[44px] w-full rounded-xl border border-rice-line text-sm font-semibold text-ink-soft" onClick={() => setOpen(true)} data-testid="buyer-cancel">
+        Cancel order
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} title="Cancel this order?" sheet>
+        <p className="text-sm text-ink-soft" data-testid="cancel-policy">
+          {status === 'booked'
+            ? 'The kitchen has not accepted yet, so your platform fee will be refunded in full.'
+            : 'The kitchen has already accepted your order, so the platform fee is not refunded. Frequent late cancellations can pause your ordering.'}
+        </p>
+        <div className="mt-5 flex gap-3">
+          <Button variant="secondary" className="flex-1" onClick={() => setOpen(false)}>Keep order</Button>
+          <Button className="flex-1" loading={busy} onClick={cancel} data-testid="confirm-buyer-cancel">Cancel order</Button>
+        </div>
+      </Modal>
+    </>
   );
 }
 

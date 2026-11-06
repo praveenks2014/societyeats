@@ -79,21 +79,33 @@ export const fulfillmentTypeEnum = pgEnum('fulfillment_type', [
 ]);
 
 export const orderStatusEnum = pgEnum('order_status', [
-  'placed',
-  // Phase 1 Pilot: the buyer's platform fee is paid; the kitchen now sees the order.
-  'fee_paid',
-  'awaiting_kitchen_payment_confirmation',
+  // Pilot v2 state machine (src/lib/orders/state.ts). `fee_pending` and `booked`
+  // were `placed` / `fee_paid`; `on_the_way` was `out_for_delivery` (renamed in migration 0015).
+  'fee_pending',
+  'booked',
+  'awaiting_kitchen_payment_confirmation', // legacy (pre-v2 UPI-up-front flow)
   'expired',
-  'paid',
+  'paid', // Mall flow (flag off)
   'accepted',
   'preparing',
   'ready',
-  'out_for_delivery',
-  'delivered',
-  'picked_up',
-  'cancelled',
-  'refund_pending',
-  'delivery_unassigned',
+  'on_the_way',
+  'delivered', // legacy / Mall
+  'picked_up', // legacy / Mall
+  'cancelled', // legacy
+  'refund_pending', // Mall flow
+  'delivery_unassigned', // legacy
+  'at_door',
+  'collected',
+  'payment_claimed',
+  'completed',
+  'payment_disputed',
+  'closed_unpaid',
+  'cancelled_by_seller',
+  'cancelled_by_buyer',
+  'cancelled_auto',
+  'cancelled_buyer_unpaid',
+  'no_show_buyer',
 ]);
 
 export const paymentStatusEnum = pgEnum('payment_status', [
@@ -191,6 +203,10 @@ export const societies = pgTable(
     isActive: boolean('is_active').notNull().default(true),
     // When true, new residents wait in 'pending' until an admin approves them.
     requireApproval: boolean('require_approval').notNull().default(false),
+    // Pilot v2: a pilot society is one of the invite-only launch communities.
+    isPilot: boolean('is_pilot').notNull().default(true),
+    towersJson: jsonb('towers_json').$type<string[]>(),
+    waGroupName: varchar('wa_group_name', { length: 120 }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (table) => [index('societies_lat_lng_idx').on(table.lat, table.lng)],
@@ -227,6 +243,19 @@ export const users = pgTable(
     referralCode: varchar('referral_code', { length: 12 }).unique(),
     // Who referred this user at signup, if anyone (self-referencing FK).
     referredByUserId: integer('referred_by_user_id').references((): AnyPgColumn => users.id),
+    // ---- Pilot v2: auth hardening, consent, strikes, deletion ----
+    age18ConfirmedAt: timestamp('age18_confirmed_at'),
+    phoneVerifiedAt: timestamp('phone_verified_at'),
+    totpSecretEnc: text('totp_secret_enc'),
+    totpEnabledAt: timestamp('totp_enabled_at'),
+    totpRecoveryHashesJson: jsonb('totp_recovery_hashes_json').$type<string[]>(),
+    failedLoginCount: integer('failed_login_count').notNull().default(0),
+    failedLoginWindowStart: timestamp('failed_login_window_start'),
+    lockedUntil: timestamp('locked_until'),
+    ordersBlockedUntil: timestamp('orders_blocked_until'),
+    googleSub: varchar('google_sub', { length: 64 }).unique(),
+    deletionRequestedAt: timestamp('deletion_requested_at'),
+    anonymizedAt: timestamp('anonymized_at'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   // Backs the SQL Haversine radius filter in src/lib/browse.ts (browseListings).
@@ -299,6 +328,39 @@ export const sellerProfiles = pgTable('seller_profiles', {
   fssaiVerificationTimelineJson: jsonb('fssai_verification_timeline_json').$type<
     { at: string; event: string }[]
   >(),
+  // ---- Pilot v2 onboarding wizard ----
+  legalName: varchar('legal_name', { length: 160 }),
+  displayName: varchar('display_name', { length: 120 }),
+  languagesJson: jsonb('languages_json').$type<string[]>(),
+  foodMark: varchar('food_mark', { length: 10 }).notNull().default('veg'), // veg | veg_egg | non_veg
+  cookingDaysJson: jsonb('cooking_days_json').$type<string[]>(),
+  cookingHoursText: varchar('cooking_hours_text', { length: 120 }),
+  maxOrdersPerDay: integer('max_orders_per_day').notNull().default(20),
+  minOrderPaise: integer('min_order_paise').notNull().default(0),
+  acceptsCash: boolean('accepts_cash').notNull().default(false),
+  hygieneDeclarationJson: jsonb('hygiene_declaration_json').$type<Record<string, string>>(),
+  panEnc: text('pan_enc'), // AES-GCM, never returned by any API
+  panMasked: varchar('pan_masked', { length: 12 }),
+  panNameOnCard: varchar('pan_name_on_card', { length: 120 }),
+  panVerifyJson: jsonb('pan_verify_json').$type<{ status: string; nameMatchScore?: number; checkedAt: string }>(),
+  gstin: varchar('gstin', { length: 15 }),
+  // The VPA that passed the ₹1 ownership check. Food payments must be received on THIS VPA.
+  upiVerifyStatus: varchar('upi_verify_status', { length: 24 }).notNull().default('unverified'), // unverified | pending | verified | needs_manual_review | mismatch
+  upiVerifiedVpa: varchar('upi_verified_vpa', { length: 80 }),
+  upiVerifiedName: varchar('upi_verified_name', { length: 160 }),
+  upiVerifiedAt: timestamp('upi_verified_at'),
+  upiNameMatchScore: integer('upi_name_match_score'),
+  agreementVersion: varchar('agreement_version', { length: 20 }),
+  agreementAcceptedAt: timestamp('agreement_accepted_at'),
+  onboardingStateJson: jsonb('onboarding_state_json').$type<Record<string, boolean>>(),
+  // Per-seller cap override set by an admin: { maxOrdersPerDay?, maxFoodValuePerDayPaise?, maxFoodValueTotalPaise?, expiresAt? }
+  capOverrideJson: jsonb('cap_override_json').$type<{ maxOrdersPerDay?: number; maxFoodValuePerDayPaise?: number; maxFoodValueTotalPaise?: number; expiresAt?: string }>(),
+  provisionalStartedAt: timestamp('provisional_started_at'),
+  listingsPausedReason: varchar('listings_paused_reason', { length: 40 }),
+  listingsPausedAt: timestamp('listings_paused_at'),
+  foundingGrantedAt: timestamp('founding_granted_at'),
+  fssaiAnnualFeeRemindedAt: timestamp('fssai_annual_fee_reminded_at'),
+  fssaiGrantedAt: date('fssai_granted_at'),
 });
 
 export const fssaiApplications = pgTable('fssai_applications', {
@@ -366,6 +428,20 @@ export const listings = pgTable('listings', {
   moderatedAt: timestamp('moderated_at'),
   // What the admin last approved; a changed name/photo or a >30% price move re-queues the dish.
   approvedSnapshotJson: jsonb('approved_snapshot_json').$type<{ title: string; photoUrl: string | null; priceInPaise: number }>(),
+  // ---- Pilot v2 dish rules ----
+  foodMark: varchar('food_mark', { length: 10 }).notNull().default('veg'), // veg | egg | non_veg
+  ingredients: text('ingredients'),
+  allergensJson: jsonb('allergens_json').$type<string[]>(),
+  allergensDeclared: boolean('allergens_declared').notNull().default(false),
+  spiceLevel: varchar('spice_level', { length: 10 }),
+  portionSize: varchar('portion_size', { length: 60 }),
+  bestWithinHours: integer('best_within_hours'),
+  storageAdvice: text('storage_advice'),
+  leadTimeDays: integer('lead_time_days').notNull().default(0),
+  maxPortionsPerSlot: integer('max_portions_per_slot'),
+  photosJson: jsonb('photos_json').$type<string[]>(),
+  isPackaged: boolean('is_packaged').notNull().default(false),
+  packagedJson: jsonb('packaged_json').$type<{ netQuantity: string; manufactureDate: string; bestBefore: string; makerName: string; makerAddress: string }>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -424,7 +500,7 @@ export const orders = pgTable('orders', {
   type: orderTypeEnum('type').notNull(),
   sellerId: integer('seller_id').references(() => users.id),
   restaurantId: integer('restaurant_id').references(() => restaurants.id),
-  status: orderStatusEnum('status').notNull().default('placed'),
+  status: orderStatusEnum('status').notNull().default('fee_pending'),
   fulfillmentType: fulfillmentTypeEnum('fulfillment_type').notNull().default('self_pickup'),
   subtotalInPaise: integer('subtotal_in_paise').notNull(),
   deliveryFeeInPaise: integer('delivery_fee_in_paise').notNull().default(0),
@@ -485,6 +561,29 @@ export const orders = pgTable('orders', {
   // once this order has been swept into a T+2 payout batch, so a later batch
   // run never re-counts it. Null = not yet paid out to the seller.
   payoutId: integer('payout_id').references(() => payouts.id),
+  // ---- Pilot v2 lifecycle ----
+  // The VPA + UPI-verified registered name in force at booking. NEVER sent to the buyer before `at_door`.
+  sellerVpaSnapshot: varchar('seller_vpa_snapshot', { length: 80 }),
+  sellerRegisteredNameSnapshot: varchar('seller_registered_name_snapshot', { length: 160 }),
+  gstModeSnapshot: varchar('gst_mode_snapshot', { length: 30 }).notNull().default('unregistered'),
+  bookedAt: timestamp('booked_at'),
+  acceptedAt: timestamp('accepted_at'),
+  readyAt: timestamp('ready_at'),
+  onTheWayAt: timestamp('on_the_way_at'),
+  atDoorAt: timestamp('at_door_at'),
+  collectedAt: timestamp('collected_at'),
+  cancelledAt: timestamp('cancelled_at'),
+  cancelledBy: varchar('cancelled_by', { length: 10 }), // buyer | seller | system | admin
+  foodPaymentMethod: varchar('food_payment_method', { length: 8 }), // upi | cash
+  creditIssuedInPaise: integer('credit_issued_in_paise').notNull().default(0),
+  feeRefundedInPaise: integer('fee_refunded_in_paise').notNull().default(0),
+  scheduledFor: timestamp('scheduled_for'),
+  scheduledSlot: varchar('scheduled_slot', { length: 20 }),
+  buyerSharePhone: boolean('buyer_share_phone').notNull().default(false),
+  sellerSharePhone: boolean('seller_share_phone').notNull().default(false),
+  autoCompleted: boolean('auto_completed').notNull().default(false),
+  buyerPaymentRemindedAt: timestamp('buyer_payment_reminded_at'),
+  buyerNote: text('buyer_note'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -709,12 +808,12 @@ export const referralCredits = pgTable('referral_credits', {
     .notNull()
     .references(() => users.id),
   // The referred neighbour whose first completed order triggered this grant.
-  referredUserId: integer('referred_user_id')
-    .notNull()
-    .references(() => users.id),
-  referredOrderId: integer('referred_order_id')
-    .notNull()
-    .references(() => orders.id),
+  referredUserId: integer('referred_user_id').references(() => users.id),
+  referredOrderId: integer('referred_order_id').references(() => orders.id),
+  // Pilot v2: 'referral' | 'seller_cancel' (equal-value credit when a kitchen cancels) | 'admin'.
+  source: varchar('source', { length: 16 }).notNull().default('referral'),
+  sourceOrderId: integer('source_order_id').references(() => orders.id),
+  note: text('note'),
   amountInPaise: integer('amount_in_paise').notNull(),
   status: referralCreditStatusEnum('status').notNull().default('available'),
   // Set once spent — the referrer's own order this credit was applied to.
@@ -806,6 +905,10 @@ export const sessions = pgTable(
     lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(),
     expiresAt: timestamp('expires_at').notNull(),
     userAgent: varchar('user_agent', { length: 200 }),
+    ip: varchar('ip', { length: 64 }),
+    deviceHash: varchar('device_hash', { length: 64 }),
+    // Set once the admin passes TOTP in this session; admin routes require it.
+    mfaVerifiedAt: timestamp('mfa_verified_at'),
   },
   (t) => [index('sessions_user_idx').on(t.userId)],
 );
@@ -996,6 +1099,7 @@ export const orderMessages = pgTable(
     senderRole: varchar('sender_role', { length: 10 }).notNull(), // buyer | seller | system
     body: text('body').notNull(),
     quickReplyKey: varchar('quick_reply_key', { length: 30 }),
+    imageKey: varchar('image_key', { length: 120 }),
     reportedAt: timestamp('reported_at'),
     reportedById: integer('reported_by_id').references(() => users.id),
     createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -1049,4 +1153,210 @@ export const fssaiFunnelEvents = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (t) => [uniqueIndex('fssai_funnel_seller_stage_idx').on(t.sellerId, t.stage)],
+);
+
+
+// ---------- Pilot v2 ----------
+
+export const consents = pgTable(
+  'consents',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 24 }).notNull(), // terms | privacy | age18 | kitchen_terms | marketing
+    version: varchar('version', { length: 20 }).notNull(),
+    acceptedAt: timestamp('accepted_at').notNull().defaultNow(),
+    ip: varchar('ip', { length: 64 }),
+  },
+  (t) => [index('consents_user_idx').on(t.userId, t.kind)],
+);
+
+export const loginCodes = pgTable(
+  'login_codes',
+  {
+    id: serial('id').primaryKey(),
+    email: varchar('email', { length: 254 }).notNull(),
+    codeHash: varchar('code_hash', { length: 64 }).notNull(),
+    expiresAt: timestamp('expires_at').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    usedAt: timestamp('used_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('login_codes_email_idx').on(t.email)],
+);
+
+export const societyMemberships = pgTable(
+  'society_memberships',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    societyId: integer('society_id').notNull().references(() => societies.id),
+    tower: varchar('tower', { length: 40 }),
+    flat: varchar('flat', { length: 20 }),
+    status: varchar('status', { length: 12 }).notNull().default('approved'), // pending | approved | rejected
+    decidedBy: integer('decided_by').references(() => users.id),
+    decidedAt: timestamp('decided_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('society_memberships_pair_idx').on(t.userId, t.societyId)],
+);
+
+export const societyAccessRequests = pgTable('society_access_requests', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id),
+  societyName: varchar('society_name', { length: 160 }).notNull(),
+  city: varchar('city', { length: 80 }),
+  contactName: varchar('contact_name', { length: 120 }).notNull(),
+  email: varchar('email', { length: 254 }).notNull(),
+  phone: varchar('phone', { length: 15 }),
+  message: text('message'),
+  status: varchar('status', { length: 12 }).notNull().default('open'), // open | contacted | closed
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const upiVerifications = pgTable(
+  'upi_verifications',
+  {
+    id: serial('id').primaryKey(),
+    sellerId: integer('seller_id').notNull().references(() => users.id),
+    provider: varchar('provider', { length: 24 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull().default('created'), // created | pending | verified | needs_manual_review | mismatch | failed
+    claimedVpa: varchar('claimed_vpa', { length: 80 }).notNull(),
+    verifiedVpa: varchar('verified_vpa', { length: 80 }),
+    registeredName: varchar('registered_name', { length: 160 }),
+    nameMatchScore: integer('name_match_score'),
+    maskedAccount: varchar('masked_account', { length: 20 }),
+    ifsc: varchar('ifsc', { length: 11 }),
+    bankName: varchar('bank_name', { length: 80 }),
+    razorpayOrderId: varchar('razorpay_order_id', { length: 64 }).unique(),
+    razorpayPaymentId: varchar('razorpay_payment_id', { length: 64 }),
+    validationId: varchar('validation_id', { length: 64 }),
+    refundId: varchar('refund_id', { length: 64 }),
+    evidenceFileKey: varchar('evidence_file_key', { length: 120 }),
+    note: text('note'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    completedAt: timestamp('completed_at'),
+  },
+  (t) => [index('upi_verifications_seller_idx').on(t.sellerId)],
+);
+
+export const strikes = pgTable(
+  'strikes',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').notNull().references(() => users.id),
+    role: varchar('role', { length: 8 }).notNull(), // buyer | seller
+    kind: varchar('kind', { length: 30 }).notNull(), // seller_cancel | seller_missed | buyer_unpaid | buyer_no_show | buyer_late_cancel | admin
+    orderId: integer('order_id').references(() => orders.id),
+    reason: text('reason'),
+    liftedAt: timestamp('lifted_at'),
+    appealedAt: timestamp('appealed_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('strikes_user_idx').on(t.userId, t.createdAt)],
+);
+
+// One list for disputes, grievances, chat reports and data requests, with the E-Commerce Rules timers.
+export const grievances = pgTable(
+  'grievances',
+  {
+    id: serial('id').primaryKey(),
+    kind: varchar('kind', { length: 24 }).notNull(), // dispute_payment | dispute_food | dispute_quality | chat_report | grievance | data_request
+    orderId: integer('order_id').references(() => orders.id),
+    raisedById: integer('raised_by_id').references(() => users.id),
+    raisedRole: varchar('raised_role', { length: 8 }),
+    subject: varchar('subject', { length: 200 }).notNull(),
+    body: text('body'),
+    evidenceJson: jsonb('evidence_json').$type<Record<string, unknown>>(),
+    status: varchar('status', { length: 12 }).notNull().default('open'), // open | acknowledged | resolved | closed
+    ackDueAt: timestamp('ack_due_at').notNull(),
+    ackAt: timestamp('ack_at'),
+    resolveDueAt: timestamp('resolve_due_at').notNull(),
+    resolvedAt: timestamp('resolved_at'),
+    resolution: varchar('resolution', { length: 30 }),
+    resolutionNote: text('resolution_note'),
+    handledBy: integer('handled_by').references(() => users.id),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('grievances_status_idx').on(t.status, t.createdAt)],
+);
+
+export const chatReads = pgTable(
+  'chat_reads',
+  {
+    orderId: integer('order_id').notNull().references(() => orders.id),
+    userId: integer('user_id').notNull().references(() => users.id),
+    lastReadMessageId: integer('last_read_message_id').notNull().default(0),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('chat_reads_pair_idx').on(t.orderId, t.userId)],
+);
+
+export const disclaimers = pgTable('disclaimers', {
+  id: varchar('id', { length: 40 }).primaryKey(),
+  version: integer('version').notNull().default(1),
+  text: text('text').notNull(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  updatedBy: integer('updated_by').references(() => users.id),
+});
+
+export const legalDocuments = pgTable('legal_documents', {
+  slug: varchar('slug', { length: 40 }).primaryKey(),
+  version: integer('version').notNull().default(1),
+  title: varchar('title', { length: 160 }).notNull(),
+  body: text('body').notNull(),
+  // Material changes bump `reconsentRequired` so users are asked to accept again.
+  reconsentRequired: boolean('reconsent_required').notNull().default(false),
+  publishedAt: timestamp('published_at').notNull().defaultNow(),
+});
+
+export const settingsHistory = pgTable(
+  'settings_history',
+  {
+    id: serial('id').primaryKey(),
+    key: varchar('key', { length: 60 }).notNull(),
+    oldValue: text('old_value'),
+    newValue: text('new_value'),
+    changedBy: integer('changed_by').references(() => users.id),
+    changedAt: timestamp('changed_at').notNull().defaultNow(),
+  },
+  (t) => [index('settings_history_key_idx').on(t.key, t.changedAt)],
+);
+
+export const pushSubscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull().unique(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('push_subscriptions_user_idx').on(t.userId)],
+);
+
+export const favourites = pgTable(
+  'favourites',
+  {
+    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    sellerId: integer('seller_id').notNull().references(() => users.id),
+    notifyCooking: boolean('notify_cooking').notNull().default(true),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('favourites_pair_idx').on(t.userId, t.sellerId)],
+);
+
+// A kitchen's published menu for one IST date (drives the share card and follower alerts).
+export const menuPosts = pgTable(
+  'menu_posts',
+  {
+    id: serial('id').primaryKey(),
+    sellerId: integer('seller_id').notNull().references(() => users.id),
+    forDate: varchar('for_date', { length: 10 }).notNull(), // YYYY-MM-DD (IST)
+    note: varchar('note', { length: 200 }),
+    listingIdsJson: jsonb('listing_ids_json').$type<number[]>().notNull(),
+    publishedAt: timestamp('published_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('menu_posts_day_idx').on(t.sellerId, t.forDate)],
 );

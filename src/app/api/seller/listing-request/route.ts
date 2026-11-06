@@ -22,7 +22,7 @@ export const POST = api(async () => {
   const c = await kitchenChecklist(session.uid);
   if (!c) throw new ApiError(404, 'Seller profile not found');
   if (!c.requestReady) {
-    const missing = c.items.slice(0, 5).filter((i) => !i.done).map((i) => i.label);
+    const missing = c.items.slice(0, c.requiredCount).filter((i) => !i.done).map((i) => i.label);
     throw new ApiError(400, `Finish these first: ${missing.join('; ')}`);
   }
   const to = await transitionKitchen(session.uid, 'submit', { id: session.uid, role: 'seller' });

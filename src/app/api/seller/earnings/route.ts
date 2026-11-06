@@ -1,3 +1,4 @@
+import { COMPLETED_STATES, type OrderStatus } from '@/lib/orders/state';
 import { desc, eq, inArray, sql, and } from 'drizzle-orm';
 import { api, ok } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
@@ -17,7 +18,7 @@ export const GET = api(async () => {
   const completed = await db
     .select()
     .from(orders)
-    .where(and(eq(orders.sellerId, session.uid), inArray(orders.status, ['delivered', 'picked_up'])))
+    .where(and(eq(orders.sellerId, session.uid), inArray(orders.status, COMPLETED_STATES)))
     .orderBy(desc(orders.completedAt));
 
   const foodTotal = completed.reduce((s, o) => s + o.foodTotalInPaise, 0);

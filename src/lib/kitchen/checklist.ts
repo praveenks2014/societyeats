@@ -1,39 +1,38 @@
 import { and, desc, eq, ne } from 'drizzle-orm';
-import { DEFAULTS } from '@/lib/config';
+import { activeMembership } from '@/lib/access';
 import { getDb } from '@/lib/db';
+import { getPlatformSettings } from '@/lib/db/platform';
 import { fssaiApplications, listings, sellerProfiles } from '@/lib/db/schema';
 import { sellerIsSubscribed } from '@/lib/subscriptions/queries';
-import { kitchenGate, paymentDetailsOk } from './gate';
+import { kitchenGate } from './gate';
+import { evaluateSteps, type Step } from './onboarding';
 
-export type ChecklistItem = { key: string; label: string; done: boolean; href: string; hint?: string };
+export type ChecklistItem = Step;
 
 /**
- * Seller onboarding checklist (shown on /seller):
- *   profile + 3 photos → payment details → FSSAI → first dish → subscription
- *   → submit listing request → admin approval → live
+ * Seller onboarding checklist (shown on /seller and on the wizard):
+ *   about → kitchen → hygiene → FSSAI → PAN → UPI ₹1 → agreement → first dish (→ plan, when there is no free founding offer)
+ *   → submit for admin approval → live
  */
 export async function kitchenChecklist(sellerId: number) {
   const db = await getDb();
   const [profile] = await db.select().from(sellerProfiles).where(eq(sellerProfiles.userId, sellerId));
   if (!profile) return null;
+  const settings = await getPlatformSettings();
   const [application] = await db.select().from(fssaiApplications).where(eq(fssaiApplications.sellerId, sellerId)).orderBy(desc(fssaiApplications.createdAt)).limit(1);
   const dishes = await db.select({ id: listings.id }).from(listings).where(and(eq(listings.sellerId, sellerId), ne(listings.moderationStatus, 'rejected')));
   const subscribed = await sellerIsSubscribed(sellerId);
   const gate = await kitchenGate(sellerId);
+  const membership = await activeMembership(sellerId);
 
-  const photos = profile.kitchenPhotosJson?.length ?? 0;
   const fssaiStarted = profile.fssaiStatus === 'verified' || profile.fssaiStatus === 'awaiting_admin_check' || ['filed_on_foscos', 'granted'].includes(application?.status ?? '');
   const state = profile.listingState;
+  const steps = evaluateSteps(profile, { isMember: !!membership || !settings.pilotSocietiesOnly, hasDish: dishes.length > 0, planOk: subscribed, fssaiStarted, foundingOffer: settings.foundingKitchenOffer });
   const items: ChecklistItem[] = [
-    { key: 'profile', label: `Kitchen profile + ${DEFAULTS.minKitchenPhotosRequired} photos`, done: !!profile.kitchenName && photos >= DEFAULTS.minKitchenPhotosRequired, href: '/seller/onboarding', hint: `${photos}/${DEFAULTS.minKitchenPhotosRequired} photos` },
-    { key: 'payment', label: 'Payment details (UPI ID or pay-at-pickup)', done: paymentDetailsOk(profile), href: '/seller/payment-details' },
-    { key: 'fssai', label: 'FSSAI registration', done: fssaiStarted, href: '/seller/compliance' },
-    { key: 'dish', label: 'Add your first dish', done: dishes.length > 0, href: '/seller/listings' },
-    { key: 'subscription', label: 'Choose and pay a subscription plan', done: subscribed, href: '/seller/subscription' },
-    { key: 'submit', label: 'Submit your listing request', done: ['submitted', 'approved', 'delisted'].includes(state), href: '/seller' },
-    { key: 'approval', label: 'PadosiPlate approval', done: state === 'approved', href: '/seller/inbox', hint: state === 'changes_requested' ? 'Changes requested — see inbox' : state === 'rejected' ? 'Not approved' : state === 'delisted' ? 'Delisted' : undefined },
+    ...steps,
+    { key: 'submit', label: 'Submit for PadosiPlate approval', done: ['submitted', 'approved', 'delisted'].includes(state), href: '/seller', hint: state === 'changes_requested' ? 'Changes requested — see inbox' : state === 'rejected' ? 'Not approved' : state === 'delisted' ? 'Delisted' : undefined },
     { key: 'live', label: 'Live to your neighbours', done: gate.ok, href: '/seller' },
   ];
-  const requestReady = items.slice(0, 5).every((i) => i.done);
-  return { items, requestReady, state, reviewNote: profile.listingReviewNote, gate };
+  const requestReady = steps.every((i) => i.done);
+  return { items, requestReady, requiredCount: steps.length, state, reviewNote: profile.listingReviewNote, gate };
 }

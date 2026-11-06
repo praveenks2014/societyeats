@@ -20,20 +20,79 @@ export type Def = IntDef | NumDef | BoolDef | TextDef | EnumDef;
 export const SETTING_DEFS = {
   // ---- buyer platform fee (the platform's revenue on every order) ----
   buyerPlatformFeeBps: { kind: 'int', unit: 'bps', min: 0, max: 2500, def: 1000, group: 'Pricing', label: 'Buyer platform fee (%)', hint: '% of the food value, paid by the buyer via Razorpay. 0–25%. Default 10.' },
-  buyerPlatformFeeMinPaise: { kind: 'int', unit: 'paise', min: 0, max: 100_000, def: 0, group: 'Pricing', label: 'Platform fee floor (₹)', hint: 'Minimum fee per order. 0 = no floor.' },
-  buyerPlatformFeeMaxPaise: { kind: 'int', unit: 'paise', min: 0, max: 1_000_000, def: 0, group: 'Pricing', label: 'Platform fee cap (₹)', hint: 'Maximum fee per order. 0 = no cap.' },
+  buyerPlatformFeeMinPaise: { kind: 'int', unit: 'paise', min: 0, max: 100_000, def: 1000, group: 'Pricing', label: 'Platform fee floor (₹)', hint: 'Minimum fee per order. Default ₹10. 0 = no floor.' },
+  buyerPlatformFeeMaxPaise: { kind: 'int', unit: 'paise', min: 0, max: 1_000_000, def: 2500, group: 'Pricing', label: 'Platform fee cap (₹)', hint: 'Maximum fee per order. Default ₹25. 0 = no cap.' },
+  sellerDeliveryFeeEnabled: { kind: 'bool', def: false, group: 'Pricing', label: 'Kitchens may add a delivery fee', hint: 'Off for the pilot: delivery is included in the dish price. A separate delivery fee would make the platform liable for GST on local delivery (Notification 17/2025-CT(Rate)).' },
   platformFeeGstBps: { kind: 'int', unit: 'bps', min: 0, max: 2800, def: 1800, group: 'Tax', label: 'GST on platform fee & subscriptions (%)', hint: 'Applied only when a platform GSTIN is entered below; otherwise 0.' },
   platformGstin: { kind: 'text', def: '', maxLen: 15, pattern: /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/, patternHint: 'a valid 15-character GSTIN, or blank', group: 'Tax', label: 'Platform GSTIN', hint: 'Leave blank until registered — GST is then not charged.' },
-  ecoFoodGstMode: { kind: 'enum', options: ['off', 'collect_with_platform_fee'], def: 'off', group: 'Tax', label: 'E-commerce-operator food GST (Sec 9(5))', hint: '⚠️ Confirm GST treatment with your CA before going live. "collect_with_platform_fee" adds 5% of the food value to the Razorpay charge and records it as ECO GST payable.' },
-  ecoFoodGstBps: { kind: 'int', unit: 'bps', min: 0, max: 2800, def: 500, group: 'Tax', label: 'ECO food GST rate (%)', hint: 'Used only when the mode above is on. Default 5.' },
+  gstMode: { kind: 'enum', options: ['unregistered', 'registered_fee_only', 'registered_eco_9_5'], def: 'unregistered', group: 'Tax', label: 'GST mode', hint: '⚠️ Confirm with your CA. unregistered: no GST charged. registered_fee_only: 18% GST on the platform fee (needs the GSTIN below). registered_eco_9_5: 18% on the fee PLUS 5% GST on the food value collected at booking (CGST Sec 9(5)); the kitchen must not charge GST on food.' },
+  gstPositionConfirmedAt: { kind: 'text', def: '', maxLen: 40, group: 'Tax', label: 'GST position confirmed on (date)', hint: 'Required before live mode. Record the date your CA confirmed the mode above.' },
+  gstPositionNote: { kind: 'text', def: '', maxLen: 300, group: 'Tax', label: 'GST position note', hint: 'For example: "CA confirmed registered_eco_9_5 on 12 Nov 2026".' },
+  tdsWarnPaise: { kind: 'int', unit: 'paise', min: 0, max: 2_000_000_000, def: 40_000_000, group: 'Tax', label: 'Seller sales TDS warning (₹)', hint: 'Alert a seller and admin when FY gross food sales reach this. Default ₹4,00,000.' },
+  tdsPausePaise: { kind: 'int', unit: 'paise', min: 0, max: 2_000_000_000, def: 50_000_000, group: 'Tax', label: 'Seller sales TDS pause (₹)', hint: 'New orders pause at this FY gross (Income-tax Act 2025 Sec 393, ex-194-O threshold). Default ₹5,00,000.' },
+  ecoFoodGstBps: { kind: 'int', unit: 'bps', min: 0, max: 2800, def: 500, group: 'Tax', label: 'Food GST rate under Sec 9(5) (%)', hint: 'Used only in registered_eco_9_5 mode. Default 5.' },
   // ---- subscriptions ----
   subscriptionGraceDays: { kind: 'int', unit: 'days', min: 0, max: 30, def: 3, group: 'Subscriptions', label: 'Grace period after expiry (days)', hint: 'Listings stay visible, with a banner, during grace.' },
-  subscriptionReminderDays: { kind: 'text', def: '7,1', pattern: /^\d{1,2}(,\d{1,2}){0,4}$/, patternHint: 'comma-separated days like 7,1', group: 'Subscriptions', label: 'Renewal reminders (days before expiry)', hint: 'Comma-separated, e.g. 7,1.' },
+  subscriptionReminderDays: { kind: 'text', def: '7,3,1', pattern: /^\d{1,2}(,\d{1,2}){0,4}$/, patternHint: 'comma-separated days like 7,1', group: 'Subscriptions', label: 'Renewal reminders (days before expiry)', hint: 'Comma-separated, e.g. 7,3,1.' },
   // ---- order timing ----
   unpaidOrderExpiryMinutes: { kind: 'int', unit: 'minutes', min: 1, max: 120, def: 15, group: 'Orders', label: 'Unpaid-fee order expiry (minutes)', hint: 'Orders whose platform fee is unpaid expire and release stock.' },
-  sellerAcceptWindowMinutes: { kind: 'int', unit: 'minutes', min: 1, max: 120, def: 15, group: 'Orders', label: 'Kitchen acceptance window (minutes)', hint: 'Unaccepted orders auto-cancel and the platform fee is refunded.' },
+  sellerAcceptWindowMinutes: { kind: 'int', unit: 'minutes', min: 1, max: 120, def: 20, group: 'Orders', label: 'Kitchen acceptance window (minutes)', hint: 'Unaccepted orders auto-cancel and the platform fee is refunded. Default 20.' },
   kitchenPaymentConfirmMinutes: { kind: 'int', unit: 'minutes', min: 1, max: 240, def: 30, group: 'Orders', label: 'Kitchen UPI-confirmation reminder (minutes)', hint: 'After this long, both sides and admin are notified. Orders are never auto-cancelled for it.' },
+  atDoorWaitMinutes: { kind: 'int', unit: 'minutes', min: 1, max: 120, def: 15, group: 'Orders', label: 'Wait at the door before a no-show (minutes)', hint: 'After this long at the door with an unreachable buyer the kitchen may record a no-show.' },
+  paymentClaimMinutes: { kind: 'int', unit: 'minutes', min: 1, max: 240, def: 30, group: 'Orders', label: 'Buyer payment claim window (minutes)', hint: 'After collecting, the buyer is reminded after this long; then the kitchen may raise a dispute.' },
+  sellerConfirmPaymentHours: { kind: 'int', unit: 'count', min: 1, max: 72, def: 12, group: 'Orders', label: 'Kitchen payment-confirmation window (hours)', hint: 'If the kitchen neither confirms nor disputes a claimed payment in this time the order auto-completes.' },
+  buyerLateCancelFeeRetained: { kind: 'bool', def: true, group: 'Orders', label: 'Keep the platform fee when a buyer cancels after acceptance' },
+  strikeWindowDays: { kind: 'int', unit: 'days', min: 1, max: 365, def: 30, group: 'Orders', label: 'Strike window (days)', hint: 'Strikes count inside this rolling window.' },
+  sellerStrikeLimit: { kind: 'int', unit: 'count', min: 1, max: 50, def: 3, group: 'Orders', label: 'Kitchen strikes before auto-pause', hint: 'Reaching it pauses the kitchen and sends it to admin review.' },
+  buyerLateCancelsBeforeStrike: { kind: 'int', unit: 'count', min: 1, max: 20, def: 3, group: 'Orders', label: 'Buyer late cancellations before a strike', hint: 'Cancelling after the kitchen accepted. Counted inside the strike window.' },
+  buyerStrikeLimit: { kind: 'int', unit: 'count', min: 1, max: 50, def: 3, group: 'Orders', label: 'Buyer strikes before an ordering block' },
+  buyerBlockDays: { kind: 'int', unit: 'days', min: 1, max: 365, def: 14, group: 'Orders', label: 'Ordering block length (days)' },
   radiusKm: { kind: 'number', unit: 'km', min: 1, max: 50, def: DEFAULTS.radiusKm, group: 'Orders', label: 'Nearby radius (km)', hint: 'The hyperlocal boundary. Default 10.' },
+  // ---- provisional FSSAI caps ----
+  provisionalMaxOrdersPerDay: { kind: 'int', unit: 'count', min: 0, max: 500, def: 8, group: 'Provisional caps', label: 'Provisional: max orders per day', hint: 'Applies to kitchens whose FSSAI application is filed but not yet verified. Resets 00:00 IST.' },
+  provisionalMaxFoodValuePerDayPaise: { kind: 'int', unit: 'paise', min: 0, max: 100_000_000, def: 250_000, group: 'Provisional caps', label: 'Provisional: max food value per day (₹)', hint: 'Default ₹2,500.' },
+  provisionalMaxFoodValueTotalPaise: { kind: 'int', unit: 'paise', min: 0, max: 1_000_000_000, def: 2_500_000, group: 'Provisional caps', label: 'Provisional: max food value in total (₹)', hint: 'Default ₹25,000.' },
+  provisionalMaxDays: { kind: 'int', unit: 'days', min: 0, max: 365, def: 45, group: 'Provisional caps', label: 'Provisional: max days', hint: 'After this long without verification, listings auto-pause.' },
+  showComingSoon: { kind: 'bool', def: false, group: 'Provisional caps', label: 'Show "Coming soon" kitchens to their own society', hint: 'Kitchens whose FSSAI application is inside the deemed window.' },
+  fssaiDeemedGrantDaysRegistration: { kind: 'int', unit: 'days', min: 1, max: 60, def: 7, group: 'FSSAI', label: 'Deemed-commencement window, Basic Registration (days)', hint: 'Rules verified Nov 2026; check FoSCoS for changes.' },
+  fssaiAnnualFeeReminderDays: { kind: 'int', unit: 'days', min: 1, max: 60, def: 30, group: 'FSSAI', label: 'Annual-fee reminder lead (days)' },
+  // ---- UPI ownership verification ----
+  upiVerifyProvider: { kind: 'enum', options: ['razorpayx_rpd', 'razorpay_checkout_vpa', 'mock'], def: 'razorpay_checkout_vpa', group: 'UPI verification', label: 'UPI ownership check', hint: 'razorpayx_rpd needs a RazorpayX account (live only). razorpay_checkout_vpa uses the normal gateway. mock is for dev.' },
+  upiNameMatchMinScore: { kind: 'int', unit: 'count', min: 0, max: 100, def: 70, group: 'UPI verification', label: 'Minimum PAN ↔ UPI name match (0–100)', hint: 'Below this the kitchen is flagged for admin; it is never auto-rejected.' },
+  upiVerifyRefund: { kind: 'bool', def: true, group: 'UPI verification', label: 'Refund the ₹1 check automatically' },
+  // ---- kitchen listing plan ----
+  foundingKitchenOffer: { kind: 'bool', def: true, group: 'Subscriptions', label: '"Founding kitchen" free plan on approval', hint: '90 days free, then the monthly plan.' },
+  sellerReferralFreeMonths: { kind: 'int', unit: 'count', min: 0, max: 12, def: 1, group: 'Referrals', label: 'Free plan months for referring a kitchen' },
+  // ---- chat ----
+  chatImagesEnabled: { kind: 'bool', def: true, group: 'Chat', label: 'Allow one image per chat message' },
+  chatRetentionDays: { kind: 'int', unit: 'days', min: 30, max: 730, def: 180, group: 'Chat', label: 'Chat retention after order closure (days)' },
+  chatReadOnlyHours: { kind: 'int', unit: 'count', min: 1, max: 720, def: 48, group: 'Chat', label: 'Chat stays open this many hours after completion' },
+  chatMaxLength: { kind: 'int', unit: 'count', min: 100, max: 4000, def: 1000, group: 'Chat', label: 'Max characters per message' },
+  // ---- pilot ----
+  pilotSocietiesOnly: { kind: 'bool', def: true, group: 'Pilot', label: 'Invite-only pilot', hint: 'Only members of active pilot societies can browse, order or sell.' },
+  membershipAutoApprove: { kind: 'bool', def: true, group: 'Pilot', label: 'Auto-approve residents who join by invite link', hint: 'A society can be switched to manual approval in /admin/societies.' },
+  packagedFoodsEnabled: { kind: 'bool', def: false, group: 'Pilot', label: 'Allow pre-packaged products', hint: 'Needs label fields (net quantity, dates, maker). Off for the pilot.' },
+  // ---- legal / consumer-protection identity ----
+  supportEmail: { kind: 'text', def: '', maxLen: 120, group: 'Legal', label: 'Customer-care email' },
+  supportPhone: { kind: 'text', def: '', maxLen: 20, group: 'Legal', label: 'Customer-care phone' },
+  grievanceAckHours: { kind: 'int', unit: 'count', min: 1, max: 168, def: 48, group: 'Legal', label: 'Grievance acknowledgement (hours)', hint: 'E-Commerce Rules: acknowledge within 48 hours.' },
+  grievanceResolveDays: { kind: 'int', unit: 'days', min: 1, max: 60, def: 30, group: 'Legal', label: 'Grievance resolution (days)', hint: 'E-Commerce Rules: resolve within one month. DPDP requests use the same bar.' },
+  // ---- security ----
+  adminSessionHours: { kind: 'int', unit: 'count', min: 1, max: 72, def: 12, group: 'Security', label: 'Admin session length (hours)' },
+  loginLockMaxFailures: { kind: 'int', unit: 'count', min: 3, max: 50, def: 10, group: 'Security', label: 'Failed logins before lockout' },
+  loginLockWindowMinutes: { kind: 'int', unit: 'minutes', min: 1, max: 240, def: 15, group: 'Security', label: 'Lockout window (minutes)' },
+  cronStaleMinutes: { kind: 'int', unit: 'minutes', min: 5, max: 1440, def: 15, group: 'Security', label: 'Cron heartbeat warning (minutes)', hint: 'Admin banner when the scheduled jobs have not run for this long.' },
+  // ---- revenue features (built, off for the pilot unless noted) ----
+  mealPlansEnabled: { kind: 'bool', def: false, group: 'Feature flags', label: 'Meal plans (tiffin subscriptions)' },
+  featuredEnabled: { kind: 'bool', def: false, group: 'Feature flags', label: 'Featured placement (always labelled Sponsored)' },
+  plusEnabled: { kind: 'bool', def: false, group: 'Feature flags', label: 'PadosiPlate Plus (buyer membership)' },
+  plusPriceMonthlyPaise: { kind: 'int', unit: 'paise', min: 0, max: 100_000, def: 9900, group: 'Feature flags', label: 'Plus: monthly price (₹)' },
+  plusFeeDiscountBps: { kind: 'int', unit: 'bps', min: 0, max: 10_000, def: 5000, group: 'Feature flags', label: 'Plus: platform-fee discount (%)' },
+  plusMonthlyDiscountCapPaise: { kind: 'int', unit: 'paise', min: 0, max: 100_000, def: 20_000, group: 'Feature flags', label: 'Plus: monthly discount cap (₹)' },
+  bulkOrdersEnabled: { kind: 'bool', def: false, group: 'Feature flags', label: 'Bulk and party orders' },
+  campaignsEnabled: { kind: 'bool', def: false, group: 'Feature flags', label: 'Festival campaigns' },
+  favouritesEnabled: { kind: 'bool', def: true, group: 'Feature flags', label: 'Favourites and "kitchen is cooking" alerts' },
+  preOrdersEnabled: { kind: 'bool', def: true, group: 'Feature flags', label: 'Scheduled pre-orders' },
   // ---- moderation & flags ----
   dishModerationEnabled: { kind: 'bool', def: true, group: 'Moderation', label: 'Dish moderation', hint: 'New dishes, and dishes whose name/photo changes or price moves >30%, wait for admin review.' },
   restaurantConsoleEnabled: { kind: 'bool', def: false, group: 'Feature flags', label: 'Restaurant (Mall) console', hint: 'Off for the pilot.' },
@@ -120,6 +179,8 @@ export function crossCheck(merged: PlatformSettings): string[] {
   if (merged.buyerPlatformFeeMaxPaise > 0 && merged.buyerPlatformFeeMaxPaise < merged.buyerPlatformFeeMinPaise) {
     errs.push('Platform fee cap must be at least the floor (or 0 for no cap)');
   }
+  if (merged.gstMode !== 'unregistered' && !merged.platformGstin) errs.push('A platform GSTIN is required for the selected GST mode');
+  if (merged.tdsPausePaise > 0 && merged.tdsWarnPaise > merged.tdsPausePaise) errs.push('The TDS warning level must not exceed the pause level');
   return errs;
 }
 

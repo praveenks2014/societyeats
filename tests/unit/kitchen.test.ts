@@ -5,7 +5,7 @@ import { moderationAfterEdit, moderationOnCreate, needsReReview } from '@/lib/di
 import { isFssaiEligibleToPublish } from '@/lib/fssai/gate';
 
 type Prof = Parameters<typeof evaluateGate>[0]['profile'];
-const okProfile: Prof = { listingState: 'approved', fssaiStatus: 'verified', fssaiExpiry: null, upiVpa: 'cook@okhdfc', acceptsUpiNow: true, acceptsPayAtPickup: true };
+const okProfile: Prof = { listingState: 'approved', fssaiStatus: 'verified', fssaiExpiry: null, upiVpa: 'cook@okhdfc', upiVerifyStatus: 'verified', upiVerifiedVpa: 'cook@okhdfc', listingsPausedReason: null };
 const gate = (over: { profile?: Partial<Prof>; subscribed?: boolean; userBlocked?: boolean } = {}) =>
   evaluateGate({ profile: { ...okProfile, ...(over.profile ?? {}) }, application: null, subscribed: over.subscribed ?? true, userBlocked: over.userBlocked ?? false });
 
@@ -19,11 +19,18 @@ describe('listing gate (approved + subscribed + FSSAI + payment details)', () =>
     expect(gate({ profile: { upiVpa: null } }).checks.paymentDetails).toBe(false);
     expect(gate({ userBlocked: true }).ok).toBe(false);
   });
-  test('pay-at-pickup-only kitchens need no VPA', () => {
-    expect(paymentDetailsOk({ upiVpa: null, acceptsUpiNow: false, acceptsPayAtPickup: true })).toBe(true);
-    expect(paymentDetailsOk({ upiVpa: null, acceptsUpiNow: true, acceptsPayAtPickup: true })).toBe(false);
-    expect(paymentDetailsOk({ upiVpa: 'bad vpa', acceptsUpiNow: true, acceptsPayAtPickup: false })).toBe(false);
-    expect(paymentDetailsOk({ upiVpa: null, acceptsUpiNow: false, acceptsPayAtPickup: false })).toBe(false);
+  test('the UPI ID must be the one that passed the ₹1 ownership check', () => {
+    expect(paymentDetailsOk({ upiVpa: 'cook@okhdfc', upiVerifyStatus: 'verified', upiVerifiedVpa: 'cook@okhdfc' })).toBe(true);
+    expect(paymentDetailsOk({ upiVpa: 'COOK@okhdfc', upiVerifyStatus: 'verified', upiVerifiedVpa: 'cook@okhdfc' })).toBe(true); // case-insensitive
+    expect(paymentDetailsOk({ upiVpa: 'new@okhdfc', upiVerifyStatus: 'verified', upiVerifiedVpa: 'cook@okhdfc' })).toBe(false); // changed since verification
+    expect(paymentDetailsOk({ upiVpa: 'cook@okhdfc', upiVerifyStatus: 'pending', upiVerifiedVpa: null })).toBe(false);
+    expect(paymentDetailsOk({ upiVpa: 'cook@okhdfc', upiVerifyStatus: 'needs_manual_review', upiVerifiedVpa: null })).toBe(false);
+    expect(paymentDetailsOk({ upiVpa: 'bad vpa', upiVerifyStatus: 'verified', upiVerifiedVpa: 'bad vpa' })).toBe(false);
+    expect(paymentDetailsOk({ upiVpa: null, upiVerifyStatus: 'unverified', upiVerifiedVpa: null })).toBe(false);
+  });
+  test('a paused kitchen (strikes) is blocked', () => {
+    expect(gate({ profile: { listingsPausedReason: 'strikes' } }).checks.notPaused).toBe(false);
+    expect(gate({ profile: { listingsPausedReason: 'strikes' } }).ok).toBe(false);
   });
   test('VPA format validation', () => {
     for (const good of ['name@okhdfcbank', 'a.b-c_1@ybl', '9876543210@paytm']) expect(VPA_RE.test(good)).toBe(true);

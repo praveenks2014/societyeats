@@ -3,7 +3,7 @@ import { api, ApiError, ok, readJson } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { getPlatformSettings } from '@/lib/db/platform';
-import { effectiveGstBps, subscriptionCharge } from '@/lib/money';
+import { subscriptionCharge, subscriptionGstBps } from '@/lib/money';
 import { getActivePlans } from '@/lib/subscriptions/plans';
 import { sellerSubscriptions } from '@/lib/subscriptions/queries';
 import { startSubscriptionPayment } from '@/lib/subscriptions/service';
@@ -16,7 +16,7 @@ export const GET = api(async () => {
   const db = await getDb();
   const [settings, subs, plans] = await Promise.all([getPlatformSettings(), sellerSubscriptions(session.uid), getActivePlans(db)]);
   const now = new Date();
-  const gstBps = effectiveGstBps(settings.platformFeeGstBps, settings.platformGstin);
+  const gstBps = subscriptionGstBps(settings);
   return ok({
     status: overallStatus(subs, now, settings.subscriptionGraceDays),
     daysLeft: daysLeft(subs, now),

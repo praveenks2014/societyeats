@@ -51,14 +51,16 @@ export const GET = api(async (req) => {
     pickupInstructions: profile.pickupInstructions,
     offersSelfPickup: profile.offersSelfPickup,
     offersSellerDelivery: profile.offersSellerDelivery,
-    sellerDeliveryFeeInPaise: profile.sellerDeliveryFeeInPaise,
+    // Pilot: delivery is included in the dish price; a separate fee would make the platform liable for GST on it.
+    sellerDeliveryFeeInPaise: settings.sellerDeliveryFeeEnabled ? profile.sellerDeliveryFeeInPaise : 0,
     sellerDeliveryRadiusKm: profile.sellerDeliveryRadiusKm,
     platformDeliveryEnabled: false, // not available while the platform holds no payment-aggregator licence
     // The bill is two parts: food (paid to the kitchen) + platform fee (Razorpay).
     // The fee maths lives in src/lib/money/fees.ts and is shared with the server.
     feeConfig: feeConfigFromSettings(settings),
-    acceptsUpiNow: profile.acceptsUpiNow,
-    acceptsPayAtPickup: profile.acceptsPayAtPickup,
+    acceptsCash: profile.acceptsCash,
+    minOrderPaise: profile.minOrderPaise,
+    gstMode: settings.gstMode,
     radiusKm: settings.radiusKm,
     availableCreditPaise,
   };

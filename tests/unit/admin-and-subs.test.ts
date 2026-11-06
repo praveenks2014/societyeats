@@ -2,7 +2,8 @@ import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { call, checkoutSignature, jsonReq, loginAs } from '../helpers/http';
-import { makeLiveKitchen, makeSociety, makeUser } from '../helpers/fixtures';
+import { AGREEMENT_VERSION, HYGIENE_ITEMS } from '@/lib/kitchen/onboarding';
+import { getTestPlan, makeLiveKitchen, makeSociety, makeUser } from '../helpers/fixtures';
 import { useTestDb } from '../helpers/db';
 import * as s from '@/lib/db/schema';
 import { parseSettingsPatch, crossCheck } from '@/lib/settings/defs';
@@ -35,11 +36,11 @@ describe('settings validation bounds', () => {
     expect(bad({ commissionMallPct: 150 })).toBe(true); // commission over 100%
     expect(bad({ buyerPlatformFeeMinPaise: 1.5 })).toBe(true);
     expect(bad({ subscriptionGraceDays: 31 })).toBe(true);
-    expect(bad({ ecoFoodGstMode: 'sometimes' })).toBe(true);
+    expect(bad({ gstMode: 'sometimes' })).toBe(true);
     expect(bad({ platformGstin: 'not-a-gstin' })).toBe(true);
     expect(bad({ subscriptionReminderDays: '7;1' })).toBe(true);
     expect(bad({ nope: 1 })).toBe(true);
-    expect(bad({ buyerPlatformFeeBps: 0, subscriptionGraceDays: 0, buyerPlatformFeeMaxPaise: 0, platformGstin: '36ABCDE1234F1Z5', ecoFoodGstMode: 'collect_with_platform_fee' })).toBe(false);
+    expect(bad({ buyerPlatformFeeBps: 0, subscriptionGraceDays: 0, buyerPlatformFeeMaxPaise: 0, platformGstin: '36ABCDE1234F1Z5', gstMode: 'registered_eco_9_5' })).toBe(false);
     expect(bad({ buyerPlatformFeeBps: 2500 })).toBe(false);
   });
   test('cap below floor is refused', async () => {
@@ -54,7 +55,7 @@ describe('settings validation bounds', () => {
     expect((await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 500 }, { method: 'PATCH' }))).status).toBe(403);
     await loginAs(admin.id);
     const def = await call(GET, jsonReq('/api/admin/settings', undefined, { method: 'GET' }));
-    expect(def.json.settings).toMatchObject({ buyerPlatformFeeBps: 1000, buyerPlatformFeeMinPaise: 0, buyerPlatformFeeMaxPaise: 0, platformFeeGstBps: 1800, ecoFoodGstMode: 'off', subscriptionGraceDays: 3, dishModerationEnabled: true, restaurantConsoleEnabled: false, mallModeEnabled: false, fssaiBasicFeePerYear: 100, fssaiDocRetentionDays: 30 });
+    expect(def.json.settings).toMatchObject({ buyerPlatformFeeBps: 1000, buyerPlatformFeeMinPaise: 1000, buyerPlatformFeeMaxPaise: 2500, platformFeeGstBps: 1800, gstMode: 'unregistered', sellerAcceptWindowMinutes: 20, provisionalMaxOrdersPerDay: 8, provisionalMaxFoodValuePerDayPaise: 250000, provisionalMaxFoodValueTotalPaise: 2500000, provisionalMaxDays: 45, tdsWarnPaise: 40000000, tdsPausePaise: 50000000, atDoorWaitMinutes: 15, paymentClaimMinutes: 30, sellerConfirmPaymentHours: 12, pilotSocietiesOnly: true, upiNameMatchMinScore: 70, upiVerifyRefund: true, sellerDeliveryFeeEnabled: false, packagedFoodsEnabled: false, subscriptionGraceDays: 3, dishModerationEnabled: true, restaurantConsoleEnabled: false, mallModeEnabled: false, fssaiBasicFeePerYear: 100, fssaiDocRetentionDays: 30 });
     expect((await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 9000 }, { method: 'PATCH' }))).status).toBe(400);
     const ok = await call(PATCH, jsonReq('/api/admin/settings', { buyerPlatformFeeBps: 1200 }, { method: 'PATCH' }));
     expect(ok.status).toBe(200);
@@ -67,8 +68,13 @@ describe('settings validation bounds', () => {
     const { setPlatformSetting } = await import('@/lib/db/platform');
     expect(quoteOrder({ foodSubtotalPaise: 20000 }, feeConfigFromSettings(await getPlatformSettings())).feeGstPaise).toBe(0);
     await setPlatformSetting('platformGstin', '36ABCDE1234F1Z5');
+    // a GSTIN alone is not enough: the GST mode decides
+    expect(quoteOrder({ foodSubtotalPaise: 20000 }, feeConfigFromSettings(await getPlatformSettings())).feeGstPaise).toBe(0);
+    await setPlatformSetting('gstMode', 'registered_fee_only');
     expect(quoteOrder({ foodSubtotalPaise: 20000 }, feeConfigFromSettings(await getPlatformSettings())).feeGstPaise).toBe(360);
     await setPlatformSetting('platformGstin', '');
+    expect(quoteOrder({ foodSubtotalPaise: 20000 }, feeConfigFromSettings(await getPlatformSettings())).feeGstPaise).toBe(0); // mode on, no GSTIN → still none
+    await setPlatformSetting('gstMode', 'unregistered');
   });
 });
 
@@ -94,7 +100,7 @@ describe('admin authorisation', () => {
 describe('kitchen admin actions: approve / request changes / delist / relist / messaging', () => {
   async function submittedKitchen() {
     const seller = await makeUser(db, 'seller', { societyId });
-    await db.insert(s.sellerProfiles).values({ userId: seller.id, kitchenName: 'Req Kitchen', listingState: 'submitted', fssaiStatus: 'verified', upiVpa: 'req@okbank', upiName: 'Req', kitchenPhotosJson: ['/a', '/b', '/c'] });
+    await db.insert(s.sellerProfiles).values({ userId: seller.id, kitchenName: 'Req Kitchen', listingState: 'submitted', fssaiStatus: 'verified', upiVpa: 'req@okbank', upiName: 'Req', upiVerifyStatus: 'verified', upiVerifiedVpa: 'req@okbank', upiVerifiedName: 'REQ COOK', kitchenPhotosJson: ['/a', '/b'], legalName: 'Req Cook', displayName: 'Req', cuisinesJson: ['Indian'], cookingDaysJson: ['mon'], hygieneDeclarationJson: Object.fromEntries(HYGIENE_ITEMS.map((i) => [i.key, new Date().toISOString()])), panMasked: 'ABCDE****F', panNameOnCard: 'Req Cook', agreementVersion: AGREEMENT_VERSION });
     await db.insert(s.kitchenSubscriptions).values({ sellerId: seller.id, status: 'active', startsAt: new Date(Date.now() - 1e6), endsAt: new Date(Date.now() + 40 * 86_400_000), planNameSnapshot: 'T', durationMonthsSnapshot: 1 });
     const [dish] = await db.insert(s.listings).values({ sellerId: seller.id, title: 'Dal', priceInPaise: 8000, cuisine: 'Indian', availableQty: 5, moderationStatus: 'approved' }).returning();
     return { seller, dish };
@@ -134,7 +140,7 @@ describe('kitchen admin actions: approve / request changes / delist / relist / m
     expect(await visible(dish.id)).toBe(false);
     const { createHomeOrder } = await import('@/lib/orders/create');
     const buyer = await makeUser(db, 'buyer', { societyId });
-    await expect(createHomeOrder({ buyerId: buyer.id, buyerApproved: true, sellerId: seller.id, items: [{ id: dish.id, qty: 1 }], fulfillmentType: 'self_pickup', foodPaymentMode: 'upi_now' })).rejects.toMatchObject({ status: 400 });
+    await expect(createHomeOrder({ buyerId: buyer.id, sellerId: seller.id, items: [{ id: dish.id, qty: 1 }], fulfillmentType: 'self_pickup' })).rejects.toMatchObject({ status: 400 });
     // subscription untouched
     expect((await db.select().from(s.kitchenSubscriptions).where(eq(s.kitchenSubscriptions.sellerId, seller.id)))[0].status).toBe('active');
     expect((await act(seller.id, { action: 'relist' })).status).toBe(200);
@@ -213,7 +219,7 @@ describe('subscription service', () => {
     await db.insert(s.sellerProfiles).values({ userId: seller.id, kitchenName: 'Sub K' });
     return seller;
   }
-  const plan = async () => (await db.select().from(s.subscriptionPlans))[0];
+  const plan = async () => getTestPlan(db);
 
   test('pay → active for N months; second payment stacks; double-processing pays once', async () => {
     const { startSubscriptionPayment, markSubscriptionPaid } = await import('@/lib/subscriptions/service');
@@ -240,10 +246,12 @@ describe('subscription service', () => {
     const { startSubscriptionPayment } = await import('@/lib/subscriptions/service');
     const { setPlatformSetting } = await import('@/lib/db/platform');
     await setPlatformSetting('platformGstin', '36ABCDE1234F1Z5');
+    await setPlatformSetting('gstMode', 'registered_fee_only');
     const seller = await newSeller();
     const other = await newSeller();
     const c = await startSubscriptionPayment(seller.id, (await plan()).id);
     await setPlatformSetting('platformGstin', '');
+    await setPlatformSetting('gstMode', 'unregistered');
     const [sub] = await db.select().from(s.kitchenSubscriptions).where(eq(s.kitchenSubscriptions.id, c.subscriptionId));
     expect(sub).toMatchObject({ gstPaise: 5382, gstBpsSnapshot: 1800 });
     const { POST } = await import('@/app/api/payments/verify/route');
@@ -297,7 +305,7 @@ describe('subscription service', () => {
     expect((await db.select().from(s.emailOutbox).where(eq(s.emailOutbox.userId, seller.id))).length).toBeGreaterThanOrEqual(4);
     // the real clock is far past 2026-06 → also hidden for real
     expect((await browseListings({})).listings.some((l) => l.id === dish.id)).toBe(false);
-    const co = await startSubscriptionPayment(seller.id, (await db.select().from(s.subscriptionPlans))[0].id);
+    const co = await startSubscriptionPayment(seller.id, (await getTestPlan(db)).id);
     await markSubscriptionPaid(co.subscriptionId);
     expect((await browseListings({})).listings.some((l) => l.id === dish.id)).toBe(true);
   });
@@ -323,7 +331,7 @@ describe('buyer ↔ kitchen threads', () => {
     const { markOrderPaid } = await import('@/lib/payments');
     const { seller, dish } = await makeLiveKitchen(db, { societyId });
     const buyer = await makeUser(db, 'buyer', { societyId });
-    const r = await createHomeOrder({ buyerId: buyer.id, buyerApproved: true, sellerId: seller.id, items: [{ id: dish.id, qty: 1 }], fulfillmentType: 'self_pickup', foodPaymentMode: 'upi_now' });
+    const r = await createHomeOrder({ buyerId: buyer.id, sellerId: seller.id, items: [{ id: dish.id, qty: 1 }], fulfillmentType: 'self_pickup' });
     const { resolveSession } = await import('@/lib/auth');
     const sess = async (u: number) => { await loginAs(u); const [row] = await db.select().from(s.sessions).where(eq(s.sessions.userId, u)); return (await resolveSession(row.id))!; };
     const buyerS = await sess(buyer.id);
@@ -385,7 +393,7 @@ describe('bootstrap', () => {
     const b = await runBootstrap(db);
     expect(b.adminsCreated).toEqual([]);
     expect((await db.select().from(s.users)).length).toBe(mid);
-    expect((await db.select().from(s.subscriptionPlans)).length).toBe(1);
+    expect((await db.select().from(s.subscriptionPlans)).filter((p) => ['Monthly', 'Quarterly', 'Yearly', 'Founding kitchen'].includes(p.name)).length).toBe(4);
     expect((await db.select().from(s.users)).filter((u) => u.phone.startsWith('99999')).length).toBe(0);
   });
   test('demo seeding refuses to run in production', async () => {

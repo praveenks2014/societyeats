@@ -1,3 +1,4 @@
+import { CANCELLED_STATES, type OrderStatus } from '@/lib/orders/state';
 import { eq, inArray } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { complaints, listings, orders, sellerProfiles, societies, users } from '@/lib/db/schema';
@@ -121,7 +122,7 @@ export async function getWeeklyMetrics(
   // "Counted" orders for volume/AOV/mix/revenue/retention — excludes
   // cancelled orders (never charged, so they'd distort AOV/net-revenue and
   // shouldn't count as a buyer "being active" that week).
-  const counted = societyOrders.filter((o) => !['cancelled', 'expired', 'placed'].includes(o.status));
+  const counted = societyOrders.filter((o) => !['fee_pending', 'expired', ...CANCELLED_STATES].includes(o.status as OrderStatus));
 
   // Each buyer's first-ever counted order — the anchor for both the repeat-
   // rate and week-4 cohort-retention metrics below.

@@ -5,8 +5,8 @@ import { isMockMode } from '@/lib/config';
 import { getDb } from '@/lib/db';
 import { notify, notifyUser } from '@/lib/db/notify';
 import { getPlatformSettings } from '@/lib/db/platform';
-import { kitchenSubscriptions, notifications, subscriptionPlans } from '@/lib/db/schema';
-import { effectiveGstBps, subscriptionCharge } from '@/lib/money';
+import { kitchenSubscriptions, notifications, sellerProfiles, subscriptionPlans } from '@/lib/db/schema';
+import { subscriptionCharge, subscriptionGstBps } from '@/lib/money';
 import { createRazorpayOrder, receiptFor } from '@/lib/payments/razorpay';
 import { addDays, DAY_MS } from '@/lib/time';
 import { parseReminderDays } from '@/lib/settings/defs';
@@ -28,7 +28,7 @@ export async function startSubscriptionPayment(sellerId: number, planId: number)
   const [plan] = await db.select().from(subscriptionPlans).where(and(eq(subscriptionPlans.id, planId), eq(subscriptionPlans.active, true)));
   if (!plan) throw new ApiError(404, 'That plan is not available');
   const settings = await getPlatformSettings();
-  const gstBps = effectiveGstBps(settings.platformFeeGstBps, settings.platformGstin);
+  const gstBps = subscriptionGstBps(settings);
   const charge = subscriptionCharge(plan.pricePaise, gstBps);
 
   const pendings = await db
@@ -120,6 +120,27 @@ export async function grantSubscription(opts: { adminId: number; sellerId: numbe
   return row;
 }
 
+/**
+ * "Founding kitchen": 90 days free, assigned automatically when an admin approves a kitchen that has never had a
+ * plan (setting `foundingKitchenOffer`). Stacks like any other period; never granted twice.
+ */
+export async function grantFoundingKitchen(sellerId: number, adminId: number | null): Promise<boolean> {
+  const db = await getDb();
+  const settings = await getPlatformSettings();
+  if (!settings.foundingKitchenOffer) return false;
+  const [p] = await db.select({ granted: sellerProfiles.foundingGrantedAt }).from(sellerProfiles).where(eq(sellerProfiles.userId, sellerId));
+  if (!p || p.granted) return false;
+  const now = new Date();
+  const subs = await sellerSubscriptions(sellerId);
+  const { startsAt } = nextPeriod(subs, 3, now);
+  const endsAt = new Date(startsAt.getTime() + 90 * 24 * 60 * 60 * 1000);
+  const [claimed] = await db.update(sellerProfiles).set({ foundingGrantedAt: now }).where(and(eq(sellerProfiles.userId, sellerId), isNull(sellerProfiles.foundingGrantedAt))).returning({ id: sellerProfiles.userId });
+  if (!claimed) return false;
+  await db.insert(kitchenSubscriptions).values({ sellerId, planNameSnapshot: 'Founding kitchen', durationMonthsSnapshot: 3, status: 'waived', startsAt, endsAt, grantedByAdminId: adminId, notes: 'Founding kitchen — free for the first 90 days', paidAt: null });
+  await notifyUser(sellerId, 'Founding kitchen: 90 days free 🎁', 'Your first 90 days on PadosiPlate are free. After that the Monthly plan is ₹199.', '/seller/subscription', { email: true, emailKind: 'subscription_granted' });
+  return true;
+}
+
 export async function extendSubscription(opts: { adminId: number; subscriptionId: number; days: number; reason: string }) {
   if (!opts.reason.trim()) throw new ApiError(400, 'A reason is required');
   if (!Number.isInteger(opts.days) || opts.days < 1 || opts.days > 366) throw new ApiError(400, 'Days must be between 1 and 366');
@@ -183,9 +204,9 @@ export async function syncSubscriptions(now: Date = new Date()): Promise<{ moved
     }
     if (r.endsAt && ['active', 'waived'].includes(eff)) {
       const left = Math.ceil((r.endsAt.getTime() - now.getTime()) / DAY_MS);
-      for (const d of reminderDays) {
-        if (left <= d && left > 0 && (await notifyOnce(r.sellerId, `Subscription ends in ${d} day${d === 1 ? '' : 's'}`, 'Renew from Seller → Subscription to stay visible without a break.', `remind${d}`, r.id, true))) reminded++;
-      }
+      // Only the tightest threshold that applies is sent, so a missed run never produces a burst of reminders.
+      const d = reminderDays.filter((x) => left <= x).sort((a, b) => a - b)[0];
+      if (d !== undefined && left > 0 && (await notifyOnce(r.sellerId, `Subscription ends in ${d} day${d === 1 ? '' : 's'}`, 'Renew from Seller → Subscription to stay visible without a break.', `remind${d}`, r.id, true))) reminded++;
     }
   }
   return { moved, reminded };

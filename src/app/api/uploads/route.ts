@@ -27,6 +27,8 @@ const POLICIES: Record<UploadPurpose, Policy> = {
   address_proof: { roles: ['seller'], visibility: 'private', allowed: ['image', 'pdf'], encrypt: true },
   complaint: { roles: ['buyer', 'seller', 'admin'], visibility: 'private', allowed: ['image'] },
   fssai_content: { roles: ['admin'], visibility: 'public', allowed: ['image'] },
+  upi_evidence: { roles: ['seller'], visibility: 'private', allowed: ['image'] },
+  chat_image: { roles: ['buyer', 'seller'], visibility: 'private', allowed: ['image'] },
   attachment: { roles: ['seller', 'admin', 'buyer'], visibility: 'private', allowed: ['image', 'pdf'] },
 };
 

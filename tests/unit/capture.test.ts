@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { call, checkoutSignature, webhookReq } from '../helpers/http';
-import { makeLiveKitchen, makeSociety, makeUser } from '../helpers/fixtures';
+import { getTestPlan, makeLiveKitchen, makeSociety, makeUser } from '../helpers/fixtures';
 import { useTestDb } from '../helpers/db';
 import * as s from '@/lib/db/schema';
 
@@ -51,7 +51,7 @@ async function pendingOrder() {
   const { createHomeOrder } = await import('@/lib/orders/create');
   const { seller, dish } = await makeLiveKitchen(db, { societyId, qty: 20 });
   const buyer = await makeUser(db, 'buyer', { societyId });
-  const r = await createHomeOrder({ buyerId: buyer.id, buyerApproved: true, sellerId: seller.id, items: [{ id: dish.id, qty: 2 }], fulfillmentType: 'self_pickup', foodPaymentMode: 'upi_now' });
+  const r = await createHomeOrder({ buyerId: buyer.id, sellerId: seller.id, items: [{ id: dish.id, qty: 2 }], fulfillmentType: 'self_pickup' });
   const [pay] = await db.select().from(s.payments).where(eq(s.payments.orderId, r.orderId));
   return { buyer, orderId: r.orderId, rzpOrderId: pay.razorpayOrderId!, amount: pay.amountInPaise };
 }
@@ -70,7 +70,7 @@ describe('live mode: only a captured payment marks an order fee as paid', () => 
     process.env.MOCK_MODE = 'false';
     await expect(verify(p)).resolves.toMatchObject({ kind: 'order', won: true });
     expect(rzp.capture).not.toHaveBeenCalled();
-    expect(await orderStatus(p.orderId)).toBe('fee_paid');
+    expect(await orderStatus(p.orderId)).toBe('booked');
   });
 
   test('authorized → captured (stored amount, INR) → then paid', async () => {
@@ -81,7 +81,7 @@ describe('live mode: only a captured payment marks an order fee as paid', () => 
     await expect(verify(p)).resolves.toMatchObject({ kind: 'order', won: true });
     expect(rzp.capture).toHaveBeenCalledTimes(1);
     expect(rzp.capture).toHaveBeenCalledWith('pay_cap', p.amount);
-    expect(await orderStatus(p.orderId)).toBe('fee_paid');
+    expect(await orderStatus(p.orderId)).toBe('booked');
   });
 
   test('authorized + capture failure → clear error, order stays unpaid', async () => {
@@ -90,7 +90,7 @@ describe('live mode: only a captured payment marks an order fee as paid', () => 
     rzp.bind(p.rzpOrderId, p.amount);
     process.env.MOCK_MODE = 'false';
     await expect(verify(p)).rejects.toMatchObject({ status: 502, message: expect.stringMatching(/could not capture/i) });
-    expect(await orderStatus(p.orderId)).toBe('placed');
+    expect(await orderStatus(p.orderId)).toBe('fee_pending');
   });
 
   test('capture call that does not end up captured → not paid', async () => {
@@ -99,7 +99,7 @@ describe('live mode: only a captured payment marks an order fee as paid', () => 
     rzp.bind(p.rzpOrderId, p.amount);
     process.env.MOCK_MODE = 'false';
     await expect(verify(p)).rejects.toMatchObject({ status: 502 });
-    expect(await orderStatus(p.orderId)).toBe('placed');
+    expect(await orderStatus(p.orderId)).toBe('fee_pending');
   });
 
   test('a wrong amount is never captured', async () => {
@@ -109,7 +109,7 @@ describe('live mode: only a captured payment marks an order fee as paid', () => 
     process.env.MOCK_MODE = 'false';
     await expect(verify(p)).rejects.toMatchObject({ status: 400 });
     expect(rzp.capture).not.toHaveBeenCalled();
-    expect(await orderStatus(p.orderId)).toBe('placed');
+    expect(await orderStatus(p.orderId)).toBe('fee_pending');
   });
 });
 
@@ -117,7 +117,7 @@ describe('live mode: kitchen subscription follows the same rule', () => {
   async function pendingSub() {
     const seller = await makeUser(db, 'seller', { societyId });
     const { startSubscriptionPayment } = await import('@/lib/subscriptions/service');
-    const co = await startSubscriptionPayment(seller.id, (await db.select().from(s.subscriptionPlans))[0].id);
+    const co = await startSubscriptionPayment(seller.id, (await getTestPlan(db)).id);
     const [sub] = await db.select().from(s.kitchenSubscriptions).where(eq(s.kitchenSubscriptions.id, co.subscriptionId));
     return { seller, sub, amount: sub.pricePaiseSnapshot + sub.gstPaise };
   }
@@ -161,7 +161,7 @@ describe('live mode: webhook applies the same rule', () => {
     const res = await post(evt('payment.authorized', p.rzpOrderId, p.amount), 'evt_auth_ok');
     expect(res.status).toBe(200);
     expect(rzp.capture).toHaveBeenCalledWith('pay_wh', p.amount);
-    expect(await orderStatus(p.orderId)).toBe('fee_paid');
+    expect(await orderStatus(p.orderId)).toBe('booked');
   });
 
   test('capture failure → 500 (Razorpay retries), order unpaid, and the retry succeeds', async () => {
@@ -170,12 +170,12 @@ describe('live mode: webhook applies the same rule', () => {
     rzp.bind(p.rzpOrderId, p.amount);
     process.env.MOCK_MODE = 'false';
     expect((await post(evt('payment.authorized', p.rzpOrderId, p.amount), 'evt_auth_bad')).status).toBe(500);
-    expect(await orderStatus(p.orderId)).toBe('placed');
+    expect(await orderStatus(p.orderId)).toBe('fee_pending');
 
     rzp = await stubRazorpay({ first: 'authorized' });
     rzp.bind(p.rzpOrderId, p.amount);
     expect((await post(evt('payment.authorized', p.rzpOrderId, p.amount), 'evt_auth_bad')).status).toBe(200);
-    expect(await orderStatus(p.orderId)).toBe('fee_paid');
+    expect(await orderStatus(p.orderId)).toBe('booked');
   });
 
   test('a payment.captured event is re-checked against Razorpay, not trusted', async () => {
@@ -184,7 +184,7 @@ describe('live mode: webhook applies the same rule', () => {
     rzp.bind(p.rzpOrderId, p.amount);
     process.env.MOCK_MODE = 'false';
     expect((await post(evt('payment.captured', p.rzpOrderId, p.amount), 'evt_cap_lie')).status).toBe(500);
-    expect(await orderStatus(p.orderId)).toBe('placed');
+    expect(await orderStatus(p.orderId)).toBe('fee_pending');
   });
 });
 

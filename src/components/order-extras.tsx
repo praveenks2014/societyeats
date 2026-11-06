@@ -6,74 +6,89 @@ import { MockCheckoutSheet } from '@/components/mock-checkout';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 
-type Upi = { vpa: string; payeeName: string; uri: string; qrSvg: string; amountInPaise: number };
+type Upi = { vpa: string; registeredName: string; payeeName: string; uri: string; qrSvg: string; amountInPaise: number };
 
-/** Buyer: the food-payment step shown right after the platform fee is paid. */
-export function FoodPaymentCard({
+/**
+ * Buyer: pay-at-the-door step. The kitchen's UPI ID, registered name and QR are only in the response once the
+ * kitchen has marked "reached your door" / "buyer has arrived", so before that this card shows what to expect.
+ */
+export function AtDoorPaymentCard({
   orderId,
   status,
-  mode,
   paymentStatus,
   utr,
   foodTotalInPaise,
   kitchenName,
+  acceptsCash,
   upi,
   onChanged,
 }: {
   orderId: number;
   status: string;
-  mode: string | null;
   paymentStatus: string | null;
   utr: string | null;
   foodTotalInPaise: number;
   kitchenName: string;
+  acceptsCash: boolean;
   upi: Upi | null;
   onChanged: () => void;
 }) {
   const toast = useToast();
   const [utrInput, setUtrInput] = useState('');
+  const [method, setMethod] = useState<'upi' | 'cash'>('upi');
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  if (!mode || ['placed', 'expired', 'cancelled'].includes(status)) return null;
-
-  async function claim() {
-    setBusy(true);
-    const res = await fetch(`/api/orders/${orderId}/food-payment`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'claim', utr: utrInput.trim() || undefined }),
-    });
-    const d = await res.json().catch(() => ({}));
-    setBusy(false);
-    if (!res.ok) return toast(d.error || 'Could not record that', 'err');
-    toast('Thanks — the kitchen will confirm');
-    onChanged();
-  }
-
-  if (mode === 'pay_at_pickup') {
+  const show = ['at_door', 'collected', 'payment_claimed', 'payment_disputed', 'completed'].includes(status);
+  if (!show) {
+    if (!['booked', 'accepted', 'preparing', 'ready', 'on_the_way'].includes(status)) return null;
     return (
-      <Card className="mt-4 border-2 border-turmeric/40 p-4" data-testid="pay-at-pickup-note">
-        <div className="eyebrow">PAY THE KITCHEN AT PICKUP</div>
+      <Card className="mt-4 p-4" data-testid="pay-later-note">
+        <div className="eyebrow">PAYING FOR THE FOOD</div>
         <p className="mt-1.5 text-sm">
-          Pay <strong>{formatINR(foodTotalInPaise)}</strong> to <strong>{kitchenName}</strong> by UPI or cash when you collect your food. Show your OTP at handover.
+          You&apos;ll pay <strong>{formatINR(foodTotalInPaise)}</strong> to <strong>{kitchenName}</strong> at your door, after the food reaches you. Never pay anyone in advance.
         </p>
-        {paymentStatus === 'at_handover' && <p className="mt-2 text-sm font-semibold text-leaf">✅ Kitchen recorded: paid at handover</p>}
       </Card>
     );
   }
 
-  const done = paymentStatus === 'confirmed';
+  async function act(action: 'collect' | 'claim_paid') {
+    setBusy(true);
+    const res = await fetch(`/api/orders/${orderId}/action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(action === 'claim_paid' ? { action, method, utr: utrInput.trim() || undefined } : { action }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) return toast(d.error || 'Could not record that', 'err');
+    toast(action === 'collect' ? 'Enjoy your food!' : 'Thanks — the kitchen will confirm');
+    onChanged();
+  }
+
+  const done = status === 'completed';
   return (
     <Card className="mt-4 border-2 border-turmeric/40 p-4" data-testid="upi-step">
       <div className="flex items-center justify-between">
-        <div className="eyebrow">STEP 2 · PAY {kitchenName.toUpperCase()} BY UPI</div>
-        {done ? <Badge tone="green">Confirmed</Badge> : paymentStatus === 'buyer_claimed' ? <Badge tone="amber">Waiting for kitchen</Badge> : paymentStatus === 'not_received' ? <Badge tone="red">Not found</Badge> : null}
+        <div className="eyebrow">PAY {kitchenName.toUpperCase()}</div>
+        {done ? <Badge tone="green">Paid</Badge> : status === 'payment_claimed' ? <Badge tone="amber">Waiting for kitchen</Badge> : status === 'payment_disputed' ? <Badge tone="red">Under review</Badge> : null}
       </div>
-      <div className="mt-2 text-2xl font-bold">{formatINR(foodTotalInPaise)}</div>
+      <div className="mt-2 text-2xl font-bold" data-testid="door-amount">{formatINR(foodTotalInPaise)}</div>
 
-      {upi && !done && (
+      {status === 'at_door' && (
         <>
+          <p className="mt-2 text-sm text-ink-soft">The food is here. Check it, then tap <strong>I&apos;ve got my food</strong> and pay.</p>
+          <Button size="lg" className="mt-3 w-full" loading={busy} onClick={() => act('collect')} data-testid="collect">
+            I&apos;ve got my food
+          </Button>
+        </>
+      )}
+
+      {upi && ['collected', 'payment_claimed', 'payment_disputed'].includes(status) && !done && (
+        <>
+          <p className="mt-2 rounded-xl bg-turmeric-tint px-3 py-2 text-xs text-turmeric-deep" role="note" data-testid="qr-check">
+            Before you pay, check that the name in your UPI app is <strong>{upi.registeredName}</strong>. Never pay anyone who asks you to pay before the food reaches you.
+          </p>
           {/* mobile: open the UPI app; desktop: scan the QR */}
           <a href={upi.uri} className="mt-3 flex min-h-[48px] items-center justify-center rounded-xl bg-turmeric px-4 text-base font-bold text-ink md:hidden" data-testid="upi-intent">
             Pay with UPI app
@@ -83,7 +98,7 @@ export function FoodPaymentCard({
             <p className="mt-1 text-xs text-ink-faint">Scan with any UPI app</p>
           </div>
           <div className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-rice px-3 py-2 text-sm">
-            <span className="min-w-0 truncate">UPI ID: <strong>{upi.vpa}</strong> · {upi.payeeName}</span>
+            <span className="min-w-0 truncate" data-testid="upi-id">UPI ID: <strong>{upi.vpa}</strong> · {upi.registeredName}</span>
             <button
               className="min-h-[44px] shrink-0 px-2 text-xs font-semibold text-leaf underline"
               onClick={() => navigator.clipboard?.writeText(upi.vpa).then(() => setCopied(true)).catch(() => {})}
@@ -94,25 +109,35 @@ export function FoodPaymentCard({
         </>
       )}
 
-      {paymentStatus === 'pending' && (
+      {status === 'collected' && (
         <div className="mt-3 space-y-2">
-          <Input value={utrInput} onChange={(e) => setUtrInput(e.target.value)} placeholder="UPI reference / UTR (optional)" aria-label="UPI reference number" />
-          <Button size="lg" className="w-full" loading={busy} onClick={claim} data-testid="claim-paid">
-            I&apos;ve paid
+          {acceptsCash && (
+            <div className="flex gap-2" role="radiogroup" aria-label="How did you pay?">
+              {(['upi', 'cash'] as const).map((m) => (
+                <button key={m} role="radio" aria-checked={method === m} onClick={() => setMethod(m)} className={`min-h-[44px] flex-1 rounded-xl border-2 text-sm font-semibold ${method === m ? 'border-leaf bg-leaf-tint text-leaf' : 'border-rice-line'}`}>
+                  {m === 'upi' ? 'UPI' : 'Cash'}
+                </button>
+              ))}
+            </div>
+          )}
+          {method === 'upi' && <Input value={utrInput} onChange={(e) => setUtrInput(e.target.value.replace(/\D/g, '').slice(0, 12))} inputMode="numeric" placeholder="12-digit UPI reference / UTR (optional)" aria-label="UPI reference number" />}
+          <Button size="lg" className="w-full" loading={busy} onClick={() => act('claim_paid')} data-testid="claim-paid">
+            I&apos;ve paid {formatINR(foodTotalInPaise)}
           </Button>
         </div>
       )}
-      {paymentStatus === 'buyer_claimed' && (
+      {status === 'payment_claimed' && (
         <p className="mt-3 text-sm text-ink-soft" role="status">
-          You said you paid{utr ? ` (UTR ${utr})` : ''}. {kitchenName} will confirm shortly — your order isn’t cancelled.
+          You said you paid{utr ? ` (UTR ${utr})` : ''}. {kitchenName} will confirm shortly.
         </p>
       )}
-      {paymentStatus === 'not_received' && (
+      {status === 'payment_disputed' && (
         <p className="mt-3 text-sm text-chili-dark" role="alert">
-          The kitchen couldn’t find your payment. PadosiPlate has been alerted — keep your UPI receipt handy.
+          The kitchen couldn’t find your payment. PadosiPlate is looking into it — keep your UPI receipt handy.
         </p>
       )}
       {done && <p className="mt-3 text-sm font-semibold text-leaf">✅ {kitchenName} confirmed your payment.</p>}
+      {paymentStatus === 'auto_confirmed' && <p className="mt-1 text-xs text-ink-faint">Completed automatically.</p>}
     </Card>
   );
 }

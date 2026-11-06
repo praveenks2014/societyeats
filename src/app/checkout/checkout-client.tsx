@@ -21,8 +21,9 @@ type QuoteResp = {
   sellerDeliveryFeeInPaise: number;
   sellerDeliveryRadiusKm: number;
   feeConfig: FeeConfig;
-  acceptsUpiNow: boolean;
-  acceptsPayAtPickup: boolean;
+  acceptsCash: boolean;
+  minOrderPaise: number;
+  gstMode: string;
   availableCreditPaise: number;
   radiusKm: number;
   distanceKm: number | null;
@@ -45,8 +46,6 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
   const [mockSheet, setMockSheet] = useState<{ orderId: number; amount: number } | null>(null);
   // Referral credit only ever reduces the platform fee. Default on.
   const [useCredit, setUseCredit] = useState(true);
-  // How the buyer pays the KITCHEN for the food.
-  const [foodMode, setFoodMode] = useState<'upi_now' | 'pay_at_pickup'>('upi_now');
 
   useEffect(() => {
     if (loc && !addressText) setAddressText(loc.label);
@@ -79,7 +78,6 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
       if (prev === 'seller_delivery' && quote.offersSellerDelivery) return prev;
       return quote.offersSelfPickup ? 'self_pickup' : quote.offersSellerDelivery ? 'seller_delivery' : prev;
     });
-    setFoodMode((prev) => (prev === 'upi_now' && !quote.acceptsUpiNow ? 'pay_at_pickup' : prev === 'pay_at_pickup' && !quote.acceptsPayAtPickup ? 'upi_now' : prev));
   }, [quote]);
 
   if (items.length === 0 && !mockSheet) {
@@ -125,7 +123,6 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
                 type: 'home_delivery',
                 sellerId: vendor.id,
                 fulfillmentType: fulfillment,
-                foodPaymentMode: foodMode,
                 items: items.map((i) => ({ id: i.id, qty: i.qty })),
                 useCredit,
                 ...(needsAddress
@@ -226,7 +223,7 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
     });
     if (outcome === 'success' && res.ok) {
       clear();
-      toast(isDelivery ? 'Platform fee paid 🎉 — now pay the kitchen' : 'Payment successful 🎉');
+      toast(isDelivery ? 'Booked 🎉 — the kitchen will confirm shortly' : 'Payment successful 🎉');
       router.push(`/orders/${mockSheet.orderId}`);
     } else {
       setMockSheet(null);
@@ -309,15 +306,14 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
         </div>
       )}
 
-      {isDelivery && quote && (quote.acceptsUpiNow || quote.acceptsPayAtPickup) && (
-        <Card className="mt-4 space-y-2.5 p-4">
-          <div className="eyebrow">HOW WILL YOU PAY {quote.kitchenName.toUpperCase()}?</div>
-          {quote.acceptsUpiNow && (
-            <FulfillmentOption active={foodMode === 'upi_now'} onClick={() => setFoodMode('upi_now')} title="Pay by UPI now" sub="Right after the platform fee you’ll get a UPI button / QR for the kitchen" feeLabel={formatINR(bill?.foodTotalPaise ?? 0)} />
-          )}
-          {quote.acceptsPayAtPickup && (
-            <FulfillmentOption active={foodMode === 'pay_at_pickup'} onClick={() => setFoodMode('pay_at_pickup')} title="Pay at pickup" sub="UPI or cash to the kitchen when you collect" feeLabel={formatINR(bill?.foodTotalPaise ?? 0)} />
-          )}
+      {isDelivery && quote && (
+        <Card className="mt-4 space-y-1.5 p-4" data-testid="pay-at-door-card">
+          <div className="eyebrow">HOW PAYMENT WORKS</div>
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-soft">
+            <li>Pay the <strong>platform fee</strong> now to confirm your booking.</li>
+            <li>The kitchen cooks and brings your food to your door (or you collect it).</li>
+            <li>Only then do you pay <strong>{quote.kitchenName}</strong> the food amount by UPI{quote.acceptsCash ? ' or cash' : ''}. You&apos;ll see their QR at the door.</li>
+          </ol>
         </Card>
       )}
 
@@ -391,7 +387,7 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
             )}
           </Card>
           <p className="px-1 text-[11px] leading-relaxed text-ink-faint">
-            You pay <strong>{vendor?.name}</strong> directly for the food — by UPI or at pickup. PadosiPlate never holds your food money; the platform fee is its only charge. If the kitchen declines, the platform fee is refunded automatically.
+            You pay <strong>{vendor?.name}</strong> directly for the food, at your door, after it arrives. PadosiPlate never holds your food money; the platform fee is its only charge. Free cancellation until the kitchen accepts. If the kitchen cancels, you get the full platform fee back plus the same amount as PadosiPlate credit.
           </p>
         </div>
       ) : (

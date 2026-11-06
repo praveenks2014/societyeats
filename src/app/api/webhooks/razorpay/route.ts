@@ -2,25 +2,29 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { getDb } from '@/lib/db';
-import { kitchenSubscriptions, orders, payments, refunds, webhookEvents } from '@/lib/db/schema';
+import { kitchenSubscriptions, orders, payments, refunds, upiVerifications, webhookEvents } from '@/lib/db/schema';
 import { isMockMode } from '@/lib/config';
 import { log } from '@/lib/log';
 import { ensureCaptured } from '@/lib/payments/capture';
 import { markOrderPaid, verifyWebhookSignature } from '@/lib/payments';
 import { markSubscriptionPaid } from '@/lib/subscriptions/service';
+import { completeRpdValidation, finalizeVerification, VERIFY_AMOUNT_PAISE } from '@/lib/upi-verify';
+import { fetchRazorpayPayment } from '@/lib/payments/razorpay';
+import { parseValidation } from '@/lib/upi-verify/razorpayx';
 
 export const dynamic = 'force-dynamic';
 
 type Entity = { id?: string; order_id?: string; method?: string; amount?: number; payment_id?: string; status?: string };
 type Payload = {
   event?: string;
-  payload?: { payment?: { entity?: Entity }; refund?: { entity?: Entity } };
+  payload?: { payment?: { entity?: Entity }; refund?: { entity?: Entity }; fund_account_validation?: { entity?: Record<string, unknown> } };
 };
 
 /**
  * Razorpay webhook (Dashboard → Webhooks):
  *   URL:    https://<site>/api/webhooks/razorpay        Secret: RAZORPAY_WEBHOOK_SECRET
- *   Events: payment.authorized, payment.captured, payment.failed, refund.processed, refund.failed
+ *   Events: payment.authorized, payment.captured, payment.failed, refund.processed, refund.failed,
+ *           fund_account.validation.completed, fund_account.validation.failed (RazorpayX only)
  *
  *  - raw-body HMAC check
  *  - deduplicated on the event id (webhook_events)
@@ -68,7 +72,18 @@ async function handle(event: string, payload: Payload): Promise<string> {
     if (!entity?.order_id) return 'no_order';
     const [pay] = await db.select().from(payments).where(eq(payments.razorpayOrderId, entity.order_id));
     const [sub] = pay ? [] : await db.select().from(kitchenSubscriptions).where(eq(kitchenSubscriptions.razorpayOrderId, entity.order_id));
-    if (!pay && !sub) return 'unknown_order';
+    if (!pay && !sub) {
+      // A ₹1 UPI-ownership check for a kitchen (razorpay_checkout_vpa provider).
+      const [ver] = await db.select().from(upiVerifications).where(eq(upiVerifications.razorpayOrderId, entity.order_id));
+      if (ver && event !== 'payment.failed') {
+        if (entity.amount !== VERIFY_AMOUNT_PAISE || !entity.id) return 'amount_mismatch';
+        if (!isMockMode()) await ensureCaptured({ paymentId: entity.id, razorpayOrderId: entity.order_id, amountInPaise: VERIFY_AMOUNT_PAISE });
+        const full = isMockMode() ? null : await fetchRazorpayPayment(entity.id);
+        await finalizeVerification(ver.id, { verifiedVpa: full?.vpa ?? full?.upi?.vpa ?? null, paymentId: entity.id });
+        return 'upi_verification_recorded';
+      }
+      return ver ? 'upi_verification_failed' : 'unknown_order';
+    }
 
     if (event === 'payment.failed') {
       // Never downgrade a payment that was already captured/refunded.
@@ -91,6 +106,14 @@ async function handle(event: string, payload: Payload): Promise<string> {
     }
     const r = await markSubscriptionPaid(sub!.id, { razorpayPaymentId: entity.id });
     return r.won ? 'subscription_paid' : 'subscription_already_paid';
+  }
+
+  if (event === 'fund_account.validation.completed' || event === 'fund_account.validation.failed') {
+    const entity = payload.payload?.fund_account_validation?.entity;
+    if (!entity?.id) return 'no_validation';
+    const v = parseValidation(entity as Record<string, any>);
+    await completeRpdValidation({ ...v, status: event.endsWith('failed') ? 'failed' : 'completed' });
+    return 'upi_validation_recorded';
   }
 
   if (event === 'refund.processed' || event === 'refund.failed') {

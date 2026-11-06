@@ -1,3 +1,4 @@
+import { OPEN_STATES, COMPLETED_STATES, type OrderStatus } from '@/lib/orders/state';
 import { desc, eq } from 'drizzle-orm';
 import { api, ApiError, ok } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
@@ -30,8 +31,8 @@ export const GET = api(async () => {
   const dueRows = await db.select().from(kitchenRefundsDue).where(and(eq(kitchenRefundsDue.sellerId, session.uid), eq(kitchenRefundsDue.status, 'due')));
 
   const today = istStartOfDay();
-  const active = myOrders.filter((o) => ['fee_paid', 'awaiting_kitchen_payment_confirmation', 'paid', 'accepted', 'preparing', 'ready', 'out_for_delivery', 'delivery_unassigned'].includes(o.status));
-  const todayDone = myOrders.filter((o) => (o.status === 'delivered' || o.status === 'picked_up') && (o.completedAt ?? o.createdAt) >= today);
+  const active = myOrders.filter((o) => OPEN_STATES.includes(o.status as OrderStatus));
+  const todayDone = myOrders.filter((o) => COMPLETED_STATES.includes(o.status as OrderStatus) && (o.completedAt ?? o.createdAt) >= today);
 
   // Lazy, dedupe-on-read FSSAI reminder (see src/lib/fssai/reminders.ts).
   const fssaiDeemedGrant = fssaiDeemedGrantInfo(application ?? null);

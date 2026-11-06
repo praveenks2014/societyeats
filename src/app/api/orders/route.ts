@@ -7,6 +7,7 @@ import { malls, orderEvents, orderItems, orders, restaurantItems, restaurants, s
 import { pctOf } from '@/lib/money';
 import { createHomeOrder } from '@/lib/orders/create';
 import { expireUnpaidOrders } from '@/lib/orders/lifecycle';
+import { redactOrder } from '@/lib/orders/view';
 import { createPaymentForOrder } from '@/lib/payments';
 import { rateLimit } from '@/lib/rate-limit';
 
@@ -21,8 +22,9 @@ type CreateBody = {
   items: { id: number; qty: number }[];
   address?: DeliveryAddress;
   fulfillmentType?: FulfillmentType;
-  /** How the buyer will pay the KITCHEN for the food: UPI right after the fee, or at pickup. */
-  foodPaymentMode?: 'upi_now' | 'pay_at_pickup';
+  /** Pre-order for a later time (ISO, IST slot). */
+  scheduledFor?: string;
+  buyerNote?: string;
   /** Apply available referral credit to the platform fee. */
   useCredit?: boolean;
 };
@@ -39,13 +41,13 @@ export const POST = api(async (req) => {
     await expireUnpaidOrders();
     const res = await createHomeOrder({
       buyerId: session.uid,
-      buyerApproved: session.approvalStatus === 'approved',
       sellerId: body.sellerId,
       items: body.items,
       fulfillmentType: body.fulfillmentType ?? 'self_pickup',
-      foodPaymentMode: body.foodPaymentMode ?? 'pay_at_pickup',
       address: body.address,
       useCredit: body.useCredit,
+      scheduledFor: body.scheduledFor ? new Date(body.scheduledFor) : null,
+      buyerNote: body.buyerNote,
     });
     return ok({ orderId: res.orderId, totalInPaise: res.quote.grandTotalPaise, onlineChargeInPaise: res.quote.onlineChargePaise, quote: res.quote, payment: res.payment });
   }
@@ -81,7 +83,7 @@ export const POST = api(async (req) => {
       buyerId: session.uid,
       type: 'mall_pickup',
       restaurantId: body.restaurantId,
-      status: 'placed',
+      status: 'fee_pending',
       subtotalInPaise: subtotal,
       deliveryFeeInPaise: 0,
       foodTotalInPaise: subtotal,
@@ -93,7 +95,7 @@ export const POST = api(async (req) => {
     })
     .returning();
   await db.insert(orderItems).values(itemRows.map((r) => ({ ...r, orderId: order.id })));
-  await db.insert(orderEvents).values({ orderId: order.id, status: 'placed', note: 'Order placed' });
+  await db.insert(orderEvents).values({ orderId: order.id, status: 'fee_pending', note: 'Order placed' });
   const payment = await createPaymentForOrder(order.id, total);
   return ok({ orderId: order.id, totalInPaise: total, payment });
 });
@@ -125,7 +127,7 @@ export const GET = api(async () => {
 
   return ok({
     orders: rows.map((o) => ({
-      ...o,
+      ...redactOrder(o, { uid: session.uid, role: session.role }),
       items: items.filter((i) => i.orderId === o.id),
       vendorName:
         (o.sellerId && profiles.find((p) => p.userId === o.sellerId)?.kitchenName) ||

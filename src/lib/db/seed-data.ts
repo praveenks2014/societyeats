@@ -610,7 +610,7 @@ export async function runSeed(db: Db): Promise<void> {
       { status: 'accepted', note: "Ammama's Biryani Ghar accepted", minutesAfter: 6 },
       { status: 'preparing', minutesAfter: 10 },
       { status: 'ready', minutesAfter: 48 },
-      { status: 'out_for_delivery', note: 'Rider Srinivas picked up', minutesAfter: 55 },
+      { status: 'on_the_way', note: 'Rider Srinivas picked up', minutesAfter: 55 },
       { status: 'delivered', note: 'OTP verified by rider', minutesAfter: 82 },
     ],
   });
@@ -660,7 +660,7 @@ export async function runSeed(db: Db): Promise<void> {
       { status: 'accepted', minutesAfter: 4 },
       { status: 'preparing', minutesAfter: 8 },
       { status: 'ready', minutesAfter: 25 },
-      { status: 'out_for_delivery', note: 'Porter failed twice, failover to Shadowfax', minutesAfter: 33 },
+      { status: 'on_the_way', note: 'Porter failed twice, failover to Shadowfax', minutesAfter: 33 },
       { status: 'delivered', minutesAfter: 58 },
     ],
   });
@@ -704,7 +704,7 @@ export async function runSeed(db: Db): Promise<void> {
     buyerId: buyer.id,
     type: 'home_delivery',
     sellerId: seller4.id,
-    status: 'out_for_delivery',
+    status: 'on_the_way',
     items: [{ listingId: l(11).id, title: l(11).title, qty: 2, unitPaise: l(11).priceInPaise }],
     deliveryFee: 5600,
     createdDaysAgo: 0,
@@ -717,7 +717,7 @@ export async function runSeed(db: Db): Promise<void> {
       { status: 'accepted', minutesAfter: 3 },
       { status: 'preparing', minutesAfter: 6 },
       { status: 'ready', minutesAfter: 35 },
-      { status: 'out_for_delivery', note: 'Rider Venkat picked up', minutesAfter: 41 },
+      { status: 'on_the_way', note: 'Rider Venkat picked up', minutesAfter: 41 },
     ],
   });
   await db.insert(deliveries).values({
@@ -1227,8 +1227,8 @@ export async function runSeed(db: Db): Promise<void> {
   // ================================================================
   await db.execute(sql`UPDATE orders SET completed_at = updated_at WHERE status IN ('delivered', 'picked_up') AND completed_at IS NULL`);
   await db.execute(sql`UPDATE orders SET food_total_in_paise = subtotal_in_paise + delivery_fee_in_paise, online_charge_in_paise = total_in_paise WHERE food_total_in_paise = 0`);
-  await db.execute(sql`UPDATE orders SET status = 'fee_paid' WHERE status = 'paid' AND type = 'home_delivery'`);
-  await db.execute(sql`UPDATE orders SET food_payment_mode = 'pay_at_pickup', food_payment_status = CASE WHEN status IN ('delivered', 'picked_up') THEN 'at_handover' ELSE 'pending' END WHERE type = 'home_delivery' AND food_payment_mode IS NULL`);
+  await db.execute(sql`UPDATE orders SET status = 'booked' WHERE status = 'paid' AND type = 'home_delivery'`);
+  await db.execute(sql`UPDATE orders SET food_payment_mode = 'pay_at_door', food_payment_status = CASE WHEN status IN ('delivered', 'picked_up') THEN 'confirmed' ELSE 'pending' END WHERE type = 'home_delivery' AND food_payment_mode IS NULL`);
   await db.execute(sql`UPDATE payments SET amount_in_paise = COALESCE((SELECT o.total_in_paise FROM orders o WHERE o.id = payments.order_id), 0), kind = 'order_full' WHERE amount_in_paise = 0`);
   await db.execute(sql`UPDATE seller_profiles SET listing_state = 'approved' WHERE is_approved = true`);
   await db.execute(sql`UPDATE seller_profiles SET upi_vpa = payout_vpa_or_bank, upi_name = kitchen_name WHERE payout_vpa_or_bank LIKE '%@%'`);

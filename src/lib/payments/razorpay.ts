@@ -6,7 +6,7 @@ import { BRAND } from '@/config/brand';
  * subscriptions and the buyer platform fee) and refunds of those. In
  * MOCK_MODE every call is simulated and deterministic.
  */
-export type RzpPayment = { id: string; order_id: string; status: string; amount: number; method?: string };
+export type RzpPayment = { id: string; order_id: string; status: string; amount: number; method?: string; vpa?: string; upi?: { vpa?: string } };
 
 async function client() {
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -16,7 +16,7 @@ async function client() {
   return { rzp: new Razorpay({ key_id: keyId, key_secret: keySecret }), keyId };
 }
 
-export function receiptFor(kind: 'o' | 's', id: number): string {
+export function receiptFor(kind: 'o' | 's' | 'u', id: number): string {
   return `${BRAND.receiptPrefix}${kind}${id}`;
 }
 

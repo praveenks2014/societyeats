@@ -1,3 +1,4 @@
+import { TERMINAL_STATES, type OrderStatus } from '@/lib/orders/state';
 import { and, asc, eq } from 'drizzle-orm';
 import { ApiError } from '@/lib/api';
 import { recordAudit } from '@/lib/audit';
@@ -36,7 +37,7 @@ export function hasProfanity(text: string): boolean {
 
 export function threadState(order: { status: string; completedAt: Date | null; updatedAt: Date }, now: Date = new Date()): { open: boolean; reason?: string } {
   if (order.status === 'expired') return { open: false, reason: 'This order expired.' };
-  const ended = ['delivered', 'picked_up', 'cancelled'].includes(order.status);
+  const ended = TERMINAL_STATES.includes(order.status as OrderStatus);
   if (!ended) return { open: true };
   const endedAt = (order.completedAt ?? order.updatedAt).getTime();
   if (now.getTime() - endedAt > THREAD_READONLY_DAYS * DAY_MS) return { open: false, reason: `Messages close ${THREAD_READONLY_DAYS} days after an order ends.` };
@@ -48,7 +49,7 @@ type Party = 'buyer' | 'seller' | 'admin';
 async function loadAccess(orderId: number, session: Session) {
   const db = await getDb();
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
-  if (!order || order.type !== 'home_delivery' || order.status === 'placed') throw new ApiError(404, 'Conversation not found');
+  if (!order || order.type !== 'home_delivery' || order.status === 'fee_pending') throw new ApiError(404, 'Conversation not found');
   let party: Party | null = null;
   if (order.buyerId === session.uid) party = 'buyer';
   else if (order.sellerId === session.uid) party = 'seller';

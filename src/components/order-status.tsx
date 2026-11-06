@@ -3,21 +3,36 @@
 import { Badge } from '@/components/ui';
 
 export const STATUS_META: Record<string, { label: string; emoji: string; tone: 'green' | 'amber' | 'red' | 'neutral' }> = {
-  placed: { label: 'Placed — pay the platform fee to send it', emoji: '🕐', tone: 'neutral' },
-  fee_paid: { label: 'Sent to the kitchen', emoji: '🍲', tone: 'amber' },
-  awaiting_kitchen_payment_confirmation: { label: 'Kitchen confirming your UPI payment', emoji: '⏳', tone: 'amber' },
+  fee_pending: { label: 'Pay the platform fee to book', emoji: '🕐', tone: 'neutral' },
+  booked: { label: 'Booked — waiting for the kitchen', emoji: '🍲', tone: 'amber' },
+  awaiting_kitchen_payment_confirmation: { label: 'Kitchen confirming payment', emoji: '⏳', tone: 'amber' },
   expired: { label: 'Expired — platform fee not paid', emoji: '⌛', tone: 'red' },
   paid: { label: 'Paid — waiting for the kitchen', emoji: '✅', tone: 'amber' },
   accepted: { label: 'Accepted by the kitchen', emoji: '👩‍🍳', tone: 'amber' },
   preparing: { label: 'Cooking now', emoji: '🍳', tone: 'amber' },
   ready: { label: 'Ready', emoji: '🛎️', tone: 'green' },
-  out_for_delivery: { label: 'Out for delivery', emoji: '🛵', tone: 'green' },
+  on_the_way: { label: 'On the way', emoji: '🛵', tone: 'green' },
+  at_door: { label: 'At your door — pay the kitchen', emoji: '🚪', tone: 'green' },
+  collected: { label: 'Collected — pay the kitchen', emoji: '🥡', tone: 'green' },
+  payment_claimed: { label: 'Payment sent — kitchen confirming', emoji: '💸', tone: 'amber' },
+  completed: { label: 'Completed', emoji: '🎉', tone: 'green' },
+  payment_disputed: { label: 'Payment under review', emoji: '🔍', tone: 'red' },
+  closed_unpaid: { label: 'Closed — unpaid', emoji: '✖️', tone: 'red' },
+  cancelled_by_seller: { label: 'Cancelled by the kitchen', emoji: '✖️', tone: 'red' },
+  cancelled_by_buyer: { label: 'Cancelled by you', emoji: '✖️', tone: 'neutral' },
+  cancelled_auto: { label: 'Cancelled — kitchen did not respond', emoji: '✖️', tone: 'red' },
+  cancelled_buyer_unpaid: { label: 'Cancelled — not paid at the door', emoji: '✖️', tone: 'red' },
+  no_show_buyer: { label: 'Cancelled — buyer not at the door', emoji: '✖️', tone: 'red' },
   delivered: { label: 'Delivered', emoji: '🎉', tone: 'green' },
   picked_up: { label: 'Picked up', emoji: '🛍️', tone: 'green' },
   cancelled: { label: 'Cancelled', emoji: '✖️', tone: 'red' },
   refund_pending: { label: 'Refund on the way', emoji: '↩️', tone: 'red' },
   delivery_unassigned: { label: 'Finding a rider…', emoji: '📡', tone: 'red' },
 };
+
+/** Statuses after which nothing more will happen on an order. */
+export const FINISHED_STATUSES = ['completed', 'closed_unpaid', 'cancelled_by_seller', 'cancelled_by_buyer', 'cancelled_auto', 'cancelled_buyer_unpaid', 'no_show_buyer', 'expired', 'cancelled', 'delivered', 'picked_up', 'refund_pending'];
+export const COMPLETED_STATUSES = ['completed', 'delivered', 'picked_up'];
 
 export function StatusPill({ status }: { status: string }) {
   const meta = STATUS_META[status] ?? { label: status, emoji: '•', tone: 'neutral' as const };

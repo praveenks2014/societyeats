@@ -1,6 +1,7 @@
-import { and, eq, gte, ne } from 'drizzle-orm';
+import { and, eq, gte, notInArray } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { orders } from '@/lib/db/schema';
+import { CANCELLED_STATES } from '@/lib/orders/state';
 import { istAtHour, istHour } from '@/lib/time';
 
 /**
@@ -52,8 +53,7 @@ export async function slotOrderCount(
       and(
         eq(orders.sellerId, sellerId),
         gte(orders.createdAt, since),
-        ne(orders.status, 'cancelled'),
-        ne(orders.status, 'refund_pending'),
+        notInArray(orders.status, [...CANCELLED_STATES, 'refund_pending']),
       ),
     );
   return rows.length;

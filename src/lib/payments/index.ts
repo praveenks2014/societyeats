@@ -39,7 +39,7 @@ export async function createPaymentForOrder(orderId: number, amountInPaise: numb
 export type PaidResult = { won: boolean; status?: string };
 
 /**
- * Exactly-once transition placed → fee_paid (home) / paid (mall). The
+ * Exactly-once transition fee_pending → booked (home) / paid (mall). The
  * conditional UPDATE … WHERE status='placed' RETURNING inside a transaction
  * means that if verify, the webhook and the mock sheet race, exactly one
  * caller wins; only the winner runs side effects (notifications, credit
@@ -59,17 +59,18 @@ export async function markOrderPaid(
     const [existing] = await tx.select().from(orders).where(eq(orders.id, orderId));
     if (!existing) return { won: false as const, order: null };
     const home = existing.type === 'home_delivery';
-    const to = home ? 'fee_paid' : 'paid';
+    const to = home ? 'booked' : 'paid';
     const [order] = await tx
       .update(orders)
       .set({
         status: to,
         feePaidAt: now,
+        bookedAt: now,
         expiresAt: null,
         acceptBy: home ? new Date(now.getTime() + settings.sellerAcceptWindowMinutes * 60_000) : null,
         updatedAt: now,
       })
-      .where(and(eq(orders.id, orderId), eq(orders.status, 'placed')))
+      .where(and(eq(orders.id, orderId), eq(orders.status, 'fee_pending')))
       .returning();
     if (!order) return { won: false as const, order: existing };
 
@@ -133,7 +134,7 @@ async function handleLateCapture(orderId: number, paymentId: string, method?: st
   }
 }
 
-/** A failed attempt never downgrades a captured/refunded payment; the order stays 'placed' so the buyer can retry until it expires. */
+/** A failed attempt never downgrades a captured/refunded payment; the order stays 'fee_pending' so the buyer can retry until it expires. */
 export async function markPaymentFailed(orderId: number): Promise<void> {
   const db = await getDb();
   await db.update(payments).set({ status: 'failed' }).where(and(eq(payments.orderId, orderId), inArray(payments.status, ['created', 'authorized'])));

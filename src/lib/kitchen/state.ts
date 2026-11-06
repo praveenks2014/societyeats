@@ -67,12 +67,16 @@ export async function transitionKitchen(
   if (actor.role === 'admin') {
     await recordAudit({ actorId: actor.id, action: `kitchen.${action}`, targetType: 'kitchen', targetId: sellerId, meta: { from: profile.listingState, to, reason: opts.reason, category: opts.category } });
     const copy: Record<string, [string, string]> = {
-      approve: ['Your kitchen is approved 🎉', 'PadosiPlate approved your listing request. Once your subscription and FSSAI requirement are in place, your dishes are visible to neighbours.'],
+      approve: ['Your kitchen is approved 🎉', 'PadosiPlate approved your listing request. Your first 90 days are free. Once your UPI ID and FSSAI status are in order, your dishes are visible to neighbours.'],
       request_changes: ['Changes needed on your listing', `We need a few changes before approving: ${opts.reason}`],
       reject: ['Your listing request was not approved', `Reason: ${opts.reason}`],
       delist: ['Your kitchen has been delisted', `New orders are paused; orders you already accepted can still be completed. Reason (${opts.category}): ${opts.reason ?? ''}`],
       relist: ['Your kitchen is listed again ✅', 'Your kitchen has been relisted — welcome back.'],
     };
+    if (action === 'approve') {
+      const { grantFoundingKitchen } = await import('@/lib/subscriptions/service');
+      await grantFoundingKitchen(sellerId, actor.id);
+    }
     const [title, body] = copy[action];
     await notifyUser(sellerId, title, body, '/seller', { email: true, emailKind: `kitchen_${action}` });
   }
