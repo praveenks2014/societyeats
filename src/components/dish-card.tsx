@@ -7,6 +7,7 @@ import { FoodImage } from '@/components/food-image';
 import { useCart, useLocation, useToast, type CartVendor } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 import { formatDistance } from '@/lib/geo';
+import { PriceSummary } from '@/components/price-lines';
 import { fssaiBadge } from '@/lib/fssai/badge';
 
 export type DishCardData = {
@@ -116,6 +117,7 @@ export function DishCard({
         <div className="mt-auto flex items-center justify-between pt-3">
           <div>
             <div className="text-base font-bold">{formatINR(dish.priceInPaise)}</div>
+            <PriceSummary foodPaise={dish.priceInPaise} className="mt-0.5" />
             {dish.rating !== undefined && dish.rating > 0 && (
               <div className="text-xs text-ink-faint">★ {dish.rating.toFixed(1)} ({dish.ratingCount})</div>
             )}

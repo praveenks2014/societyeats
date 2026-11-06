@@ -1,18 +1,5 @@
+import { dishRulesShape } from '@/lib/dishes/rules';
 import { z } from 'zod';
-
-export type ListingBody = {
-  title: string;
-  description?: string;
-  priceRupees: number;
-  isVeg: boolean;
-  cuisine: string;
-  photoUrl?: string;
-  prepTimeMins: number;
-  availableQty: number;
-  days: string[];
-  slots: string[];
-  isActive?: boolean;
-};
 
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const SLOTS = ['breakfast', 'lunch', 'dinner'];
@@ -21,7 +8,8 @@ export const listingCreateSchema = z.object({
   title: z.string().trim().min(1, 'Dish name required').max(160),
   description: z.string().trim().max(1000).optional(),
   priceRupees: z.number({ error: 'Price required' }).finite().min(1, 'Price must be at least ₹1').max(50_000, 'Price is too high'),
-  isVeg: z.boolean(),
+  isVeg: z.boolean().optional(),
+  ...dishRulesShape,
   cuisine: z.string().trim().min(1, 'Cuisine required').max(60),
   photoUrl: z.string().trim().max(500).optional().nullable(),
   prepTimeMins: z.number().finite().min(0).max(24 * 60).default(30),

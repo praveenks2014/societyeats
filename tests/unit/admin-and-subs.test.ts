@@ -191,7 +191,7 @@ describe('dish moderation through the seller API', () => {
     const { POST: create } = await import('@/app/api/seller/listings/route');
     const { PATCH: edit } = await import('@/app/api/seller/listings/[id]/route');
     await loginAs(seller.id);
-    const c = await call(create, jsonReq('/x', { title: 'Pulao', priceRupees: 200, isVeg: true, cuisine: 'Indian', prepTimeMins: 30, availableQty: 5 }));
+    const c = await call(create, jsonReq('/x', { title: 'Pulao', priceRupees: 200, foodMark: 'veg', ingredients: 'rice, ghee', allergens: ['none'], cuisine: 'Indian', prepTimeMins: 30, availableQty: 5 }));
     const id = (c.json.listing as { id: number }).id;
     expect((c.json.listing as { moderationStatus: string }).moderationStatus).toBe('pending');
     const { browseListings } = await import('@/lib/browse');

@@ -254,6 +254,8 @@ test('2. seller onboards: wizard, â‚¹1 UPI check, FSSAI "help me apply", dish â†
   await page.getByLabel(/dish name/i).fill('Dum Biryani');
   await page.getByLabel(/price/i).first().fill('100');
   await page.getByLabel(/portions|quantity|available/i).first().fill('50');
+  await page.getByTestId('ingredients').fill('Basmati rice, chicken, curd, spices');
+  await page.getByTestId('allergen-milk').click();
   await page.getByRole('button', { name: /save|add dish|publish|create/i }).last().click();
   await expect(page.getByText('Dum Biryani')).toBeVisible();
   await expect(page.getByText('In review')).toBeVisible();

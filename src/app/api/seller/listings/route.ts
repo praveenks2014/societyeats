@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { listings } from '@/lib/db/schema';
 import { moderationOnCreate } from '@/lib/dishes/moderation';
+import { dishRuleColumns } from '@/lib/dishes/columns';
 import { listingCreateSchema, rupeesToPaise } from '@/lib/seller';
 
 export const dynamic = 'force-dynamic';
@@ -27,7 +28,9 @@ export const POST = api(async (req) => {
   if (!parsed.success) throw new ApiError(400, parsed.error.issues[0].message);
   const body = parsed.data;
   const settings = await getPlatformSettings();
-  const moderationStatus = moderationOnCreate(settings.dishModerationEnabled);
+  const rules = dishRuleColumns(body, settings);
+  // A health claim (cure, weight loss…) always waits for an admin, whatever the moderation setting says.
+  const moderationStatus = rules.healthClaim ? 'pending' : moderationOnCreate(settings.dishModerationEnabled);
   const priceInPaise = rupeesToPaise(body.priceRupees);
 
   const db = await getDb();
@@ -38,7 +41,7 @@ export const POST = api(async (req) => {
       title: body.title,
       description: body.description,
       priceInPaise,
-      isVeg: body.isVeg,
+      ...rules.columns,
       cuisine: body.cuisine,
       photoUrl: body.photoUrl?.trim() || null,
       prepTimeMins: Math.max(5, Math.round(body.prepTimeMins || 30)),
@@ -46,6 +49,7 @@ export const POST = api(async (req) => {
       slotsJson: { days: body.days, slots: body.slots },
       isActive: body.isActive !== false,
       moderationStatus,
+      moderationNote: rules.healthClaim ? `Auto-flagged: health claim “${rules.healthClaim}”` : null,
       moderatedAt: moderationStatus === 'approved' ? new Date() : null,
       approvedSnapshotJson: moderationStatus === 'approved' ? { title: body.title, photoUrl: body.photoUrl?.trim() || null, priceInPaise } : null,
     })

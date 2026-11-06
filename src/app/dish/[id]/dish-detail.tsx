@@ -10,6 +10,7 @@ import { DishCard } from '@/components/dish-card';
 import { ShareButton } from '@/components/share-button';
 import { useLocation } from '@/components/providers';
 import { formatINR } from '@/lib/money';
+import { PriceLines } from '@/components/price-lines';
 import { formatDistance, haversineKm, type GeoPoint } from '@/lib/geo';
 import { BADGE_TIER_LABEL } from '@/lib/reputation-labels';
 import { fssaiBadge } from '@/lib/fssai/badge';
@@ -88,6 +89,8 @@ export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, ot
         </div>
         <div className="text-right text-2xl font-bold">{formatINR(listing.priceInPaise)}</div>
       </div>
+
+      <div className="mt-3"><PriceLines foodPaise={listing.priceInPaise} /></div>
 
       {listing.description && (
         <p className="mt-3 text-sm leading-relaxed text-ink-soft">{listing.description}</p>

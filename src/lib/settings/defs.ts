@@ -94,6 +94,7 @@ export const SETTING_DEFS = {
   favouritesEnabled: { kind: 'bool', def: true, group: 'Feature flags', label: 'Favourites and "kitchen is cooking" alerts' },
   preOrdersEnabled: { kind: 'bool', def: true, group: 'Feature flags', label: 'Scheduled pre-orders' },
   // ---- moderation & flags ----
+  prohibitedKeywords: { kind: 'text', def: 'alcohol,liquor,beer,wine,whisky,whiskey,vodka,rum,bhang,cannabis,ganja,weed,raw meat,raw chicken,raw fish,raw mutton,home canned,home-canned,canned at home,infant formula,baby formula,baby food,protein powder,supplement,vitamin tablet', maxLen: 2000, group: 'Moderation', label: 'Prohibited keywords (comma-separated)', hint: 'A dish whose name, description or ingredients contains one is blocked at create/edit. Health claims (cure, weight loss, …) go to moderation instead.' },
   dishModerationEnabled: { kind: 'bool', def: true, group: 'Moderation', label: 'Dish moderation', hint: 'New dishes, and dishes whose name/photo changes or price moves >30%, wait for admin review.' },
   restaurantConsoleEnabled: { kind: 'bool', def: false, group: 'Feature flags', label: 'Restaurant (Mall) console', hint: 'Off for the pilot.' },
   mallModeEnabled: { kind: 'bool', def: DEFAULTS.mallModeEnabled, group: 'Feature flags', label: 'Mall Mode', hint: 'Off for the pilot.' },

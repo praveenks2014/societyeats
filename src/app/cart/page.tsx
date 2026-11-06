@@ -6,6 +6,7 @@ import { Button, EmptyState, VegDot } from '@/components/ui';
 import { FoodImage } from '@/components/food-image';
 import { useCart } from '@/components/providers';
 import { formatINR } from '@/lib/money';
+import { PriceLines } from '@/components/price-lines';
 
 export default function CartPage() {
   const { vendor, items, subtotalPaise, inc, dec, clear } = useCart();
@@ -69,8 +70,9 @@ export default function CartPage() {
           <span className="font-semibold">{formatINR(subtotalPaise)}</span>
         </div>
         <div className="mt-1 flex justify-between text-xs text-ink-faint">
-          <span>{vendor?.kind === 'restaurant' ? 'No delivery fee — counter pickup' : 'Delivery fee & final bill at checkout'}</span>
+          <span>{vendor?.kind === 'restaurant' ? 'No delivery fee — counter pickup' : 'Final bill at checkout'}</span>
         </div>
+        {vendor?.kind !== 'restaurant' && <div className="mt-3"><PriceLines foodPaise={subtotalPaise} /></div>}
       </div>
 
       <div className="mt-5 flex gap-3">
