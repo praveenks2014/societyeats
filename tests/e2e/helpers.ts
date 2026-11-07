@@ -139,6 +139,31 @@ export async function loginAdmin(browser: Browser): Promise<{ ctx: BrowserContex
   return { ctx, page };
 }
 
+/** First-ever admin login on a fresh database (one-time password → new password → two-factor enrolment); leaves the context signed in with 2FA done and saves the TOTP secret. */
+export async function enrolAdminFresh(browser: Browser, viewport?: { width: number; height: number }): Promise<{ ctx: BrowserContext; page: Page }> {
+  const { ctx, page } = await newUserContext(browser, { viewport });
+  await page.goto('/login');
+  await page.getByLabel('Email or phone number').fill(ADMIN_EMAIL);
+  await page.locator('input[type=password]').fill(ADMIN_FIRST_PASSWORD);
+  await page.getByRole('button', { name: 'Log in' }).click();
+  await page.waitForURL(/\/change-password/);
+  await page.locator('input[type=password]').nth(0).fill(ADMIN_FIRST_PASSWORD);
+  await page.locator('input[type=password]').nth(1).fill(ADMIN_PASSWORD);
+  await page.getByRole('button', { name: 'Save password' }).click();
+  await page.waitForURL(/\/(admin|auth\/2fa)/);
+  await page.goto('/admin');
+  await page.waitForURL(/\/auth\/2fa/);
+  await page.getByTestId('start-2fa').click();
+  const secret = (await page.getByTestId('totp-secret').textContent())!.trim();
+  await page.getByTestId('totp-code').fill(totpAt(secret, Date.now()));
+  await page.getByTestId('enable-2fa').click();
+  await expect(page.getByTestId('recovery-codes').locator('li')).toHaveCount(10);
+  saveAdminTotp(secret);
+  await page.getByTestId('recovery-saved').click();
+  await page.waitForURL(/\/admin/);
+  return { ctx, page };
+}
+
 export async function seedKitchen(request: APIRequestContext, b: { n: number; societyId?: number; fssai?: 'verified' | 'provisional'; price?: number; qty?: number; cash?: boolean }) {
   const r = await api(request, 'post', '/api/dev/seed-kitchen', b);
   expect(r.status, JSON.stringify(r.json)).toBe(200);
