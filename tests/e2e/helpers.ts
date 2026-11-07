@@ -140,6 +140,16 @@ export async function loginAdmin(browser: Browser): Promise<{ ctx: BrowserContex
 }
 
 /** First-ever admin login on a fresh database (one-time password → new password → two-factor enrolment); leaves the context signed in with 2FA done and saves the TOTP secret. */
+/** A signed-in admin context: enrols a fresh database's admin, or logs in when the desktop run already did. */
+export async function adminSession(browser: Browser, viewport?: { width: number; height: number }): Promise<{ ctx: BrowserContext; page: Page }> {
+  if (fs.existsSync(SECRET_FILE)) {
+    const s = await loginAdmin(browser);
+    if (viewport) await s.page.setViewportSize(viewport);
+    return s;
+  }
+  return enrolAdminFresh(browser, viewport);
+}
+
 export async function enrolAdminFresh(browser: Browser, viewport?: { width: number; height: number }): Promise<{ ctx: BrowserContext; page: Page }> {
   const { ctx, page } = await newUserContext(browser, { viewport });
   await page.goto('/login');

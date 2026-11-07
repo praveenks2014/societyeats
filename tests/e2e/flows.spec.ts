@@ -678,6 +678,10 @@ test('16. account deletion is blocked while an order is open, then succeeds and 
   await b.page.getByTestId('confirm-delete').click();
   await expect(b.page.getByText(/open order/i)).toBeVisible();
   await orderAction(b.page.request, orderId, 'buyer_cancel');
+  // the dialog may have re-rendered after the refusal; make sure the fields are filled before confirming again
+  if (!(await b.page.getByTestId('delete-confirm').isVisible())) await b.page.getByTestId('delete-account').click();
+  await b.page.getByLabel('Your password').fill(PW);
+  await b.page.getByTestId('delete-confirm').fill('DELETE');
   await b.page.getByTestId('confirm-delete').click();
   await expect(b.page).toHaveURL(/\/$/);
   expect((await api(b.page.request, 'get', '/api/auth/me')).json.session).toBeNull();

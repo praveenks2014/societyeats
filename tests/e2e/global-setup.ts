@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 /**
  * Warms the Next dev server (Turbopack compiles routes on first request, and a first compile while a browser page is
  * open makes dev reload that page mid-test). Plain HTTP GETs compile every route the journeys use before any browser opens.
@@ -12,6 +15,8 @@ const PAGES = [
 ];
 
 export default async function globalSetup() {
+  // a fresh database has no enrolled admin: forget the previous run's TOTP secret
+  fs.rmSync(path.join(os.tmpdir(), 'padosiplate-e2e-admin-totp.json'), { force: true });
   const base = 'http://localhost:3100';
   for (const p of PAGES) {
     try {

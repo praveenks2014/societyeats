@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { api, enrolAdminFresh, mockOutbox, newUserContext, register, seedKitchen } from './helpers';
+import { api, adminSession, mockOutbox, newUserContext, register, seedKitchen } from './helpers';
 
 /** 390px smoke checks: no horizontal overflow, 44px touch targets on the main public pages. */
 const PUBLIC_PAGES = ['/', '/login', '/register', '/join/E2E-ONE', '/legal/terms', '/legal/refunds', '/forgot-password'];
@@ -66,7 +66,7 @@ test('mobile: book a pre-order, see it on the order page, and chat with the kitc
 });
 
 test('mobile: the admin console pages fit 390px', async ({ browser }) => {
-  const { ctx, page } = await enrolAdminFresh(browser, { width: 390, height: 844 });
+  const { ctx, page } = await adminSession(browser, { width: 390, height: 844 });
   for (const path of ['/admin', '/admin/settings', '/admin/go-live', '/admin/insights', '/admin/grievances', '/admin/legal', '/admin/growth']) {
     await page.goto(path);
     await noOverflow(page, path);
