@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 /** "Log out of all devices". */
 export const POST = api(async () => {
-  const session = await requireSession(undefined, { allowMustChange: true });
+  const session = await requireSession(undefined, { allowMustChange: true, allowMfaPending: true });
   await revokeAllSessions(session.uid);
   await destroyCurrentSession();
   return ok({ ok: true });

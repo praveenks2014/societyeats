@@ -13,7 +13,7 @@ async function emailSeller(sellerId: number, subject: string, body: string) {
   const db = await getDb();
   const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, sellerId));
   if (u?.email) {
-    await sendEmail({ userId: sellerId, to: u.email, kind: 'admin_message', subject: `[PadosiPlate] ${subject}`, text: `${body}\n\nReply in your inbox: ${siteOriginSafe()}/seller/inbox` });
+    await sendEmail({ userId: sellerId, to: u.email, kind: 'admin_message', subject: `[PadosiPlate] ${subject}`, text: `${body}\n\nReply in your inbox: ${await siteOriginSafe()}/seller/inbox` });
   }
 }
 

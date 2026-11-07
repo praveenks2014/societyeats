@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { listings } from '@/lib/db/schema';
 import { moderationAfterEdit } from '@/lib/dishes/moderation';
+import { dishRuleColumns } from '@/lib/dishes/columns';
 import { listingPatchSchema, rupeesToPaise } from '@/lib/seller';
 
 export const dynamic = 'force-dynamic';
@@ -25,7 +26,33 @@ export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => 
     photoUrl: body.photoUrl !== undefined ? body.photoUrl?.trim() || null : existing.photoUrl,
     priceInPaise: body.priceRupees !== undefined ? rupeesToPaise(body.priceRupees) : existing.priceInPaise,
   };
-  const status = moderationAfterEdit(existing.moderationStatus, existing.approvedSnapshotJson, next, settings.dishModerationEnabled);
+  // Re-run the dish rules on the merged dish whenever a rule or text field is touched (a plain pause/go-live toggle is exempt).
+  const touchesRules = ['title', 'description', 'cuisine', 'foodMark', 'ingredients', 'allergens', 'spiceLevel', 'portionSize', 'bestWithinHours', 'storageAdvice', 'leadTimeDays', 'maxPortionsPerSlot', 'photos', 'isPackaged', 'packaged'].some((k) => k in body);
+  const rules = touchesRules
+    ? dishRuleColumns(
+        {
+          title: next.title,
+          description: body.description ?? existing.description,
+          cuisine: body.cuisine ?? existing.cuisine,
+          foodMark: (body.foodMark ?? existing.foodMark) as 'veg' | 'egg' | 'non_veg',
+          ingredients: body.ingredients ?? existing.ingredients ?? '',
+          allergens: body.allergens ?? (existing.allergensDeclared ? (existing.allergensJson?.length ? existing.allergensJson : ['none']) : []),
+          spiceLevel: body.spiceLevel !== undefined ? body.spiceLevel : existing.spiceLevel,
+          portionSize: body.portionSize !== undefined ? body.portionSize : existing.portionSize,
+          bestWithinHours: body.bestWithinHours !== undefined ? body.bestWithinHours : existing.bestWithinHours,
+          storageAdvice: body.storageAdvice !== undefined ? body.storageAdvice : existing.storageAdvice,
+          leadTimeDays: body.leadTimeDays ?? existing.leadTimeDays,
+          maxPortionsPerSlot: body.maxPortionsPerSlot !== undefined ? body.maxPortionsPerSlot : existing.maxPortionsPerSlot,
+          photos: body.photos ?? existing.photosJson ?? undefined,
+          isPackaged: body.isPackaged ?? existing.isPackaged,
+          packaged: body.packaged !== undefined ? body.packaged : existing.packagedJson,
+        },
+        settings,
+      )
+    : null;
+  if (rules && (!(body.ingredients ?? existing.ingredients) || !(body.allergens ?? existing.allergensDeclared))) throw new ApiError(400, 'Add the ingredients and allergens to save this dish');
+  let status = moderationAfterEdit(existing.moderationStatus, existing.approvedSnapshotJson, next, settings.dishModerationEnabled);
+  if (rules?.healthClaim && status === 'approved') status = 'pending';
   const becameApproved = status === 'approved' && existing.moderationStatus !== 'approved';
 
   const [updated] = await db
@@ -34,7 +61,7 @@ export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => 
       ...(body.title !== undefined ? { title: body.title } : {}),
       ...(body.description !== undefined ? { description: body.description } : {}),
       ...(body.priceRupees !== undefined ? { priceInPaise: next.priceInPaise } : {}),
-      ...(body.isVeg !== undefined ? { isVeg: body.isVeg } : {}),
+      ...(rules ? rules.columns : body.isVeg !== undefined ? { isVeg: body.isVeg } : {}),
       ...(body.cuisine !== undefined ? { cuisine: body.cuisine } : {}),
       ...(body.photoUrl !== undefined ? { photoUrl: next.photoUrl } : {}),
       ...(body.prepTimeMins !== undefined ? { prepTimeMins: Math.max(5, Math.round(body.prepTimeMins)) } : {}),

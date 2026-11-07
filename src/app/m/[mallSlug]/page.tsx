@@ -7,7 +7,7 @@ import { MallClient } from './mall-client';
 
 export const dynamic = 'force-dynamic';
 
-export default async function MallPage({ params }: { params: { mallSlug: string } }) {
+export default async function MallPage({ params }: { params: Promise<{ mallSlug: string }> }) {
   // Pilot Hardening v2 — Phase 8 (DECISIONS.md #112+): Mall Mode's code is
   // fully retained but deferred this pilot — the storefront itself 404s
   // while FEATURE_MALL_MODE is off, same as visiting an unknown slug. The
@@ -16,7 +16,7 @@ export default async function MallPage({ params }: { params: { mallSlug: string 
   if (!settings.mallModeEnabled) notFound();
 
   const db = await getDb();
-  const [mall] = await db.select().from(malls).where(eq(malls.slug, params.mallSlug));
+  const [mall] = await db.select().from(malls).where(eq(malls.slug, (await params).mallSlug));
   if (!mall) notFound();
 
   const rests = await db.select().from(restaurants).where(eq(restaurants.mallId, mall.id));

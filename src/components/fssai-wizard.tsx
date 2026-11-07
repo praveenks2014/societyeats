@@ -5,8 +5,9 @@ import { AadhaarMask } from '@/components/aadhaar-mask';
 import { Button, Field, Input, Modal, Select, Textarea } from '@/components/ui';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
+import { DisclaimerClient } from '@/components/disclaimer-client';
 import {
-  DECLARATIONS, FOOD_CATEGORIES, ID_TYPES, MAX_YEARS, MIN_YEARS, PERSISTENT_NOTICE, SALES_LABELS, WATER_SOURCES,
+  DECLARATIONS, FOOD_CATEGORIES, ID_TYPES, MAX_YEARS, MIN_YEARS, ANTI_SCAM_NOTICE, PERSISTENT_NOTICE, RULES_VERIFIED_NOTE, SALES_LABELS, WATER_SOURCES,
   basicRegistrationFeePaise, checkEligibility, type IdType, type SalesBand,
 } from '@/lib/fssai/assistant';
 
@@ -245,6 +246,7 @@ export function FssaiWizard({
           <Row k="Period" v={`${years} year${years === 1 ? '' : 's'} · ${formatINR(fee)} to FSSAI`} />
           <Row k="Documents" v={`${Object.keys(docs).length}/${DOC_SLOTS.length} uploaded`} />
           <p className="mt-3 rounded-xl bg-turmeric-tint px-3 py-2.5 text-xs text-ink-soft">{PERSISTENT_NOTICE}</p>
+          <p className="mt-2 rounded-xl bg-chili-tint px-3 py-2.5 text-xs text-chili-dark" role="note" data-testid="anti-scam">{ANTI_SCAM_NOTICE}</p>
         </div>
       ),
     },
@@ -260,7 +262,8 @@ export function FssaiWizard({
       title="FSSAI Basic Registration assistant"
       footer={
         <div className="space-y-2">
-          <p className="text-[11px] leading-snug text-ink-faint">{PERSISTENT_NOTICE}</p>
+          <DisclaimerClient id="fssai-help" />
+          <p className="text-[11px] leading-snug text-ink-faint">{PERSISTENT_NOTICE} {ANTI_SCAM_NOTICE} {RULES_VERIFIED_NOTE}</p>
           <div className="flex gap-3">
             {step > 0 && <Button variant="ghost" onClick={() => setStep((s) => s - 1)}>← Back</Button>}
             {last ? (

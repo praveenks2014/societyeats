@@ -2,11 +2,13 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getKitchenProfile } from '@/lib/browse';
 import { KitchenProfile } from './kitchen-client';
+import { Disclaimer } from '@/components/disclaimer';
+import { qualityScore } from '@/lib/quality';
 
 export const dynamic = 'force-dynamic';
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const id = Number(params.id);
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const id = Number((await params).id);
   if (!Number.isFinite(id)) return {};
   const kitchen = await getKitchenProfile(id);
   if (!kitchen) return {};
@@ -22,14 +24,18 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default async function KitchenPage({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export default async function KitchenPage({ params }: { params: Promise<{ id: string }> }) {
+  const id = Number((await params).id);
   if (!Number.isFinite(id)) notFound();
   const kitchen = await getKitchenProfile(id);
   if (!kitchen) notFound();
+  const topKitchen = (await qualityScore(id)).topKitchen;
 
   return (
+    <>
     <KitchenProfile
+      closedToday={kitchen.closedToday}
+      topKitchen={topKitchen}
       seller={{
         id: kitchen.seller.id,
         kitchenName: kitchen.profile.kitchenName,
@@ -65,7 +71,13 @@ export default async function KitchenPage({ params }: { params: { id: string } }
         buyerName: r.buyer.name,
         createdAt: r.review.createdAt.toISOString(),
         sellerReplyText: r.review.sellerReplyText,
+        photos: r.review.photosJson ?? [],
       }))}
     />
+    <div className="mt-4 space-y-2">
+      <Disclaimer id="marketplace" />
+      {kitchen.fssaiTier === 'provisional' && <Disclaimer id="fssai-provisional" />}
+    </div>
+    </>
   );
 }

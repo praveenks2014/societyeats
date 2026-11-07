@@ -4,8 +4,8 @@ import { FssaiSummaryView } from './summary-client';
 
 export const dynamic = 'force-dynamic';
 
-export default async function FssaiSummaryPage({ params }: { params: { id: string } }) {
+export default async function FssaiSummaryPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
-  if (!session) redirect(`/login?next=/fssai/${params.id}/summary`);
-  return <FssaiSummaryView applicationId={Number(params.id)} />;
+  if (!session) redirect(`/login?next=/fssai/${(await params).id}/summary`);
+  return <FssaiSummaryView applicationId={Number((await params).id)} />;
 }

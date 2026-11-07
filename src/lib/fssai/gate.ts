@@ -1,6 +1,7 @@
 import type { fssaiApplications, sellerProfiles } from '@/lib/db/schema';
 import { DEFAULTS } from '@/lib/config';
 import { istDateString } from '@/lib/time';
+import { fssaiTier, isBuyerVisibleTier } from '@/lib/fssai/tier';
 
 /**
  * FSSAI hardening v3 (DECISIONS.md #119+) — the publishing gate.
@@ -20,7 +21,7 @@ export const FSSAI_DEEMED_GRANT_DAYS = {
   state: DEFAULTS.fssaiDeemedGrantDaysState,
 } as const;
 
-type Profile = Pick<typeof sellerProfiles.$inferSelect, 'fssaiStatus'> & { fssaiExpiry?: string | null };
+type Profile = Pick<typeof sellerProfiles.$inferSelect, 'fssaiStatus'> & { fssaiExpiry?: string | null; fssaiBlockedReason?: string | null };
 type Application = Pick<
   typeof fssaiApplications.$inferSelect,
   'status' | 'foscosRefNumber' | 'filedAt' | 'licenseType'
@@ -81,15 +82,24 @@ export function fssaiDeemedGrantInfo(app: Application): FssaiDeemedGrantInfo | n
  * application already earned them; 'draft' and 'submitted_to_backoffice'
  * never qualify (status simply isn't 'filed_on_foscos' yet).
  */
-export function isFssaiEligibleToPublish(profile: Profile, latestApplication: Application, now: Date = new Date()): boolean {
-  if (profile.fssaiStatus === 'verified') {
-    // Licence expiry is enforced: an expired licence unpublishes the kitchen
-    // until it is renewed (dates compared as IST calendar days).
-    if (isFssaiExpired(profile.fssaiExpiry, now)) return false;
-    return true;
-  }
-  return fssaiFiledEligible(latestApplication);
+export function isFssaiEligibleToPublish(
+  profile: Profile & { provisionalStartedAt?: Date | null },
+  latestApplication: Application,
+  now: Date = new Date(),
+  opts: { deemedDays?: number; provisionalMaxDays?: number } = {},
+): boolean {
+  // Pilot v2: the tier model decides (verified or provisional is visible to buyers; a certificate with an
+  // explicit expiry date still lapses; a provisional period that ran out hides the kitchen).
+  const tier = fssaiTier(profile, latestApplication, {
+    deemedDays: opts.deemedDays ?? FSSAI_DEEMED_GRANT_DAYS.registration,
+    provisionalMaxDays: opts.provisionalMaxDays ?? DEFAULTS_PROVISIONAL_MAX_DAYS,
+    now,
+  });
+  return isBuyerVisibleTier(tier);
 }
+
+/** Mirrors the `provisionalMaxDays` setting default; callers that have settings pass the live value. */
+const DEFAULTS_PROVISIONAL_MAX_DAYS = 45;
 
 /** True when the recorded licence/registration expiry date (YYYY-MM-DD) is before today (IST). */
 export function isFssaiExpired(expiry: string | null | undefined, now: Date = new Date()): boolean {

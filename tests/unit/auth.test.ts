@@ -13,7 +13,7 @@ const PW = 'correct-horse-9';
 
 async function register(over: Record<string, unknown> = {}) {
   const { POST } = await import('@/app/api/auth/register/route');
-  return call(POST, jsonReq('/api/auth/register', { phone: '9876543210', email: 'a@example.com', name: 'A', password: PW, inviteCode: 'TESTCODE', ...over }, { headers: { 'x-forwarded-for': `10.1.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` } }));
+  return call(POST, jsonReq('/api/auth/register', { phone: '9876543210', email: 'a@example.com', name: 'A', password: PW, inviteCode: 'TESTCODE', age18: true, acceptTerms: true, tower: 'A', flat: '101', ...over }, { headers: { 'x-forwarded-for': `10.1.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` } }));
 }
 async function login(identifier: string, password = PW) {
   const { POST } = await import('@/app/api/auth/login/route');
@@ -110,7 +110,9 @@ describe('admin allowlist', () => {
     expect(res.json.mustChangePassword).toBe(true);
     const { requireSession } = await import('@/lib/auth');
     await expect(requireSession(['admin'])).rejects.toMatchObject({ status: 403 });
-    await expect(requireSession(['admin'], { allowMustChange: true })).resolves.toMatchObject({ role: 'admin' });
+    await expect(requireSession(['admin'], { allowMustChange: true, allowMfaPending: true })).resolves.toMatchObject({ role: 'admin' });
+    // …and even after the password change the admin area stays closed until two-factor is set up and passed
+    await expect(requireSession(['admin'], { allowMustChange: true })).rejects.toMatchObject({ status: 403, code: 'mfa_enroll' });
   });
 });
 

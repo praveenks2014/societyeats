@@ -10,6 +10,7 @@ import { DishCard } from '@/components/dish-card';
 import { ShareButton } from '@/components/share-button';
 import { useLocation } from '@/components/providers';
 import { formatINR } from '@/lib/money';
+import { PriceLines } from '@/components/price-lines';
 import { formatDistance, haversineKm, type GeoPoint } from '@/lib/geo';
 import { BADGE_TIER_LABEL } from '@/lib/reputation-labels';
 import { fssaiBadge } from '@/lib/fssai/badge';
@@ -50,7 +51,7 @@ type Props = {
   };
   sellerPoint: GeoPoint | null;
   radiusKm: number;
-  reviews: { id: number; rating: number; text: string | null; buyerName: string; createdAt: string; sellerReplyText: string | null }[];
+  reviews: { id: number; rating: number; text: string | null; buyerName: string; createdAt: string; sellerReplyText: string | null; photos?: string[] }[];
   otherDishes: { id: number; title: string; priceInPaise: number; isVeg: boolean; photoUrl: string | null; availableQty: number }[];
   /** DECISIONS.md #37+: seller has hit maxOrdersPerSlot for the current meal slot. */
   slotSoldOut: boolean;
@@ -88,6 +89,8 @@ export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, ot
         </div>
         <div className="text-right text-2xl font-bold">{formatINR(listing.priceInPaise)}</div>
       </div>
+
+      <div className="mt-3"><PriceLines foodPaise={listing.priceInPaise} /></div>
 
       {listing.description && (
         <p className="mt-3 text-sm leading-relaxed text-ink-soft">{listing.description}</p>
@@ -135,7 +138,7 @@ export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, ot
           </div>
         )}
         {seller.kitchenVideoUrl && (
-          // eslint-disable-next-line jsx-a11y/media-has-caption
+           
           <video src={seller.kitchenVideoUrl} controls className="mt-3 w-full rounded-xl bg-ink" />
         )}
 
@@ -205,12 +208,19 @@ export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, ot
             {reviews.map((r) => (
               <Card key={r.id} className="p-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold">{r.buyerName}</span>
+                  <span className="text-sm font-semibold">{r.buyerName} <span className="ml-1 text-[11px] font-semibold text-leaf" data-testid="verified-order">✔ Verified order</span></span>
                   <span className="rounded-md bg-leaf px-1.5 py-0.5 text-xs font-bold text-white">
                     ★ {r.rating}
                   </span>
                 </div>
                 {r.text && <p className="mt-1.5 text-sm text-ink-soft">{r.text}</p>}
+                {r.photos && r.photos.length > 0 && (
+                  <div className="mt-2 flex gap-2" data-testid="review-photos">
+                    {r.photos.map((k) => (
+                      <img key={k} src={`/api/files/${k}`} alt="Photo from the buyer" className="h-20 w-20 rounded-xl object-cover" />
+                    ))}
+                  </div>
+                )}
                 {r.sellerReplyText && (
                   <div className="mt-2 rounded-xl bg-rice-deep px-3 py-2 text-sm">
                     <span className="font-semibold">{seller.kitchenName} replied: </span>

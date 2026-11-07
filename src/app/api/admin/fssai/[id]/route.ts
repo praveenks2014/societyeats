@@ -1,9 +1,11 @@
 import { eq } from 'drizzle-orm';
-import { addMonthsIST } from '@/lib/time';
+import { addMonthsIST, istDateString } from '@/lib/time';
 import { recordFunnel } from '@/lib/fssai/funnel';
 import { scheduleDocumentDeletion } from '@/lib/fssai/jobs';
 import { api, ApiError, ok, readJson } from '@/lib/api';
-import { requireSession } from '@/lib/auth';
+import { requireRecentMfa, requireSession } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
+import { blockFssai, recordInterruption, requestFssaiChanges, unblockFssai } from '@/lib/fssai/admin-actions';
 import { getDb } from '@/lib/db';
 import { fssaiApplications, sellerProfiles } from '@/lib/db/schema';
 import { notify } from '@/lib/db/notify';
@@ -15,17 +17,38 @@ type Body =
   | { action: 'grant'; licenseNumber: string }
   | { action: 'reject'; reason?: string }
   | { action: 'sponsor'; sponsoredByPlatform: boolean }
-  | { action: 'inspection_ordered' }
-  | { action: 'inadequacy_notice' };
+  | { action: 'inspection_ordered'; date?: string; note?: string }
+  | { action: 'inadequacy_notice'; date?: string; note?: string }
+  | { action: 'request_changes'; note: string }
+  | { action: 'block'; reason: string }
+  | { action: 'unblock' };
 
 /** Back-office completes the honest FSSAI loop: file on FoSCoS by hand, then record the outcome. */
 export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => {
-  await requireSession(['admin']);
+  const admin = await requireSession(['admin']);
+  requireRecentMfa(admin); // every FSSAI decision needs a fresh 2FA check and is audit-logged
   const body = await readJson<Body>(req);
   const id = Number(params.id);
   const db = await getDb();
   const [app] = await db.select().from(fssaiApplications).where(eq(fssaiApplications.id, id));
   if (!app) throw new ApiError(404, 'Application not found');
+
+  if (body.action === 'request_changes') {
+    await requestFssaiChanges({ applicationId: id, note: body.note ?? '', adminId: admin.uid });
+    return ok({ ok: true });
+  }
+  if (body.action === 'block') {
+    await blockFssai({ sellerId: app.sellerId, reason: body.reason ?? '', adminId: admin.uid });
+    return ok({ ok: true });
+  }
+  if (body.action === 'unblock') {
+    await unblockFssai({ sellerId: app.sellerId, adminId: admin.uid });
+    return ok({ ok: true });
+  }
+  if (body.action === 'inspection_ordered' || body.action === 'inadequacy_notice') {
+    await recordInterruption({ applicationId: id, kind: body.action, date: body.date ?? istDateString(new Date()), note: body.note, adminId: admin.uid });
+    return ok({ ok: true });
+  }
 
   const timeline = [...(app.timelineJson ?? [])];
   const now = new Date().toISOString();
@@ -102,32 +125,10 @@ export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => 
       .update(fssaiApplications)
       .set({ sponsoredByPlatform: body.sponsoredByPlatform, updatedAt: new Date() })
       .where(eq(fssaiApplications.id, id));
-  } else if (body.action === 'inspection_ordered' || body.action === 'inadequacy_notice') {
-    // FSSAI hardening v3 (DECISIONS.md #119+): records that FoSCoS actually
-    // responded during the deemed-commencement waiting window (see
-    // src/lib/fssai/gate.ts) — an inspection order (Basic Registration) or
-    // an inadequacy notice (State License). There's no FoSCoS status API to
-    // detect this automatically, so an admin enters it by hand once they
-    // learn of it; moving status away from 'filed_on_foscos' stops the
-    // regulatory publishing gate from firing for this application.
-    if (app.status !== 'filed_on_foscos') {
-      throw new ApiError(400, 'Only an application currently filed on FoSCoS can be moved to this status');
-    }
-    const label = body.action === 'inspection_ordered' ? 'Inspection ordered' : 'Inadequacy notice issued';
-    timeline.push({ at: now, event: `${label} by FoSCoS` });
-    await db
-      .update(fssaiApplications)
-      .set({ status: body.action, timelineJson: timeline, updatedAt: new Date() })
-      .where(eq(fssaiApplications.id, id));
-    await notify(
-      app.sellerId,
-      `FSSAI: ${label.toLowerCase()}`,
-      `FoSCoS responded to your filing (ref ${app.foscosRefNumber}) with a ${label.toLowerCase()} — check your FoSCoS account for next steps.`,
-      '/seller/compliance',
-    );
   } else {
     throw new ApiError(400, 'Unknown action');
   }
 
+  await recordAudit({ actorId: admin.uid, action: `fssai.${body.action}`, targetType: 'fssai_application', targetId: id });
   return ok({ ok: true });
 });

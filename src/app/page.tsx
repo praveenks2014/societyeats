@@ -4,11 +4,19 @@ import { Browse } from '@/components/browse';
 import { FeaturedKitchen } from '@/components/featured-kitchen';
 import { getFeaturedKitchen } from '@/lib/browse';
 import { getPlatformSettings } from '@/lib/db/platform';
+import { getSession } from '@/lib/auth';
+import { isPilotMember } from '@/lib/access';
+import { InviteOnly } from '@/components/invite-only';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
   const [featured, settings] = await Promise.all([getFeaturedKitchen(), getPlatformSettings()]);
+  const session = await getSession();
+  // Invite-only pilot: visitors and non-members see the request-access page instead of the feed.
+  if (settings.pilotSocietiesOnly && (!session || !(await isPilotMember(session.uid)))) {
+    return <InviteOnly signedIn={!!session} />;
+  }
   return (
     <>
       <Hero />

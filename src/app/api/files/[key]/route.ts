@@ -6,6 +6,9 @@ import { getDb } from '@/lib/db';
 import { files } from '@/lib/db/schema';
 import { recordAudit } from '@/lib/audit';
 import { canViewPrivateFile } from '@/lib/storage/access';
+import { registerChatFileAccess } from '@/lib/chat/file-access';
+
+registerChatFileAccess();
 import { decryptBytes } from '@/lib/storage/files';
 import { getStorage } from '@/lib/storage';
 

@@ -7,6 +7,7 @@ import { FoodImage } from '@/components/food-image';
 import { useCart, useLocation, useToast, type CartVendor } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 import { formatDistance } from '@/lib/geo';
+import { PriceSummary } from '@/components/price-lines';
 import { fssaiBadge } from '@/lib/fssai/badge';
 
 export type DishCardData = {
@@ -31,6 +32,7 @@ export type DishCardData = {
   kitchenPhotosVerified?: boolean;
   /** DECISIONS.md #73+: distinct buyers with a completed order from this seller. */
   orderedByCount?: number;
+  topKitchen?: boolean;
 };
 
 export function DishCard({
@@ -105,7 +107,7 @@ export function DishCard({
           <VegDot isVeg={dish.isVeg} className="mt-0.5" />
           <h3 className="flex-1 font-display text-[15px] font-bold leading-snug">{dish.title}</h3>
         </div>
-        <div className="mt-1 text-xs text-ink-soft">{dish.kitchenName}</div>
+        <div className="mt-1 text-xs text-ink-soft">{dish.kitchenName}{dish.topKitchen && <span className="ml-1.5 font-semibold text-leaf" data-testid="top-kitchen-chip">🏆 Top Kitchen</span>}</div>
         {(dish.distanceKm != null || dish.societyName) && (
           <div className="eyebrow mt-1.5">
             {dish.distanceKm != null ? `${formatDistance(dish.distanceKm)} away` : ''}
@@ -116,6 +118,7 @@ export function DishCard({
         <div className="mt-auto flex items-center justify-between pt-3">
           <div>
             <div className="text-base font-bold">{formatINR(dish.priceInPaise)}</div>
+            <PriceSummary foodPaise={dish.priceInPaise} className="mt-0.5" />
             {dish.rating !== undefined && dish.rating > 0 && (
               <div className="text-xs text-ink-faint">★ {dish.rating.toFixed(1)} ({dish.ratingCount})</div>
             )}

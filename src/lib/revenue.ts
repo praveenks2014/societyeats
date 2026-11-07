@@ -63,7 +63,7 @@ export async function revenueReport(range: RevenueRange, now: Date = new Date())
     .from(orders)
     .where(and(eq(orders.type, 'home_delivery'), isNotNull(orders.feePaidAt), gte(orders.feePaidAt, since)))
     .groupBy(orders.foodPaymentMode);
-  const [unconfirmed] = await db.select({ n: sql<number>`count(*)` }).from(orders).where(eq(orders.status, 'awaiting_kitchen_payment_confirmation'));
+  const [unconfirmed] = await db.select({ n: sql<number>`count(*)` }).from(orders).where(inArray(orders.status, ['payment_claimed', 'payment_disputed']));
   const [due] = await db
     .select({ n: sql<number>`count(*)`, total: sql<number>`coalesce(sum(${kitchenRefundsDue.amountInPaise}), 0)` })
     .from(kitchenRefundsDue)

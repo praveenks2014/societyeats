@@ -1,15 +1,18 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Chip, EmptyState, Input, SectionTitle, Skeleton } from '@/components/ui';
 import { DishCard } from '@/components/dish-card';
 import { CartBar } from '@/components/cart-bar';
 import { useLocation } from '@/components/providers';
 import type { ListingCard } from '@/lib/browse';
+import { UsualsRow } from '@/components/usuals-row';
+import { DisclaimerClient } from '@/components/disclaimer-client';
 
 export function Browse() {
   const { loc, openPicker } = useLocation();
-  const [data, setData] = useState<{ listings: ListingCard[]; cuisines: string[]; radiusKm: number } | null>(null);
+  const [data, setData] = useState<{ listings: ListingCard[]; cuisines: string[]; radiusKm: number; comingSoon?: { sellerId: number; kitchenName: string; societyName: string | null }[]; sponsored?: { sellerId: number; kitchen: string }[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [veg, setVeg] = useState(false);
   const [cuisine, setCuisine] = useState<string | null>(null);
@@ -57,6 +60,8 @@ export function Browse() {
 
   return (
     <section id="browse">
+      <DisclaimerClient id="pricing" className="mb-2" />
+      <UsualsRow />
       {/* sticky search + filters */}
       <div className="sticky top-14 z-30 -mx-4 bg-rice/90 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6">
         {hasSociety && (
@@ -150,6 +155,17 @@ export function Browse() {
             }
           />
         ) : (
+          <>
+          {data.sponsored && data.sponsored[0] && (
+            <div className="mb-4 rounded-card border border-turmeric bg-turmeric-tint p-4" data-testid="sponsored-card">
+              <span className="eyebrow !text-turmeric-deep" data-testid="sponsored-label">SPONSORED</span>
+              <Link href={`/kitchen/${data.sponsored[0].sellerId}`} className="mt-0.5 flex min-h-[44px] items-center justify-between gap-3 text-base font-bold">
+                <span>{data.sponsored[0].kitchen}</span>
+                <span aria-hidden>›</span>
+              </Link>
+              <p className="text-xs text-ink-soft">Shown for a fixed period. It does not change the ranking below. <Link href="/legal/how-ranking-works#sponsored" className="inline-flex min-h-[44px] items-center underline" data-testid="sponsored-why">Why am I seeing this?</Link></p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {data.listings.map((dish) => (
               <DishCard
@@ -158,6 +174,21 @@ export function Browse() {
                 vendor={{ kind: 'seller', id: dish.sellerId, name: dish.kitchenName }}
               />
             ))}
+          </div>
+          </>
+        )}
+        {data?.comingSoon && data.comingSoon.length > 0 && (
+          <div className="mt-8" data-testid="coming-soon">
+            <SectionTitle eyebrow="IN YOUR SOCIETY" title="Coming soon" />
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {data.comingSoon.map((k) => (
+                <div key={k.sellerId} className="rounded-card border border-dashed border-rice-line bg-white p-3 text-sm" data-testid="coming-soon-card">
+                  <div className="font-semibold">{k.kitchenName}</div>
+                  <div className="text-xs text-ink-faint">{k.societyName}</div>
+                  <div className="mt-2 inline-block rounded-pill bg-turmeric-tint px-2.5 py-1 text-xs font-semibold text-turmeric-deep">Coming soon</div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

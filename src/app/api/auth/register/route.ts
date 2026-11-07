@@ -4,7 +4,11 @@ import { createSession } from '@/lib/auth';
 import { sendVerificationEmail } from '@/lib/auth/mail';
 import { hashPassword, validatePassword } from '@/lib/auth/passwords';
 import { getDb } from '@/lib/db';
+import { getPlatformSettings } from '@/lib/db/platform';
 import { sellerProfiles, societies, users } from '@/lib/db/schema';
+import { recordConsent } from '@/lib/consent';
+import { currentConsentLabel } from '@/lib/legal/docs';
+import { joinSociety } from '@/lib/membership';
 import { clientIp, rateLimit } from '@/lib/rate-limit';
 import { referralCodeFor } from '@/lib/referrals';
 
@@ -24,6 +28,11 @@ type Body = {
   kitchenName?: string;
   vegOnly?: boolean;
   bio?: string;
+  /** Explicit, never pre-ticked: 18+ and acceptance of the Terms and the Privacy Notice. */
+  age18?: boolean;
+  acceptTerms?: boolean;
+  tower?: string;
+  flat?: string;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -39,6 +48,8 @@ export const POST = api(async (req) => {
   if (!body.name?.trim()) throw new ApiError(400, 'Name is required');
   const pwError = validatePassword(body.password, { phone, email });
   if (pwError) throw new ApiError(400, pwError);
+  if (body.age18 !== true) throw new ApiError(400, 'You must be 18 or older to use PadosiPlate');
+  if (body.acceptTerms !== true) throw new ApiError(400, 'Please accept the Terms and the Privacy Notice to continue');
   const role = body.role === 'seller' ? 'seller' : 'buyer';
   if (role === 'seller' && !body.kitchenName?.trim()) throw new ApiError(400, 'Kitchen name is required');
 
@@ -55,11 +66,11 @@ export const POST = api(async (req) => {
   if (inviteCode) {
     [society] = await db.select().from(societies).where(eq(societies.inviteCode, inviteCode));
     if (!society || society.isActive === false) throw new ApiError(400, 'Invalid invite code');
-  } else if (body.societyId) {
+  } else if (body.societyId && !(await getPlatformSettings()).pilotSocietiesOnly) {
     [society] = await db.select().from(societies).where(eq(societies.id, body.societyId));
     if (!society?.isLive || society.isActive === false) throw new ApiError(400, 'Select a valid society');
   } else {
-    throw new ApiError(400, 'Select your society or enter an invite code');
+    throw new ApiError(400, 'PadosiPlate is invite-only during the pilot — use the invite link from your society’s WhatsApp group');
   }
 
   let referredByUserId: number | null = null;
@@ -82,9 +93,18 @@ export const POST = api(async (req) => {
       lat: society.lat,
       lng: society.lng,
       referredByUserId,
-      approvalStatus: society.requireApproval ? 'pending' : 'approved',
+      age18ConfirmedAt: new Date(),
+      approvalStatus: 'pending',
     })
     .returning();
+
+  // Consent is recorded with the version accepted, when and from where.
+  const ip = clientIp(req);
+  await recordConsent(user.id, 'age18', '1', ip);
+  await recordConsent(user.id, 'terms', await currentConsentLabel('terms'), ip);
+  await recordConsent(user.id, 'privacy', await currentConsentLabel('privacy'), ip);
+  // Society membership: automatic for a valid invite link, otherwise it waits for an admin.
+  await joinSociety({ userId: user.id, societyId: society.id, tower: body.tower, flat: body.flat, viaInvite: !!inviteCode });
 
   await db.update(users).set({ referralCode: referralCodeFor(user.id) }).where(eq(users.id, user.id));
 
@@ -99,5 +119,6 @@ export const POST = api(async (req) => {
 
   await sendVerificationEmail(user.id);
   await createSession(user.id);
-  return ok({ ok: true, role: user.role, pending: user.approvalStatus === 'pending' });
+  const [fresh] = await db.select({ approvalStatus: users.approvalStatus }).from(users).where(eq(users.id, user.id));
+  return ok({ ok: true, role: user.role, pending: fresh?.approvalStatus === 'pending' });
 });

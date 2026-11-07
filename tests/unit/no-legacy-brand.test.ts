@@ -37,5 +37,5 @@ test('BRAND is the single source for the app name', async () => {
   const { BRAND } = await import('@/config/brand');
   expect(BRAND.appName).toBe('PadosiPlate');
   expect(BRAND.cookieName).toBe('padosi_session');
-  expect(BRAND.receiptPrefix).toBe('pp_');
+  expect(BRAND.receiptPrefix).toBe('pp-');
 });

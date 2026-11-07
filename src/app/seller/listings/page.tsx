@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, Select, Skeleton, Textarea, VegDot } from '@/components/ui';
 import { FoodImage } from '@/components/food-image';
 import { useToast } from '@/components/providers';
+import { MenuPublisher } from '@/components/menu-publisher';
 import { formatINR } from '@/lib/money';
 
 type Listing = {
@@ -12,6 +13,16 @@ type Listing = {
   description: string | null;
   priceInPaise: number;
   isVeg: boolean;
+  foodMark?: 'veg' | 'egg' | 'non_veg';
+  ingredients?: string | null;
+  allergensJson?: string[] | null;
+  allergensDeclared?: boolean;
+  spiceLevel?: string | null;
+  portionSize?: string | null;
+  bestWithinHours?: number | null;
+  storageAdvice?: string | null;
+  leadTimeDays?: number;
+  maxPortionsPerSlot?: number | null;
   cuisine: string;
   photoUrl: string | null;
   prepTimeMins: number;
@@ -25,6 +36,7 @@ type Listing = {
 const CUISINES = ['Biryani', 'Tiffins', 'North Indian', 'Jain Thali', 'Bengali Sweets', 'Keto Bowls', 'Desserts', 'Snacks', 'Other'];
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const SLOTS = ['breakfast', 'lunch', 'dinner'];
+const ALLERGENS = ['gluten', 'milk', 'nuts', 'peanuts', 'soy', 'egg', 'fish', 'shellfish', 'sesame', 'mustard'];
 
 export default function SellerListings() {
   const [rows, setRows] = useState<Listing[] | null>(null);
@@ -61,6 +73,8 @@ export default function SellerListings() {
         <h1 className="text-2xl font-bold">My dishes</h1>
         <Button onClick={() => setEditing('new')}>+ New dish</Button>
       </div>
+
+      <MenuPublisher dishes={rows} />
 
       {rows.length === 0 ? (
         <EmptyState
@@ -137,7 +151,15 @@ function ListingForm({
     title: row?.title ?? '',
     description: row?.description ?? '',
     priceRupees: row ? String(row.priceInPaise / 100) : '',
-    isVeg: row?.isVeg ?? true,
+    foodMark: row?.foodMark ?? (row?.isVeg === false ? 'non_veg' : 'veg'),
+    ingredients: row?.ingredients ?? '',
+    allergens: row ? (row.allergensDeclared ? (row.allergensJson?.length ? row.allergensJson : ['none']) : []) : ([] as string[]),
+    spiceLevel: row?.spiceLevel ?? '',
+    portionSize: row?.portionSize ?? '',
+    bestWithinHours: row?.bestWithinHours ? String(row.bestWithinHours) : '',
+    storageAdvice: row?.storageAdvice ?? '',
+    leadTimeDays: String(row?.leadTimeDays ?? 0),
+    maxPortionsPerSlot: row?.maxPortionsPerSlot ? String(row.maxPortionsPerSlot) : '',
     cuisine: row?.cuisine ?? 'Tiffins',
     photoUrl: row?.photoUrl ?? '',
     prepTimeMins: String(row?.prepTimeMins ?? 30),
@@ -168,7 +190,15 @@ function ListingForm({
       title: form.title,
       description: form.description,
       priceRupees: Number(form.priceRupees),
-      isVeg: form.isVeg,
+      foodMark: form.foodMark,
+      ingredients: form.ingredients,
+      allergens: form.allergens,
+      spiceLevel: form.spiceLevel || null,
+      portionSize: form.portionSize || null,
+      bestWithinHours: form.bestWithinHours ? Number(form.bestWithinHours) : null,
+      storageAdvice: form.storageAdvice || null,
+      leadTimeDays: Number(form.leadTimeDays) || 0,
+      maxPortionsPerSlot: form.maxPortionsPerSlot ? Number(form.maxPortionsPerSlot) : null,
       cuisine: form.cuisine,
       photoUrl: form.photoUrl,
       prepTimeMins: Number(form.prepTimeMins),
@@ -219,10 +249,60 @@ function ListingForm({
           </Field>
         </div>
 
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={form.isVeg} onChange={(e) => set('isVeg', e.target.checked)} className="h-4 w-4 accent-leaf" />
-          Vegetarian dish
-        </label>
+        <Field label="Food mark" hint="Declared by you; shown to buyers as the green / brown mark.">
+          <Select value={form.foodMark} onChange={(e) => set('foodMark', e.target.value)} data-testid="food-mark">
+            <option value="veg">🟢 Vegetarian</option>
+            <option value="egg">🟡 Contains egg</option>
+            <option value="non_veg">🔴 Non-vegetarian</option>
+          </Select>
+        </Field>
+        <Field label="Ingredients">
+          <Textarea rows={2} value={form.ingredients} onChange={(e) => set('ingredients', e.target.value)} placeholder="Basmati rice, chicken, curd, onion, spices, ghee" data-testid="ingredients" />
+        </Field>
+        <Field label="Allergens" hint="Tick every allergen this dish contains, or “none of these”.">
+          <div className="flex flex-wrap gap-1.5">
+            {[...ALLERGENS, 'none'].map((a) => {
+              const on = form.allergens.includes(a);
+              return (
+                <button
+                  key={a}
+                  type="button"
+                  data-testid={`allergen-${a}`}
+                  aria-pressed={on}
+                  onClick={() => set('allergens', a === 'none' ? (on ? [] : ['none']) : on ? form.allergens.filter((x) => x !== a) : [...form.allergens.filter((x) => x !== 'none'), a])}
+                  className={`min-h-[36px] rounded-pill px-3 py-1 text-xs font-semibold capitalize ${on ? 'bg-leaf text-white' : 'bg-rice-deep text-ink-soft'}`}
+                >
+                  {a === 'none' ? 'None of these' : a}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Spice level">
+            <Select value={form.spiceLevel} onChange={(e) => set('spiceLevel', e.target.value)}>
+              <option value="">Not stated</option>
+              <option value="mild">Mild</option>
+              <option value="medium">Medium</option>
+              <option value="hot">Hot</option>
+            </Select>
+          </Field>
+          <Field label="Portion">
+            <Input value={form.portionSize} onChange={(e) => set('portionSize', e.target.value)} placeholder="e.g. 350 g, 2 pieces" />
+          </Field>
+          <Field label="Best within (hours)">
+            <Input inputMode="numeric" value={form.bestWithinHours} onChange={(e) => set('bestWithinHours', e.target.value)} />
+          </Field>
+          <Field label="Pre-order lead (days)">
+            <Input inputMode="numeric" value={form.leadTimeDays} onChange={(e) => set('leadTimeDays', e.target.value)} />
+          </Field>
+          <Field label="Max portions per slot">
+            <Input inputMode="numeric" value={form.maxPortionsPerSlot} onChange={(e) => set('maxPortionsPerSlot', e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Storage advice">
+          <Input value={form.storageAdvice} onChange={(e) => set('storageAdvice', e.target.value)} placeholder="Refrigerate; reheat before eating" />
+        </Field>
 
         <Field label="Photo">
           <div className="flex items-center gap-3">

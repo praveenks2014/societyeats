@@ -1,5 +1,6 @@
 'use client';
 
+import { ChatBadge } from '@/components/chat-badge';
 import { BRAND } from '@/config/brand';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -65,6 +66,7 @@ export function Header({ session }: { session: Session | null }) {
           </button>
 
           <div className="ml-auto flex items-center gap-1.5">
+            {session && <ChatBadge role={session.role} />}
             {session && <Bell />}
             <Link
               href="/cart"
@@ -110,6 +112,11 @@ export function Header({ session }: { session: Session | null }) {
                         className="block px-4 py-2.5 text-sm hover:bg-rice"
                       >
                         Browse food
+                      </Link>
+                    )}
+                    {session.role !== 'admin' && (
+                      <Link href="/favourites" onClick={() => setMenuOpen(false)} className="block px-4 py-2.5 text-sm hover:bg-rice">
+                        ♡ Favourite kitchens
                       </Link>
                     )}
                     <Link

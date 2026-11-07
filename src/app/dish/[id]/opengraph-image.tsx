@@ -15,8 +15,8 @@ export const alt = `${BRAND.name} dish`;
  * a branded text card rather than embedding the dish's own (external,
  * possibly-dead) photo URL.
  */
-export default async function Image({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export default async function Image({ params }: { params: Promise<{ id: string }> }) {
+  const id = Number((await params).id);
   const detail = Number.isFinite(id) ? await getListingDetail(id) : null;
 
   const title = detail?.listing.title ?? BRAND.name;

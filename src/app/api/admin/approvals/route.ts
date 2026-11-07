@@ -5,7 +5,8 @@ import { requireSession } from '@/lib/auth';
 import { recordAudit } from '@/lib/audit';
 import { getDb } from '@/lib/db';
 import { notifyUser } from '@/lib/db/notify';
-import { societies, users } from '@/lib/db/schema';
+import { societies, societyMemberships, users } from '@/lib/db/schema';
+import { decideMembership } from '@/lib/membership';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,9 @@ export const POST = api(async (req) => {
     .where(and(eq(users.id, userId), eq(users.approvalStatus, 'pending')))
     .returning();
   if (!u) throw new ApiError(404, 'No pending resident with that id');
+  // Keep the society membership in step with the user's approval status.
+  const [m] = await db.select().from(societyMemberships).where(and(eq(societyMemberships.userId, userId), eq(societyMemberships.status, 'pending')));
+  if (m) await decideMembership(m.id, admin.uid, decision);
   await recordAudit({ actorId: admin.uid, action: `resident.${decision}`, targetType: 'user', targetId: userId });
   await notifyUser(
     userId,

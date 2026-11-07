@@ -3,23 +3,26 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { BRAND } from '@/config/brand';
 import { societyForInvite } from '@/lib/join';
+import { Disclaimer } from '@/components/disclaimer';
+import { VisitPing } from '@/components/visit-ping';
 
 export const dynamic = 'force-dynamic';
 
-export async function generateMetadata({ params }: { params: { code: string } }): Promise<Metadata> {
-  const r = await societyForInvite(params.code);
+export async function generateMetadata({ params }: { params: Promise<{ code: string }> }): Promise<Metadata> {
+  const r = await societyForInvite((await params).code);
   if (!r) return {};
   const title = `Join ${BRAND.appName} in ${r.society.name}`;
   const description = `${BRAND.tagline}. ${r.liveKitchens} kitchen${r.liveKitchens === 1 ? '' : 's'} cooking in ${r.society.name}.`;
   return { title, description, openGraph: { title, description, type: 'website' }, twitter: { card: 'summary_large_image', title, description } };
 }
 
-export default async function JoinPage({ params }: { params: { code: string } }) {
-  const r = await societyForInvite(params.code);
+export default async function JoinPage({ params }: { params: Promise<{ code: string }> }) {
+  const r = await societyForInvite((await params).code);
   if (!r) notFound();
   const code = encodeURIComponent(r.society.inviteCode!);
   return (
     <div className="mx-auto max-w-md pt-10 text-center">
+      <VisitPing code={r.society.inviteCode ?? undefined} />
       <div className="text-5xl" aria-hidden>🍛</div>
       <div className="eyebrow mt-4">{BRAND.appName.toUpperCase()} · {BRAND.tagline.toUpperCase()}</div>
       <h1 className="mt-2 text-3xl font-bold" data-testid="join-society">{r.society.name}</h1>
@@ -35,7 +38,8 @@ export default async function JoinPage({ params }: { params: { code: string } })
         </Link>
         <Link href="/login" className="inline-flex min-h-[44px] items-center text-sm font-semibold text-leaf underline">Already have an account? Log in</Link>
       </div>
-      <p className="mt-8 text-xs text-ink-faint">You pay kitchens directly (UPI or at pickup). {BRAND.appName} charges only a small platform fee.</p>
+      <Disclaimer id="community" className="mt-6 text-left" />
+      <p className="mt-4 text-xs text-ink-faint">You pay kitchens directly at your door, after the food arrives. {BRAND.appName} charges only a small platform fee.</p>
     </div>
   );
 }

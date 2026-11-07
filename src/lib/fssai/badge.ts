@@ -28,7 +28,7 @@ export type FssaiBadge = { label: string; tone: 'green' | 'amber' | 'neutral' };
 export function fssaiBadge({ fssaiStatus, fssaiNumber, eligibleFoscosRef }: FssaiBadgeInput): FssaiBadge {
   if (fssaiStatus === 'verified') {
     return {
-      label: fssaiNumber ? `FSSAI Verified ✅ · Lic. ${fssaiNumber}` : 'FSSAI Verified ✅',
+      label: fssaiNumber ? `FSSAI registered ✅ · ${fssaiNumber}` : 'FSSAI registered ✅',
       tone: 'green',
     };
   }
@@ -36,10 +36,10 @@ export function fssaiBadge({ fssaiStatus, fssaiNumber, eligibleFoscosRef }: Fssa
   // own doc comment (a seller mid "enter it anytime" check keeps whatever
   // publishing/display rights their filed application already earned).
   if (eligibleFoscosRef) {
-    return { label: `FSSAI applied · ref ${eligibleFoscosRef}`, tone: 'amber' };
+    return { label: 'FSSAI applied: provisional', tone: 'amber' };
   }
   if (fssaiStatus === 'awaiting_admin_check') {
-    return { label: 'Verification in progress', tone: 'amber' };
+    return { label: 'FSSAI applied: provisional', tone: 'amber' };
   }
   if (fssaiStatus === 'pending_application') {
     return { label: 'FSSAI Pending — application under process', tone: 'amber' };

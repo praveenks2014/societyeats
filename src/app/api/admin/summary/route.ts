@@ -1,3 +1,4 @@
+import { OPEN_STATES, COMPLETED_STATES, type OrderStatus } from '@/lib/orders/state';
 import { eq } from 'drizzle-orm';
 import { api, ok } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
@@ -16,7 +17,7 @@ export const GET = api(async () => {
   const complaintRows = await db.select().from(complaints);
 
   const active = allOrders.filter((o) =>
-    ['fee_paid', 'awaiting_kitchen_payment_confirmation', 'paid', 'accepted', 'preparing', 'ready', 'out_for_delivery'].includes(o.status),
+    OPEN_STATES.includes(o.status as OrderStatus),
   );
   return ok({
     stats: {
@@ -25,10 +26,10 @@ export const GET = api(async () => {
       unassigned: allOrders.filter((o) => o.status === 'delivery_unassigned').length,
       // GMV = food value kitchens were paid directly (the platform never held it).
       gmvPaise: allOrders
-        .filter((o) => ['delivered', 'picked_up'].includes(o.status))
+        .filter((o) => COMPLETED_STATES.includes(o.status as OrderStatus))
         .reduce((s, o) => s + o.foodTotalInPaise, 0),
       platformFeePaise: allOrders
-        .filter((o) => ['delivered', 'picked_up'].includes(o.status))
+        .filter((o) => COMPLETED_STATES.includes(o.status as OrderStatus))
         .reduce((s, o) => s + o.platformFeeInPaise, 0),
       sellersAwaitingApproval: sellers.filter((s) => s.listingState === 'submitted').length,
       fssaiQueue: apps.filter((a) => ['submitted_to_backoffice', 'filed_on_foscos'].includes(a.status)).length,

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Skeleton } from '@/components/ui';
 import { FssaiWizard } from '@/components/fssai-wizard';
-import { PERSISTENT_NOTICE } from '@/lib/fssai/assistant';
+import { ANTI_SCAM_NOTICE, PERSISTENT_NOTICE, RULES_VERIFIED_NOTE } from '@/lib/fssai/assistant';
 import { useToast } from '@/components/providers';
 
 type Summary = {
@@ -77,6 +77,7 @@ export default function CompliancePage() {
       </p>
 
       <p className="mt-3 rounded-xl bg-turmeric-tint px-3 py-2 text-xs text-ink-soft" role="note" data-testid="fssai-notice">{PERSISTENT_NOTICE}</p>
+      <p className="mt-2 rounded-xl bg-chili-tint px-3 py-2 text-xs text-chili-dark" role="note" data-testid="anti-scam">{ANTI_SCAM_NOTICE} {RULES_VERIFIED_NOTE}</p>
 
       {profile.fssaiStatus === 'verified' && (
         <Card className="mt-5 border-leaf bg-leaf-tint/60 p-5">

@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { call, checkoutSignature, webhookReq } from '../helpers/http';
-import { makeLiveKitchen, makeSociety, makeUser } from '../helpers/fixtures';
+import { getTestPlan, makeLiveKitchen, makeSociety, makeUser } from '../helpers/fixtures';
 import { useTestDb } from '../helpers/db';
 import * as s from '@/lib/db/schema';
 
@@ -13,14 +13,14 @@ let societyId: number;
 beforeAll(async () => {
   process.env.RAZORPAY_KEY_SECRET = 'rzp_test_secret_value';
   process.env.RAZORPAY_WEBHOOK_SECRET = 'whsec_test_secret_value';
-  process.env.MOCK_MODE = 'true';
+  process.env.MOCK_MODE = 'true'; process.env.PAYMENTS_ADAPTER = 'mock';
   db = await useTestDb();
   societyId = (await makeSociety(db)).id;
   const { seedSubscriptionPlans } = await import('@/lib/subscriptions/plans');
   await seedSubscriptionPlans(db);
 });
 afterEach(() => {
-  process.env.MOCK_MODE = 'true';
+  process.env.MOCK_MODE = 'true'; process.env.PAYMENTS_ADAPTER = 'mock';
   vi.doUnmock('@/lib/payments/razorpay');
   vi.resetModules();
 });
@@ -51,7 +51,7 @@ async function pendingOrder() {
   const { createHomeOrder } = await import('@/lib/orders/create');
   const { seller, dish } = await makeLiveKitchen(db, { societyId, qty: 20 });
   const buyer = await makeUser(db, 'buyer', { societyId });
-  const r = await createHomeOrder({ buyerId: buyer.id, buyerApproved: true, sellerId: seller.id, items: [{ id: dish.id, qty: 2 }], fulfillmentType: 'self_pickup', foodPaymentMode: 'upi_now' });
+  const r = await createHomeOrder({ buyerId: buyer.id, sellerId: seller.id, items: [{ id: dish.id, qty: 2 }], fulfillmentType: 'self_pickup' });
   const [pay] = await db.select().from(s.payments).where(eq(s.payments.orderId, r.orderId));
   return { buyer, orderId: r.orderId, rzpOrderId: pay.razorpayOrderId!, amount: pay.amountInPaise };
 }
@@ -67,49 +67,49 @@ describe('live mode: only a captured payment marks an order fee as paid', () => 
     const p = await pendingOrder();
     const rzp = await stubRazorpay({ first: 'captured' });
     rzp.bind(p.rzpOrderId, p.amount);
-    process.env.MOCK_MODE = 'false';
+    process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     await expect(verify(p)).resolves.toMatchObject({ kind: 'order', won: true });
     expect(rzp.capture).not.toHaveBeenCalled();
-    expect(await orderStatus(p.orderId)).toBe('fee_paid');
+    expect(await orderStatus(p.orderId)).toBe('booked');
   });
 
   test('authorized → captured (stored amount, INR) → then paid', async () => {
     const p = await pendingOrder();
     const rzp = await stubRazorpay({ first: 'authorized' });
     rzp.bind(p.rzpOrderId, p.amount);
-    process.env.MOCK_MODE = 'false';
+    process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     await expect(verify(p)).resolves.toMatchObject({ kind: 'order', won: true });
     expect(rzp.capture).toHaveBeenCalledTimes(1);
     expect(rzp.capture).toHaveBeenCalledWith('pay_cap', p.amount);
-    expect(await orderStatus(p.orderId)).toBe('fee_paid');
+    expect(await orderStatus(p.orderId)).toBe('booked');
   });
 
   test('authorized + capture failure → clear error, order stays unpaid', async () => {
     const p = await pendingOrder();
     const rzp = await stubRazorpay({ first: 'authorized', captureFails: true });
     rzp.bind(p.rzpOrderId, p.amount);
-    process.env.MOCK_MODE = 'false';
+    process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     await expect(verify(p)).rejects.toMatchObject({ status: 502, message: expect.stringMatching(/could not capture/i) });
-    expect(await orderStatus(p.orderId)).toBe('placed');
+    expect(await orderStatus(p.orderId)).toBe('fee_pending');
   });
 
   test('capture call that does not end up captured → not paid', async () => {
     const p = await pendingOrder();
     const rzp = await stubRazorpay({ first: 'authorized', afterCapture: 'failed' });
     rzp.bind(p.rzpOrderId, p.amount);
-    process.env.MOCK_MODE = 'false';
+    process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     await expect(verify(p)).rejects.toMatchObject({ status: 502 });
-    expect(await orderStatus(p.orderId)).toBe('placed');
+    expect(await orderStatus(p.orderId)).toBe('fee_pending');
   });
 
   test('a wrong amount is never captured', async () => {
     const p = await pendingOrder();
     const rzp = await stubRazorpay({ first: 'authorized' });
     rzp.bind(p.rzpOrderId, 1);
-    process.env.MOCK_MODE = 'false';
+    process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     await expect(verify(p)).rejects.toMatchObject({ status: 400 });
     expect(rzp.capture).not.toHaveBeenCalled();
-    expect(await orderStatus(p.orderId)).toBe('placed');
+    expect(await orderStatus(p.orderId)).toBe('fee_pending');
   });
 });
 
@@ -117,7 +117,7 @@ describe('live mode: kitchen subscription follows the same rule', () => {
   async function pendingSub() {
     const seller = await makeUser(db, 'seller', { societyId });
     const { startSubscriptionPayment } = await import('@/lib/subscriptions/service');
-    const co = await startSubscriptionPayment(seller.id, (await db.select().from(s.subscriptionPlans))[0].id);
+    const co = await startSubscriptionPayment(seller.id, (await getTestPlan(db)).id);
     const [sub] = await db.select().from(s.kitchenSubscriptions).where(eq(s.kitchenSubscriptions.id, co.subscriptionId));
     return { seller, sub, amount: sub.pricePaiseSnapshot + sub.gstPaise };
   }
@@ -131,16 +131,16 @@ describe('live mode: kitchen subscription follows the same rule', () => {
     const a = await pendingSub();
     let rzp = await stubRazorpay({ first: 'authorized' });
     rzp.bind(a.sub.razorpayOrderId!, a.amount);
-    process.env.MOCK_MODE = 'false';
+    process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     await expect(run(a)).resolves.toMatchObject({ kind: 'subscription', won: true });
     expect(rzp.capture).toHaveBeenCalledWith('pay_sub', a.amount);
     expect(await subStatus(a.sub.id)).toBe('active');
 
-    process.env.MOCK_MODE = 'true';
+    process.env.MOCK_MODE = 'true'; process.env.PAYMENTS_ADAPTER = 'mock';
     const b = await pendingSub();
     rzp = await stubRazorpay({ first: 'authorized', captureFails: true });
     rzp.bind(b.sub.razorpayOrderId!, b.amount);
-    process.env.MOCK_MODE = 'false';
+    process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     await expect(run(b)).rejects.toMatchObject({ status: 502 });
     expect(await subStatus(b.sub.id)).toBe('pending_payment');
   });
@@ -157,34 +157,34 @@ describe('live mode: webhook applies the same rule', () => {
     const p = await pendingOrder();
     const rzp = await stubRazorpay({ first: 'authorized' });
     rzp.bind(p.rzpOrderId, p.amount);
-    process.env.MOCK_MODE = 'false';
+    process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     const res = await post(evt('payment.authorized', p.rzpOrderId, p.amount), 'evt_auth_ok');
     expect(res.status).toBe(200);
     expect(rzp.capture).toHaveBeenCalledWith('pay_wh', p.amount);
-    expect(await orderStatus(p.orderId)).toBe('fee_paid');
+    expect(await orderStatus(p.orderId)).toBe('booked');
   });
 
   test('capture failure → 500 (Razorpay retries), order unpaid, and the retry succeeds', async () => {
     const p = await pendingOrder();
     let rzp = await stubRazorpay({ first: 'authorized', captureFails: true });
     rzp.bind(p.rzpOrderId, p.amount);
-    process.env.MOCK_MODE = 'false';
+    process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     expect((await post(evt('payment.authorized', p.rzpOrderId, p.amount), 'evt_auth_bad')).status).toBe(500);
-    expect(await orderStatus(p.orderId)).toBe('placed');
+    expect(await orderStatus(p.orderId)).toBe('fee_pending');
 
     rzp = await stubRazorpay({ first: 'authorized' });
     rzp.bind(p.rzpOrderId, p.amount);
     expect((await post(evt('payment.authorized', p.rzpOrderId, p.amount), 'evt_auth_bad')).status).toBe(200);
-    expect(await orderStatus(p.orderId)).toBe('fee_paid');
+    expect(await orderStatus(p.orderId)).toBe('booked');
   });
 
   test('a payment.captured event is re-checked against Razorpay, not trusted', async () => {
     const p = await pendingOrder();
     const rzp = await stubRazorpay({ first: 'failed' });
     rzp.bind(p.rzpOrderId, p.amount);
-    process.env.MOCK_MODE = 'false';
+    process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     expect((await post(evt('payment.captured', p.rzpOrderId, p.amount), 'evt_cap_lie')).status).toBe(500);
-    expect(await orderStatus(p.orderId)).toBe('placed');
+    expect(await orderStatus(p.orderId)).toBe('fee_pending');
   });
 });
 
@@ -193,10 +193,10 @@ describe('Razorpay order creation', () => {
     vi.resetModules();
     const create = vi.fn(async () => ({ id: 'order_live_1' }));
     vi.doMock('razorpay', () => ({ default: class { orders = { create }; } }));
-    process.env.MOCK_MODE = 'false';
+    process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
     const { createRazorpayOrder } = await import('@/lib/payments/razorpay');
-    await createRazorpayOrder({ amountInPaise: 2000, receipt: 'r1' });
+    await createRazorpayOrder({ amountInPaise: 2000, receipt: 'pp-r1', kind: 'order_fee', ref: 1 });
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ amount: 2000, currency: 'INR', payment_capture: 1 }));
     vi.doUnmock('razorpay');
   });

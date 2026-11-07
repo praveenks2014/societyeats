@@ -13,8 +13,10 @@ import { getPlatformSettings } from '@/lib/db/platform';
 import { DEFAULTS } from '@/lib/config';
 import { haversineKm, type GeoPoint } from '@/lib/geo';
 import { fssaiFiledEligible, isFssaiEligibleToPublish } from '@/lib/fssai/gate';
+import { fssaiTier, type FssaiTier } from '@/lib/fssai/tier';
 import { neighbourOrderCount, sellerBadgeTier, sellerCompletedOrderCount } from '@/lib/reputation';
-import { kitchenGate } from '@/lib/kitchen/gate';
+import { isClosedToday, kitchenGate } from '@/lib/kitchen/gate';
+import { topKitchenSet } from '@/lib/quality';
 import { buyerHandle } from '@/lib/handles';
 import { currentSlot, isSlotSoldOut, slotOrderCount } from '@/lib/slots';
 
@@ -89,6 +91,12 @@ export type ListingCard = {
   kitchenPhotosVerified: boolean;
   /** DECISIONS.md #73+: distinct buyers with a completed order from this seller — "Ordered by N neighbours". */
   orderedByCount: number;
+  foodMark: 'veg' | 'egg' | 'non_veg';
+  /** `verified` shows "FSSAI registered"; `provisional` shows "FSSAI applied: provisional". */
+  fssaiTier: FssaiTier;
+  topKitchen: boolean;
+  sellerSocietyId: number | null;
+  createdAt: number;
 };
 
 export async function browseListings(opts: {
@@ -99,6 +107,8 @@ export async function browseListings(opts: {
   q?: string;
   /** Restrict to kitchens inside this society ("My society"); omit for "Nearby" (radius). */
   societyId?: number;
+  /** The viewer's own society: its kitchens are listed first, then the others by distance → rating → recency. */
+  homeSocietyId?: number;
 }): Promise<{ listings: ListingCard[]; cuisines: string[]; radiusKm: number }> {
   const db = await getDb();
   const settings = await getPlatformSettings();
@@ -127,6 +137,9 @@ export async function browseListings(opts: {
     eq(listings.isActive, true),
     gt(listings.availableQty, 0),
     eq(sellerProfiles.isApproved, true),
+    // Pilot v2: a kitchen is buyer-visible only with a verified UPI ID and while it is not paused (strikes).
+    eq(sellerProfiles.upiVerifyStatus, 'verified'),
+    isNull(sellerProfiles.listingsPausedReason),
     eq(listings.moderationStatus, 'approved'),
     isNull(users.blockedAt),
     sql`(${societies.id} is null or ${societies.isActive})`,
@@ -211,7 +224,7 @@ export async function browseListings(opts: {
       continue;
 
     const latestApplication = applicationBySeller.get(listing.sellerId) ?? null;
-    if (!isFssaiEligibleToPublish(profile, latestApplication)) continue;
+    if (!isFssaiEligibleToPublish(profile, latestApplication, new Date(), { deemedDays: settings.fssaiDeemedGrantDaysRegistration, provisionalMaxDays: settings.provisionalMaxDays })) continue;
 
     const listingSlots = listing.slotsJson?.slots;
     const slotSoldOut =
@@ -242,15 +255,28 @@ export async function browseListings(opts: {
       slotSoldOut,
       kitchenPhotosVerified: (profile.kitchenPhotosJson?.length ?? 0) >= DEFAULTS.minKitchenPhotosRequired,
       orderedByCount: await sellerNeighbourCount(listing.sellerId),
+      foodMark: listing.foodMark as 'veg' | 'egg' | 'non_veg',
+      fssaiTier: fssaiTier(profile, latestApplication, { deemedDays: settings.fssaiDeemedGrantDaysRegistration, provisionalMaxDays: settings.provisionalMaxDays }),
+      topKitchen: false,
+      sellerSocietyId: society?.id ?? null,
+      createdAt: listing.createdAt.getTime(),
     });
   }
 
+  // Transparent ranking (explained on /legal/how-ranking-works): own society first, then distance → rating → recency.
+  // Nothing is paid for and no sponsored slot is mixed in (featured placement, when enabled, is shown separately and labelled).
   cards.sort((a, b) => {
-    if (a.distanceKm != null && b.distanceKm != null && a.distanceKm !== b.distanceKm) {
-      return a.distanceKm - b.distanceKm;
-    }
-    return b.rating - a.rating;
+    const homeA = opts.homeSocietyId != null && a.sellerSocietyId === opts.homeSocietyId ? 0 : 1;
+    const homeB = opts.homeSocietyId != null && b.sellerSocietyId === opts.homeSocietyId ? 0 : 1;
+    if (homeA !== homeB) return homeA - homeB;
+    if (a.distanceKm != null && b.distanceKm != null && a.distanceKm !== b.distanceKm) return a.distanceKm - b.distanceKm;
+    if (b.rating !== a.rating) return b.rating - a.rating;
+    return b.createdAt - a.createdAt;
   });
+
+  // The public Top Kitchen badge (numbers stay private to the kitchen).
+  const tops = await topKitchenSet(cards.map((c) => c.sellerId));
+  for (const c of cards) c.topKitchen = tops.has(c.sellerId);
 
   return { listings: cards, cuisines: [...cuisines].sort(), radiusKm: settings.radiusKm };
 }
@@ -313,9 +339,11 @@ export async function getListingDetail(id: number, loc?: GeoPoint | null) {
   const latestApplication = (await latestApplicationsBySeller([row.listing.sellerId])).get(row.listing.sellerId) ?? null;
 
   const gate = await kitchenGate(row.listing.sellerId);
+  const tierSettings = await getPlatformSettings();
 
   return {
     ...row,
+    fssaiTier: fssaiTier(row.profile, latestApplication, { deemedDays: tierSettings.fssaiDeemedGrantDaysRegistration, provisionalMaxDays: tierSettings.provisionalMaxDays }),
     /** False when the kitchen/dish is not currently orderable (shown as "unavailable"). */
     listable: gate.ok && row.listing.moderationStatus === 'approved' && row.listing.isActive,
     distanceKm,
@@ -385,7 +413,9 @@ export async function getKitchenProfile(sellerId: number) {
 
   return {
     ...row,
+    fssaiTier: fssaiTier(row.profile, latestApplication, { deemedDays: settings.fssaiDeemedGrantDaysRegistration, provisionalMaxDays: settings.provisionalMaxDays }),
     kitchenLive: gate.ok,
+    closedToday: isClosedToday(row.profile.closedUntil),
     activeListings: gate.ok ? activeListings : [],
     activeListingsHidden: !gate.ok,
     sellerReviews,
@@ -411,4 +441,30 @@ export async function getFeaturedKitchen() {
   const profile = await getKitchenProfile(sellerId);
   if (!profile || profile.activeListings.length === 0) return null;
   return profile;
+}
+
+export type ComingSoonKitchen = { sellerId: number; kitchenName: string; societyName: string | null };
+
+/**
+ * “Coming soon”: kitchens whose FSSAI application is filed and still inside the deemed window. Shown ONLY to
+ * residents of the kitchen's own society, only when `showComingSoon` is on, with no menu and no ordering.
+ */
+export async function comingSoonKitchens(viewerSocietyId: number | null | undefined): Promise<ComingSoonKitchen[]> {
+  const settings = await getPlatformSettings();
+  if (!settings.showComingSoon || !viewerSocietyId) return [];
+  const db = await getDb();
+  const rows = await db
+    .select({ profile: sellerProfiles, society: societies })
+    .from(sellerProfiles)
+    .innerJoin(users, eq(sellerProfiles.userId, users.id))
+    .leftJoin(societies, eq(users.societyId, societies.id))
+    .where(and(eq(users.societyId, viewerSocietyId), eq(sellerProfiles.listingState, 'approved')));
+  if (!rows.length) return [];
+  const apps = await latestApplicationsBySeller(rows.map((r) => r.profile.userId));
+  const out: ComingSoonKitchen[] = [];
+  for (const r of rows) {
+    const tier = fssaiTier(r.profile, apps.get(r.profile.userId) ?? null, { deemedDays: settings.fssaiDeemedGrantDaysRegistration, provisionalMaxDays: settings.provisionalMaxDays });
+    if (tier === 'applied') out.push({ sellerId: r.profile.userId, kitchenName: r.profile.kitchenName, societyName: r.society?.name ?? null });
+  }
+  return out;
 }

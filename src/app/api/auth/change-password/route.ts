@@ -1,6 +1,7 @@
 import { and, eq, ne } from 'drizzle-orm';
 import { api, ApiError, ok, readJson } from '@/lib/api';
 import { requireSession, verifyPassword } from '@/lib/auth';
+import { sendSecurityAlert } from '@/lib/auth/device';
 import { hashPassword, validatePassword } from '@/lib/auth/passwords';
 import { getDb } from '@/lib/db';
 import { sessions, users } from '@/lib/db/schema';
@@ -9,7 +10,7 @@ import { rateLimit } from '@/lib/rate-limit';
 export const dynamic = 'force-dynamic';
 
 export const POST = api(async (req) => {
-  const session = await requireSession(undefined, { allowMustChange: true });
+  const session = await requireSession(undefined, { allowMustChange: true, allowMfaPending: true });
   await rateLimit(`chpw:${session.uid}`, { limit: 8, windowMs: 15 * 60 * 1000 });
   const { current, next } = await readJson<{ current: string; next: string }>(req);
   const db = await getDb();
@@ -21,5 +22,6 @@ export const POST = api(async (req) => {
   await db.update(users).set({ passwordHash: await hashPassword(next), mustChangePassword: false }).where(eq(users.id, u.id));
   // Sign out every other device.
   await db.delete(sessions).where(and(eq(sessions.userId, u.id), ne(sessions.id, session.sid)));
+  await sendSecurityAlert(u.id, 'Your password was changed');
   return ok({ ok: true });
 });

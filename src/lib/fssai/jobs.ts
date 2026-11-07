@@ -7,6 +7,7 @@ import { getStorage } from '@/lib/storage';
 import { keyFromUrl } from '@/lib/storage/files';
 import { DAY_MS, istDateString } from '@/lib/time';
 import { log } from '@/lib/log';
+import { fssaiTierInfo } from '@/lib/fssai/tier';
 
 async function once(userId: number, key: string, title: string, body: string, href: string): Promise<boolean> {
   const db = await getDb();
@@ -27,7 +28,7 @@ async function once(userId: number, key: string, title: string, body: string, hr
  */
 export async function runFssaiJobs(now: Date = new Date()): Promise<Record<string, number>> {
   const db = await getDb();
-  const out = { day3: 0, day6: 0, expiry30: 0, expired: 0, purged: 0 };
+  const out = { day3: 0, day6: 0, expiry30: 0, expired: 0, purged: 0, annualFee: 0, provisionalEnded: 0 };
 
   const filed = await db.select().from(fssaiApplications).where(and(eq(fssaiApplications.status, 'filed_on_foscos'), isNotNull(fssaiApplications.filedAt)));
   for (const a of filed) {
@@ -45,6 +46,36 @@ export async function runFssaiJobs(now: Date = new Date()): Promise<Record<strin
       if (await once(p.userId, `exp-${expiry}`, 'Your FSSAI has expired — listings paused', 'Your dishes are hidden until you renew and enter the new expiry date on the FSSAI page.', '/seller/compliance')) out.expired++;
     } else if (daysLeft <= 30) {
       if (await once(p.userId, `exp30-${expiry}`, `Your FSSAI expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`, 'Renew on foscos.fssai.gov.in before it lapses — an expired licence automatically unpublishes your listings.', '/seller/compliance')) out.expiry30++;
+    }
+  }
+
+  // Registrations are perpetual (no expiry date), but ₹100 a year is still payable on FoSCoS: remind before each anniversary.
+  const settings = await getPlatformSettings();
+  const registered = await db.select().from(sellerProfiles).where(eq(sellerProfiles.fssaiStatus, 'verified'));
+  for (const p of registered) {
+    const since = p.fssaiGrantedAt ? new Date(`${p.fssaiGrantedAt}T00:00:00Z`) : p.fssaiVerifiedAt;
+    if (!since) continue;
+    const next = new Date(since);
+    while (next.getTime() <= now.getTime()) next.setUTCFullYear(next.getUTCFullYear() + 1);
+    const daysTo = Math.ceil((next.getTime() - now.getTime()) / DAY_MS);
+    if (daysTo <= settings.fssaiAnnualFeeReminderDays) {
+      if (await once(p.userId, `fee-${next.getUTCFullYear()}`, 'FSSAI annual fee due soon', `Your FSSAI registration does not expire, but the annual fee (₹${settings.fssaiBasicFeePerYear}) is due around ${next.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}. Pay it only on the official FoSCoS portal — never to an agent.`, '/seller/compliance')) out.annualFee++;
+    }
+  }
+
+  // A provisional kitchen whose provisional period ran out without verification is hidden — tell the seller (and admins) once.
+  const provisional = await db.select().from(sellerProfiles).where(eq(sellerProfiles.fssaiStatus, 'awaiting_admin_check'));
+  const apps = await db.select().from(fssaiApplications).where(inArray(fssaiApplications.sellerId, [...provisional.map((p) => p.userId), ...filed.map((a) => a.sellerId)].concat([-1])));
+  const candidates = await db.select().from(sellerProfiles).where(inArray(sellerProfiles.userId, [...new Set([...provisional.map((p) => p.userId), ...filed.map((a) => a.sellerId)])].concat([-1])));
+  for (const p of candidates) {
+    const app = apps.filter((a) => a.sellerId === p.userId).sort((a, b) => b.id - a.id)[0] ?? null;
+    const info = fssaiTierInfo(p, app, { deemedDays: settings.fssaiDeemedGrantDaysRegistration, provisionalMaxDays: settings.provisionalMaxDays, now });
+    if (info.tier === 'blocked' && info.provisionalEndsAt) {
+      if (await once(p.userId, `prov-end-${p.userId}`, 'Provisional selling has ended', 'Your FSSAI is still not verified, so your kitchen is hidden. Upload your FSSAI certificate on the FSSAI page to go live again.', '/seller/compliance')) {
+        out.provisionalEnded++;
+        const { notifyAdmins } = await import('@/lib/orders/strikes');
+        await notifyAdmins('Provisional period ended', `Kitchen #${p.userId} is hidden: FSSAI not verified.`, `/admin/kitchens/${p.userId}`);
+      }
     }
   }
 

@@ -3,6 +3,7 @@ import { getDb, type Db } from '@/lib/db';
 import { orders, referralCredits, users } from '@/lib/db/schema';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { notify } from '@/lib/db/notify';
+import { COMPLETED_STATES } from '@/lib/orders/state';
 
 /**
  * Pilot Hardening v2 — Phase 6 (Society-first launch mechanics,
@@ -65,6 +66,9 @@ export async function reserveCredit(tx: DbLike, buyerId: number, orderId: number
         buyerId,
         referredUserId: row.referredUserId,
         referredOrderId: row.referredOrderId,
+        source: row.source,
+        sourceOrderId: row.sourceOrderId,
+        note: row.note,
         amountInPaise: remaining,
         status: 'reserved',
         appliedToOrderId: orderId,
@@ -100,7 +104,7 @@ export async function releaseCredit(tx: DbLike, orderId: number): Promise<number
 
 /**
  * Grants the referrer's credit the moment a referred neighbour's order first
- * reaches a terminal completed state (delivered/picked_up) — called from the
+ * reaches a completed state — called from the
  * OTP verify route right after that transition. Deliberately gated on
  * *completion*, not placement, so a placed-then-cancelled order can't be
  * used to farm credit. Idempotent (checked by referredUserId, not orderId,
@@ -115,7 +119,7 @@ export async function maybeGrantReferralCredit(order: { id: number; buyerId: num
   const completed = await db
     .select({ id: orders.id })
     .from(orders)
-    .where(and(eq(orders.buyerId, order.buyerId), inArray(orders.status, ['delivered', 'picked_up'])));
+    .where(and(eq(orders.buyerId, order.buyerId), inArray(orders.status, COMPLETED_STATES)));
   const isFirstCompleted = completed.length === 1 && completed[0].id === order.id;
   if (!isFirstCompleted) return;
 
@@ -130,7 +134,7 @@ export async function maybeGrantReferralCredit(order: { id: number; buyerId: num
   const grantedSoFar = await db
     .selectDistinct({ referredUserId: referralCredits.referredUserId })
     .from(referralCredits)
-    .where(eq(referralCredits.buyerId, buyer.referredByUserId));
+    .where(and(eq(referralCredits.buyerId, buyer.referredByUserId), eq(referralCredits.source, 'referral')));
   if (grantedSoFar.length >= settings.referralCreditCapPerUser) return;
 
   await db.insert(referralCredits).values({

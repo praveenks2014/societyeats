@@ -4,11 +4,13 @@ import { getListingDetail } from '@/lib/browse';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { DEFAULTS } from '@/lib/config';
 import { DishDetail } from './dish-detail';
+import { DishFacts } from '@/components/dish-facts';
+import { Disclaimer } from '@/components/disclaimer';
 
 export const dynamic = 'force-dynamic';
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const id = Number(params.id);
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const id = Number((await params).id);
   if (!Number.isFinite(id)) return {};
   const detail = await getListingDetail(id);
   if (!detail) return {};
@@ -24,8 +26,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default async function DishPage({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export default async function DishPage({ params }: { params: Promise<{ id: string }> }) {
+  const id = Number((await params).id);
   if (!Number.isFinite(id)) notFound();
   const detail = await getListingDetail(id);
   if (!detail) notFound();
@@ -39,6 +41,7 @@ export default async function DishPage({ params }: { params: { id: string } }) {
         : null;
 
   return (
+    <>
     <DishDetail
       listing={{
         id: detail.listing.id,
@@ -82,6 +85,7 @@ export default async function DishPage({ params }: { params: { id: string } }) {
         buyerName: r.buyer.name,
         createdAt: r.review.createdAt.toISOString(),
         sellerReplyText: r.review.sellerReplyText,
+        photos: r.review.photosJson ?? [],
       }))}
       otherDishes={detail.otherDishes.map((d) => ({
         id: d.id,
@@ -93,5 +97,8 @@ export default async function DishPage({ params }: { params: { id: string } }) {
       }))}
       slotSoldOut={detail.slotSoldOut}
     />
+    <DishFacts listing={detail.listing} provisional={detail.fssaiTier === 'provisional'} />
+    <Disclaimer id="pricing" className="mt-3" />
+    </>
   );
 }

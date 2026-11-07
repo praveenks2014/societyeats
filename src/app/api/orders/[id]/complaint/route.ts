@@ -1,3 +1,4 @@
+import { COMPLETED_STATES, type OrderStatus } from '@/lib/orders/state';
 import { eq } from 'drizzle-orm';
 import { api, ApiError, ok, readJson } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
@@ -31,7 +32,7 @@ export const POST = api<{ params: { id: string } }>(async (req, { params }) => {
   const db = await getDb();
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
   if (!order || order.buyerId !== session.uid) throw new ApiError(404, 'Order not found');
-  if (!['delivered', 'picked_up'].includes(order.status)) {
+  if (!COMPLETED_STATES.includes(order.status as OrderStatus)) {
     throw new ApiError(409, 'You can only report an issue after the order is delivered/collected');
   }
   const hoursSince = (Date.now() - (order.completedAt ?? order.updatedAt).getTime()) / (60 * 60 * 1000);
@@ -75,7 +76,7 @@ export const GET = api<{ params: { id: string } }>(async (_req, { params }) => {
 
   const eligible =
     !complaint &&
-    ['delivered', 'picked_up'].includes(order.status) &&
+    COMPLETED_STATES.includes(order.status as OrderStatus) &&
     (Date.now() - (order.completedAt ?? order.updatedAt).getTime()) / (60 * 60 * 1000) <= DEFAULTS.complaintWindowHours;
 
   return ok({ complaint: complaint ?? null, eligible, windowHours: DEFAULTS.complaintWindowHours });

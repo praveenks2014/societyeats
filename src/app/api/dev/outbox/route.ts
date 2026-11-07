@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 /** Dev/e2e only: reads the mock email outbox without logging in. 404 in production. */
 export const GET = api(async (req) => {
-  if (process.env.NODE_ENV === 'production') throw new ApiError(404, 'Not found');
+  if (process.env.NODE_ENV === 'production' || process.env.E2E !== 'true') throw new ApiError(404, 'Not found');
   const to = req.nextUrl.searchParams.get('to')?.toLowerCase();
   const db = await getDb();
   const rows = await db

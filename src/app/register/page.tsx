@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { Button, Field, Input, Select, Textarea } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { DisclaimerClient } from '@/components/disclaimer-client';
 
 function RegisterForm() {
   const router = useRouter();
@@ -14,8 +15,9 @@ function RegisterForm() {
   const [societies, setSocieties] = useState<{ id: number; name: string }[]>([]);
   // Pilot Hardening v2 — Phase 6 (DECISIONS.md #87+): pick from the pilot's
   // live society/societies, or switch to an invite code for a not-yet-public one.
-  const [societyMode, setSocietyMode] = useState<'select' | 'code'>(params.get('code') ? 'code' : 'select');
+  const [societyMode, setSocietyMode] = useState<'select' | 'code'>('code');
   const referredByCode = params.get('ref') ?? '';
+  const hasInviteCode = !!params.get('code');
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -26,15 +28,24 @@ function RegisterForm() {
     kitchenName: '',
     bio: '',
     vegOnly: false,
+    tower: '',
+    flat: '',
   });
+  // Explicit, never pre-ticked: 18+ and the Terms / Privacy Notice.
+  const [age18, setAge18] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     fetch('/api/societies?live=1')
       .then((r) => r.json())
-      .then((d) => setSocieties(d.societies))
+      .then((d) => {
+        setSocieties(d.societies);
+        // Open pilot (list available): allow the dropdown when there is no invite code in the link.
+        if (d.societies.length > 0 && !hasInviteCode) setSocietyMode('select');
+      })
       .catch(() => {});
-  }, []);
+  }, [hasInviteCode]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,6 +59,8 @@ function RegisterForm() {
         societyId: form.societyId ? Number(form.societyId) : undefined,
         inviteCode: societyMode === 'code' ? form.inviteCode.trim() : undefined,
         referredByCode: referredByCode || undefined,
+        age18,
+        acceptTerms,
       }),
     });
     const data = await res.json();
@@ -68,6 +81,7 @@ function RegisterForm() {
   return (
     <div className="mx-auto mt-10 max-w-sm">
       <h1 className="text-2xl font-bold">Join PadosiPlate</h1>
+      <DisclaimerClient id="marketplace" className="mt-3" />
       <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-rice-deep p-1.5">
         {(['buyer', 'seller'] as const).map((r) => (
           <button
@@ -122,8 +136,8 @@ function RegisterForm() {
           label="Your society"
           hint={
             societyMode === 'select'
-              ? 'PadosiPlate is live in one society right now — more coming soon.'
-              : 'Got a code from your society WhatsApp group? Enter it here.'
+              ? 'Choose your society.'
+              : 'PadosiPlate is invite-only during the pilot. Use the invite code from your society’s WhatsApp group.'
           }
         >
           {societyMode === 'select' ? (
@@ -143,14 +157,20 @@ function RegisterForm() {
               required
             />
           )}
-          <button
-            type="button"
-            onClick={() => setSocietyMode((m) => (m === 'select' ? 'code' : 'select'))}
-            className="mt-1 inline-flex min-h-[44px] items-center text-xs font-semibold text-leaf underline"
-          >
-            {societyMode === 'select' ? 'Have an invite code instead?' : '← Choose from the list instead'}
-          </button>
+          {societies.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSocietyMode((m) => (m === 'select' ? 'code' : 'select'))}
+              className="mt-1 inline-flex min-h-[44px] items-center text-xs font-semibold text-leaf underline"
+            >
+              {societyMode === 'select' ? 'Have an invite code instead?' : '← Choose from the list instead'}
+            </button>
+          )}
         </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Tower / block"><Input value={form.tower} onChange={(e) => set('tower', e.target.value)} data-testid="reg-tower" /></Field>
+          <Field label="Flat no."><Input value={form.flat} onChange={(e) => set('flat', e.target.value)} data-testid="reg-flat" /></Field>
+        </div>
 
         {role === 'seller' && (
           <>
@@ -180,7 +200,17 @@ function RegisterForm() {
           </>
         )}
 
-        <Button type="submit" size="lg" className="w-full" loading={busy}>
+        <div className="space-y-1">
+          <label className="flex min-h-[44px] items-start gap-3 text-sm">
+            <input type="checkbox" className="mt-0.5 h-5 w-5 accent-leaf" checked={age18} onChange={(e) => setAge18(e.target.checked)} data-testid="age18" />
+            <span>I am 18 years or older.</span>
+          </label>
+          <label className="flex min-h-[44px] items-start gap-3 text-sm">
+            <input type="checkbox" className="mt-0.5 h-5 w-5 accent-leaf" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} data-testid="accept-terms" />
+            <span>I accept the <Link href="/legal/terms" className="inline-flex min-h-[44px] items-center font-semibold text-leaf underline" target="_blank">Terms</Link> and the <Link href="/legal/privacy" className="inline-flex min-h-[44px] items-center font-semibold text-leaf underline" target="_blank">Privacy Notice</Link>.</span>
+          </label>
+        </div>
+        <Button type="submit" size="lg" className="w-full" loading={busy} disabled={!age18 || !acceptTerms}>
           Create account
         </Button>
       </form>

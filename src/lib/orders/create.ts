@@ -1,56 +1,69 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { ApiError, otp4 } from '@/lib/api';
-import { isMockMode } from '@/lib/config';
+import { assertBuyerCanOrder } from '@/lib/access';
 import { getDb } from '@/lib/db';
 import { getPlatformSettings } from '@/lib/db/platform';
-import { listings, orderEvents, orderItems, orders, referralCredits, societies, users, type DeliveryAddress } from '@/lib/db/schema';
+import { listings, orderEvents, orderItems, orders, referralCredits, sellerProfiles, societies, userBlocks, users, type DeliveryAddress } from '@/lib/db/schema';
+import { effectiveCaps, checkCaps, fssaiTierInfo } from '@/lib/fssai/tier';
 import { haversineKm, type GeoPoint } from '@/lib/geo';
 import { kitchenGate } from '@/lib/kitchen/gate';
+import { assertLiveModeReady } from '@/lib/live-guard';
 import { feeConfigFromSettings, quoteOrder, type OrderQuote } from '@/lib/money';
 import { createOrderPayment, markOrderPaid, type CheckoutPayload } from '@/lib/payments';
 import { reserveCredit } from '@/lib/referrals';
 import { currentSlot, isSlotSoldOut } from '@/lib/slots';
+import { fssaiApplications } from '@/lib/db/schema';
+import { desc } from 'drizzle-orm';
+import { sellerCapUsage, sellerFySalesPaise } from './caps';
 import { reserveStock } from './stock';
+import { plusDiscountFor } from '@/lib/plus';
+import { platformFeeBase } from '@/lib/money/fees';
+import { assertSlotCapacity, checkPreOrderTime } from './preorder';
 
 export type HomeOrderInput = {
   buyerId: number;
-  buyerApproved: boolean;
   sellerId: number;
   items: { id: number; qty: number }[];
   fulfillmentType: 'self_pickup' | 'seller_delivery' | 'platform_delivery';
-  foodPaymentMode: 'upi_now' | 'pay_at_pickup';
   address?: DeliveryAddress;
   useCredit?: boolean;
+  /** Pre-order for a later slot (IST). Needs the preOrdersEnabled flag. */
+  scheduledFor?: Date | null;
+  buyerNote?: string;
+  /** Meal plan day: its fee is paid together with the rest of the week (see lib/meal-plans.ts). */
+  mealPlanSubId?: number | null;
 };
 
 /**
- * Creates a home-kitchen order. The buyer's bill is two parts:
- *   Food (paid directly to the kitchen) — NOT collected by the platform
- *   Platform fee (+GST) — collected via Razorpay
- * Stock and referral credit are reserved in the same transaction as the order.
+ * Creates a home-kitchen order. The buyer's booking payment is the platform fee (+GST) ONLY; the food
+ * (shown upfront on every screen) is paid to the kitchen at the door after it arrives:
+ *   Food — NOT collected by the platform
+ *   Platform fee (+GST, +food GST in registered_eco_9_5 mode) — collected via Razorpay now
+ * Stock, referral credit and the kitchen's provisional-sales caps are enforced in the same transaction
+ * as the order insert, under a row lock on the kitchen, so two simultaneous bookings can never both
+ * take the last slot.
  */
 export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId: number; quote: OrderQuote; payment: CheckoutPayload }> {
   const db = await getDb();
   const settings = await getPlatformSettings();
-  if (!input.buyerApproved) throw new ApiError(403, 'Your account is waiting for approval from your society admin');
+  await assertBuyerCanOrder(input.buyerId);
   if (!input.items.length) throw new ApiError(400, 'Cart is empty');
-  if (!['upi_now', 'pay_at_pickup'].includes(input.foodPaymentMode)) throw new ApiError(400, 'Choose how you will pay the kitchen');
   if (input.fulfillmentType === 'platform_delivery') {
-    // A third-party delivery fee would be money the platform collects and passes on —
-    // out of scope while the platform holds no payment-aggregator licence.
-    throw new ApiError(400, 'Delivery-partner pickup is not available in this version');
+    // A courier cannot run the pay-at-the-door QR flow, and a delivery fee would be platform-collected money.
+    throw new ApiError(400, 'Third-party delivery is not available in this version');
   }
+  if (input.scheduledFor && !settings.preOrdersEnabled) throw new ApiError(400, 'Pre-orders are not enabled');
+  await assertLiveModeReady(settings);
 
-  // Live orders need the platform's own FSSAI e-commerce registration.
-  if (!isMockMode() && !settings.platformFssaiCentralLicenseNo) {
-    throw new ApiError(503, 'Live orders are paused — the platform FSSAI registration has not been entered yet. Contact support.');
-  }
-
+  // A kitchen that blocked this buyer in chat can refuse new orders from them.
+  const [blockedByKitchen] = await db.select({ id: userBlocks.id }).from(userBlocks).where(and(eq(userBlocks.blockerId, input.sellerId), eq(userBlocks.blockedId, input.buyerId)));
+  if (blockedByKitchen) throw new ApiError(403, 'This kitchen is not taking orders from you');
   const gate = await kitchenGate(input.sellerId);
   const profile = gate.profile;
-  if (!profile || !gate.ok) throw new ApiError(400, 'This kitchen is not accepting orders right now');
-  if (input.foodPaymentMode === 'upi_now' && !profile.acceptsUpiNow) throw new ApiError(400, 'This kitchen does not take UPI payments up front — choose pay at pickup');
-  if (input.foodPaymentMode === 'pay_at_pickup' && !profile.acceptsPayAtPickup) throw new ApiError(400, 'This kitchen only takes payment by UPI up front');
+  // “Closed today” only closes today: a scheduled order for a later day is fine.
+  const closedOnlyToday = !!profile && gate.checks.openToday === false && Object.entries(gate.checks).every(([k, v]) => k === 'openToday' || v) && !!input.scheduledFor && !!profile.closedUntil && input.scheduledFor.getTime() >= profile.closedUntil.getTime();
+  if (!profile || (!gate.ok && !closedOnlyToday)) throw new ApiError(400, 'This kitchen is not accepting orders right now');
+  if (!profile.upiVerifiedVpa || !profile.upiVerifiedName) throw new ApiError(400, 'This kitchen is not accepting orders right now');
   if (input.fulfillmentType === 'self_pickup' && !profile.offersSelfPickup) throw new ApiError(400, 'This kitchen does not offer self-pickup');
   if (input.fulfillmentType === 'seller_delivery' && !profile.offersSellerDelivery) throw new ApiError(400, 'This kitchen does not offer its own delivery');
 
@@ -83,25 +96,57 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
   for (const [id, qty] of merged) {
     const l = rows.find((r) => r.id === id);
     if (!l || !l.isActive || l.sellerId !== input.sellerId || l.moderationStatus !== 'approved') throw new ApiError(400, 'An item in your cart is no longer available');
-    if (l.availableQty < qty) throw new ApiError(409, `Only ${l.availableQty} of "${l.title}" left`);
+    if (!input.scheduledFor && l.availableQty < qty) throw new ApiError(409, `Only ${l.availableQty} of "${l.title}" left`);
     subtotal += qty * l.priceInPaise;
     lines.push({ listingId: l.id, qty, title: l.title, unit: l.priceInPaise });
   }
+  if (profile.minOrderPaise > 0 && subtotal < profile.minOrderPaise) throw new ApiError(400, `This kitchen's minimum order is ₹${(profile.minOrderPaise / 100).toFixed(0)}`);
+
+  let pre: ReturnType<typeof checkPreOrderTime> | null = null;
+  if (input.scheduledFor) pre = checkPreOrderTime(input.scheduledFor, rows, settings);
 
   const slot = currentSlot();
   const cartSlots = rows.flatMap((l) => l.slotsJson?.slots ?? []);
-  if (slot && (cartSlots.length === 0 || cartSlots.includes(slot))) {
+  if (!input.scheduledFor && slot && (cartSlots.length === 0 || cartSlots.includes(slot))) {
     if (await isSlotSoldOut(input.sellerId, profile.maxOrdersPerSlot, cartSlots)) {
       throw new ApiError(400, 'This kitchen is sold out for the current meal slot — try again next slot');
     }
   }
 
-  const deliveryFee = input.fulfillmentType === 'seller_delivery' ? profile.sellerDeliveryFeeInPaise : 0;
-  const cfg = feeConfigFromSettings(settings);
+  const deliveryFee = input.fulfillmentType === 'seller_delivery' && settings.sellerDeliveryFeeEnabled ? profile.sellerDeliveryFeeInPaise : 0;
+  const baseCfg = feeConfigFromSettings(settings);
+  // PadosiPlate Plus (flag off by default): a percentage off the platform fee, within a monthly cap. Scaling the percentage, floor and
+  // cap together scales every fee by the same factor, so GST and the fee clamps stay consistent.
+  const baseFee = platformFeeBase(subtotal, baseCfg);
+  const plus = await plusDiscountFor(input.buyerId, baseFee);
+  const scale = (n: number) => Math.round((n * (10_000 - plus.discountBps)) / 10_000);
+  const cfg = plus.discountBps > 0 ? { ...baseCfg, feeBps: scale(baseCfg.feeBps), feeMinPaise: scale(baseCfg.feeMinPaise), feeMaxPaise: scale(baseCfg.feeMaxPaise) } : baseCfg;
   const now = new Date();
+  const [application] = await db.select().from(fssaiApplications).where(eq(fssaiApplications.sellerId, input.sellerId)).orderBy(desc(fssaiApplications.createdAt)).limit(1);
+  const tierInfo = fssaiTierInfo(profile, application ?? null, { deemedDays: settings.fssaiDeemedGrantDaysRegistration, provisionalMaxDays: settings.provisionalMaxDays, now });
 
+  let capHit: 'day' | 'total' | null = null;
   const created = await db.transaction(async (tx) => {
-    // Available referral credit, read inside the transaction.
+    // Row lock on the kitchen: bookings for the same kitchen are serialised, so cap checks cannot race.
+    await tx.select({ id: sellerProfiles.userId }).from(sellerProfiles).where(eq(sellerProfiles.userId, input.sellerId)).for('update');
+
+    const usage = await sellerCapUsage(tx, input.sellerId, now, input.scheduledFor ?? undefined);
+    if (usage.ordersToday + 1 > profile.maxOrdersPerDay) throw new ApiError(409, input.scheduledFor ? 'Fully booked on that day' : 'Fully booked today');
+    if (input.scheduledFor && pre) await assertSlotCapacity(tx, input.sellerId, input.scheduledFor, pre.slot, lines, rows, profile.maxOrdersPerSlot);
+    const foodForCaps = subtotal + deliveryFee;
+    if (tierInfo.tier === 'provisional') {
+      const caps = effectiveCaps(settings, profile.capOverrideJson, now);
+      const check = checkCaps(caps, usage, foodForCaps);
+      if (!check.ok) {
+        capHit = check.reason === 'value_total' ? 'total' : 'day';
+        throw new ApiError(409, check.message);
+      }
+    }
+    // Sec 393 (ex-194-O) tracking: new orders pause at the statutory gross-sales threshold until an admin decides.
+    if (settings.tdsPausePaise > 0 && (await sellerFySalesPaise(tx, input.sellerId, now)) >= settings.tdsPausePaise) {
+      throw new ApiError(409, 'This kitchen is not taking new orders right now');
+    }
+
     let available = 0;
     if (input.useCredit) {
       const credits = await tx.select({ a: referralCredits.amountInPaise }).from(referralCredits).where(and(eq(referralCredits.buyerId, input.buyerId), eq(referralCredits.status, 'available')));
@@ -115,7 +160,7 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
         buyerId: input.buyerId,
         type: 'home_delivery',
         sellerId: input.sellerId,
-        status: 'placed',
+        status: 'fee_pending',
         fulfillmentType: input.fulfillmentType,
         subtotalInPaise: quote.foodSubtotalPaise,
         deliveryFeeInPaise: quote.sellerDeliveryFeePaise,
@@ -134,26 +179,40 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
         feeGstBpsSnapshot: quote.snapshot.feeGstBps,
         ecoModeSnapshot: quote.snapshot.ecoMode,
         ecoBpsSnapshot: quote.snapshot.ecoBps,
-        foodPaymentMode: input.foodPaymentMode,
+        gstModeSnapshot: settings.gstMode,
+        foodPaymentMode: 'pay_at_door',
         foodPaymentStatus: 'pending',
+        sellerVpaSnapshot: profile.upiVerifiedVpa,
+        sellerRegisteredNameSnapshot: profile.upiVerifiedName,
         deliveryAddressJson: addr,
         otpCode: otp4(),
+        scheduledFor: input.scheduledFor ?? null,
+        scheduledSlot: pre?.slot ?? null,
+        mealPlanSubId: input.mealPlanSubId ?? null,
+        plusDiscountPaise: Math.max(0, platformFeeBase(subtotal, baseCfg) - quote.feeBeforeCreditPaise),
+        buyerNote: input.buyerNote?.slice(0, 300) ?? null,
         expiresAt: new Date(now.getTime() + settings.unpaidOrderExpiryMinutes * 60_000),
-        stockReserved: true,
+        stockReserved: !input.scheduledFor,
       })
       .returning();
 
-    await reserveStock(tx, lines);
+    // A scheduled order does not take today's portions; its slot capacity was checked above.
+    if (!input.scheduledFor) await reserveStock(tx, lines);
     if (quote.creditAppliedPaise > 0) {
       const got = await reserveCredit(tx, input.buyerId, order.id, quote.creditAppliedPaise);
       if (got !== quote.creditAppliedPaise) throw new ApiError(409, 'Your referral credit changed — please try again');
     }
     await tx.insert(orderItems).values(lines.map((l) => ({ orderId: order.id, listingId: l.listingId, titleSnapshot: l.title, qty: l.qty, unitPriceInPaise: l.unit })));
-    await tx.insert(orderEvents).values({ orderId: order.id, status: 'placed', note: 'Order placed — waiting for the platform fee' });
+    await tx.insert(orderEvents).values({ orderId: order.id, status: 'fee_pending', note: 'Order created — waiting for the platform fee' });
     return { order, quote };
+  }).catch(async (e) => {
+    // Tell the kitchen (once a day) that a buyer was turned away by its provisional limit.
+    if (capHit) await notifyCapReached(input.sellerId, capHit, now);
+    throw e;
   });
 
   const { order, quote } = created;
+  if (input.mealPlanSubId) return { orderId: order.id, quote, payment: { mode: 'none', orderId: order.id, amountInPaise: 0 } }; // paid with the week's bundle
   if (quote.onlineChargePaise === 0) {
     // Nothing for Razorpay to collect (0% fee, or fully covered by credit).
     await markOrderPaid(order.id, { method: 'none' });
@@ -161,4 +220,16 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
   }
   const payment = await createOrderPayment(order.id, quote.onlineChargePaise, 'order_fee');
   return { orderId: order.id, quote, payment };
+}
+
+/** One “provisional limit reached” alert per kitchen per IST day (the notification itself is the de-dup record). */
+async function notifyCapReached(sellerId: number, which: 'day' | 'total', now: Date): Promise<void> {
+  const db = await getDb();
+  const { notifications } = await import('@/lib/db/schema');
+  const { istStartOfDay } = await import('@/lib/time');
+  const { gte } = await import('drizzle-orm');
+  const [seen] = await db.select({ id: notifications.id }).from(notifications).where(and(eq(notifications.userId, sellerId), eq(notifications.eventKey, 'provisional_cap_reached'), gte(notifications.createdAt, istStartOfDay(now))));
+  if (seen) return;
+  const { emit } = await import('@/lib/notify');
+  await emit('provisional_cap_reached', sellerId, { which }, now);
 }

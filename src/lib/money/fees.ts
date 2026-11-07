@@ -105,24 +105,40 @@ export function quoteOrder(
   };
 }
 
-/** Build the fee config from platform settings (GST dropped to 0 without a GSTIN). */
+export type GstMode = 'unregistered' | 'registered_fee_only' | 'registered_eco_9_5';
+
+/**
+ * Fee config from platform settings. The GST mode decides everything:
+ *   unregistered         → no GST anywhere
+ *   registered_fee_only  → GST on the platform fee (and subscriptions); needs a GSTIN
+ *   registered_eco_9_5   → the above PLUS GST on the food value, collected at booking
+ *                          (CGST Sec 9(5): the platform pays GST on restaurant-type supplies)
+ * GST is never charged without a GSTIN on file, whatever the mode says.
+ */
 export function feeConfigFromSettings(s: {
   buyerPlatformFeeBps: number;
   buyerPlatformFeeMinPaise: number;
   buyerPlatformFeeMaxPaise: number;
   platformFeeGstBps: number;
   platformGstin: string;
-  ecoFoodGstMode: string;
+  gstMode: string;
   ecoFoodGstBps: number;
 }): FeeConfig {
+  const registered = s.gstMode !== 'unregistered' && !!s.platformGstin?.trim();
+  const eco = registered && s.gstMode === 'registered_eco_9_5';
   return {
     feeBps: s.buyerPlatformFeeBps,
     feeMinPaise: s.buyerPlatformFeeMinPaise,
     feeMaxPaise: s.buyerPlatformFeeMaxPaise,
-    feeGstBps: effectiveGstBps(s.platformFeeGstBps, s.platformGstin),
-    ecoMode: s.ecoFoodGstMode === 'collect_with_platform_fee' ? 'collect_with_platform_fee' : 'off',
-    ecoBps: s.ecoFoodGstBps,
+    feeGstBps: registered ? s.platformFeeGstBps : 0,
+    ecoMode: eco ? 'collect_with_platform_fee' : 'off',
+    ecoBps: eco ? s.ecoFoodGstBps : 0,
   };
+}
+
+/** GST rate for subscriptions: the same registration rule as the fee. */
+export function subscriptionGstBps(s: { gstMode: string; platformFeeGstBps: number; platformGstin: string }): number {
+  return s.gstMode !== 'unregistered' ? effectiveGstBps(s.platformFeeGstBps, s.platformGstin) : 0;
 }
 
 /** GST split for an invoice: intra-state supply → CGST + SGST halves (odd paisa goes to CGST). */

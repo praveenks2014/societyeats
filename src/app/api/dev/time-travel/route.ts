@@ -1,7 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { api, ApiError, ok, readJson } from '@/lib/api';
 import { getDb } from '@/lib/db';
-import { fssaiApplications, kitchenSubscriptions } from '@/lib/db/schema';
+import { fssaiApplications, grievances, kitchenSubscriptions, orders } from '@/lib/db/schema';
 import { runScheduledJobs } from '@/lib/jobs';
 import { DAY_MS } from '@/lib/time';
 
@@ -14,9 +14,32 @@ export const dynamic = 'force-dynamic';
  */
 export const POST = api(async (req) => {
   if (process.env.NODE_ENV === 'production' || process.env.E2E !== 'true') throw new ApiError(404, 'Not found');
-  const body = await readJson<{ kind: 'subscription' | 'fssai_filed'; sellerId: number; days: number }>(req);
+  const body = await readJson<{ kind: 'subscription' | 'fssai_filed' | 'order_accept_deadline' | 'order_age' | 'order_completed_ago' | 'grievance_age'; sellerId: number; days: number; orderId?: number; minutes?: number }>(req);
   const db = await getDb();
   const shift = body.days * DAY_MS;
+  if (body.kind === 'order_accept_deadline' && body.orderId) {
+    await db.update(orders).set({ acceptBy: new Date(Date.now() - 1000) }).where(eq(orders.id, body.orderId));
+    return ok({ jobs: await runScheduledJobs() });
+  }
+  if (body.kind === 'order_age' && body.orderId) {
+    // Pretend N minutes have passed since the order's last timestamps (door wait, payment-claim window, confirm window).
+    const [o] = await db.select().from(orders).where(eq(orders.id, body.orderId));
+    const back = (d: Date | null) => (d ? new Date(d.getTime() - (body.minutes ?? 0) * 60_000) : d);
+    if (o) await db.update(orders).set({ atDoorAt: back(o.atDoorAt), collectedAt: back(o.collectedAt), foodPaymentClaimedAt: back(o.foodPaymentClaimedAt) }).where(eq(orders.id, o.id));
+    return ok({ jobs: await runScheduledJobs(new Date()) });
+  }
+  if (body.kind === 'order_completed_ago' && body.orderId) {
+    // Make the order look completed N minutes ago (chat read-only window).
+    await db.update(orders).set({ status: 'completed', completedAt: new Date(Date.now() - (body.minutes ?? 0) * 60_000) }).where(eq(orders.id, body.orderId));
+    return ok({ ok: true });
+  }
+  if (body.kind === 'grievance_age') {
+    // Pretend N hours have passed for every open ticket (deadlines slide earlier), then run the cron that raises overdue alerts.
+    const shiftMs = (body.minutes ?? 0) * 60_000;
+    const open = await db.select().from(grievances).where(inArray(grievances.status, ['open', 'acknowledged']));
+    for (const g of open) await db.update(grievances).set({ createdAt: new Date(g.createdAt.getTime() - shiftMs), ackDueAt: new Date(g.ackDueAt.getTime() - shiftMs), resolveDueAt: new Date(g.resolveDueAt.getTime() - shiftMs) }).where(eq(grievances.id, g.id));
+    return ok({ jobs: await runScheduledJobs() });
+  }
   if (body.kind === 'subscription') {
     const subs = await db.select().from(kitchenSubscriptions).where(eq(kitchenSubscriptions.sellerId, body.sellerId));
     for (const s of subs) {

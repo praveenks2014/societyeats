@@ -9,16 +9,16 @@ Work top to bottom. Everything up to step 6 can be done with `MOCK_MODE=true`; s
 - [ ] **5. Legal placeholders.** Enter legal entity name, GSTIN (GST is only added once a GSTIN is set), registered address, grievance officer and `platformFssaiCentralLicenseNo` in `/admin/settings`. Replace the draft legal pages with lawyer-reviewed text when you have it.
 - [ ] **6. Onboard the first 5 kitchens.** Each kitchen: profile, UPI VPA, FSSAI (assistant or licence number), dishes with photos, subscription, **Submit listing request**. Review in `/admin/kitchens/requests`, message them from the inbox if photos need work, approve dishes, then approve the kitchen.
 - [ ] **7. Share the join links** in the two societies' WhatsApp groups. Watch `/admin` (requests, users, complaints) daily.
-- [ ] **8. Schedule the cron job (required on Autoscale).** Autoscale has no built-in cron, so `/api/cron/run` never runs on its own. Set `CRON_SECRET` in Secrets, then schedule it hourly with cron-job.org:
+- [ ] **8. Schedule the cron job (required on Autoscale).** Autoscale has no built-in cron, so `/api/cron/run` never runs on its own. Set `CRON_SECRET` in Secrets, then schedule it every 5 minutes with cron-job.org:
    1. Sign up at [cron-job.org](https://cron-job.org) and click **Create cronjob**.
    2. **Title:** `PadosiPlate scheduled jobs`. **URL:** `https://<SITE_URL>/api/cron/run` (your deployed domain, e.g. `https://padosiplate.replit.app/api/cron/run`).
-   3. **Execution schedule:** every hour (e.g. "Every 1 hour", minute 0). Hourly is enough; every 15–30 minutes gives faster unpaid-order expiry.
+   3. **Execution schedule:** **Every 5 minutes** (cron-job.org: "Every 5 minutes"). The jobs also run the order timers (accept deadlines, unpaid-order expiry, reminders), so a long gap delays those.
    4. Open the **Advanced** tab:
       - **Request method:** `POST`
       - **Headers → Add:** name `Authorization`, value `Bearer <CRON_SECRET>` (the exact value you stored in Replit Secrets, after the word `Bearer` and one space)
    5. Save, then press **Test run**. A healthy response is HTTP `200` with `{"ok":true, ...}`. `401` means the secret is wrong or `CRON_SECRET` is not set on the deployment.
    6. In cron-job.org enable **notifications on failure**, so you hear about it if the endpoint starts failing.
-   7. Open `/admin`: the red "Scheduled jobs have not run" banner disappears once a run has been recorded. It comes back whenever there has been no successful run for **3 hours**.
+   7. Open `/admin`: the red "Scheduled jobs have not run" banner disappears once a run has been recorded. It comes back whenever there has been no successful run for **`cronStaleMinutes` (default 15 minutes, an admin setting)**, and both admins also get an in-app and e-mail alert once per incident. A late run never stops ordering.
 
    **What stops working if this is not scheduled** (Autoscale has no built-in cron, so nothing calls the route by itself):
    - **Subscription expiry and grace:** status is still derived from dates on read, but reminder emails and the expiry sweep do not run.
@@ -39,3 +39,35 @@ Work top to bottom. Everything up to step 6 can be done with `MOCK_MODE=true`; s
 - **WhatsApp Business relay** for order notifications (today: in-app and e-mail).
 - **Trademark search** for "PadosiPlate" before spending on branding.
 - Bank account / PAN collection, kitchen payouts and platform delivery are intentionally **not** part of this phase.
+
+## Before go-live (Pilot v2): founder's tasks
+
+Open `/admin/go-live`: it lists every blocker and links each to the screen that fixes it. The app refuses to start with `MOCK_MODE=false` while a blocking row is open (same function). In practice:
+
+1. **Legal review.** Have a lawyer review every document in `/admin/legal`, then mark each one *reviewed* (they ship as *draft*). Fill the grievance officer's name and email, the registered address and the GSTIN in `/admin/settings`.
+2. **Platform FSSAI** e-commerce registration number in `/admin/settings`.
+3. **Razorpay** keys and webhook secret (platform fees only); UPI verification provider `razorpay_checkout_vpa`. Add `RAZORPAYX_ACCOUNT_NUMBER` only if you switch to `razorpayx_rpd`.
+4. **Real e-mail**: `EMAIL_ADAPTER=resend`, `RESEND_API_KEY`, `EMAIL_FROM` on a verified domain.
+5. **Object Storage**: create the Replit bucket, `STORAGE_ADAPTER=replit`.
+6. **Push (optional)**: `npm run vapid:generate`, then set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.
+7. **Cron**: schedule `POST /api/cron/run` every 5 minutes with `CRON_SECRET`.
+8. **Admins**: both `ADMIN_EMAILS` accounts log in, change the one-time password and enrol two-factor; keep the recovery codes.
+9. **Backups**: schedule `npm run db:backup` and test one restore.
+10. **GST by a CA** (see below) and a **breach drill** from `docs/BREACH_RUNBOOK.md`.
+
+## Payments: two paths with your existing Razorpay account
+
+**Trial with test keys** (no real money; can run while `MOCK_MODE=true`):
+1. Razorpay Dashboard → switch to **Test mode** → Settings → API keys → generate keys (`rzp_test_…`).
+2. Create a **test** webhook → `https://<domain>/api/webhooks/razorpay` with the events in the README; copy its secret.
+3. In Secrets set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`. Leave `MOCK_MODE=true`.
+4. Run `npm run razorpay:check`. Expect "Payments mode: razorpay_test" and an order id.
+5. Place an order, pay the fee with Razorpay's test UPI/cards; the amber banner "Test payments: no real money is charged." shows on checkout.
+
+**Live**:
+1. `/admin/go-live` configuration rows all green (FSSAI Central licence, GST position, legal entity, grievance officer, support contact, webhook secret, UPI provider).
+2. Razorpay Dashboard → **Live mode** → live keys (`rzp_live_…`) and a **live** webhook with the same events; add the website URL to the account details.
+3. Replace the three secrets with the live values, set `MOCK_MODE=false` and `EMAIL_ADAPTER=resend`, redeploy.
+4. `npm run razorpay:check` (live): expect "razorpay_live".
+5. Take a live ₹1 UPI check for a kitchen and a live platform fee on a real order between the two admins; refund it from `/admin/refunds` and confirm the refund webhook.
+6. Your other apps on the same account must ignore events whose order notes say `app: padosiplate`.

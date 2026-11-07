@@ -16,8 +16,10 @@ const envSchema = z
   .object({
     JWT_SECRET: z
       .string({
-        required_error:
-          'JWT_SECRET is required — the app refuses to start without it (no dev fallback). Generate one with `openssl rand -hex 32` and set it as an env var (a Replit Secret in production).',
+        error: (iss) =>
+          iss.input === undefined
+            ? 'JWT_SECRET is required — the app refuses to start without it (no dev fallback). Generate one with `openssl rand -hex 32` and set it as an env var (a Replit Secret in production).'
+            : undefined,
       })
       .min(
         20,
@@ -25,13 +27,14 @@ const envSchema = z
       ),
     MOCK_MODE: z
       .enum(['true', 'false'], {
-        errorMap: () => ({ message: "MOCK_MODE must be exactly 'true' or 'false' when set" }),
+        error: "MOCK_MODE must be exactly 'true' or 'false' when set",
       })
       .optional(),
     DATABASE_URL: z.string().optional(),
     ADMIN_EMAILS: z.string().optional(),
-    STORAGE_ADAPTER: z.enum(['local', 'replit', 's3']).optional(),
+    STORAGE_ADAPTER: z.enum(['local', 'replit', 's3', 'memory']).optional(),
     EMAIL_ADAPTER: z.enum(['mock', 'resend']).optional(),
+    PAYMENTS_ADAPTER: z.enum(['mock', 'razorpay']).optional(),
     RAZORPAY_KEY_ID: z.string().optional(),
     RAZORPAY_KEY_SECRET: z.string().optional(),
     RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
@@ -46,7 +49,7 @@ const envSchema = z
         message: 'DATABASE_URL is required in production (add the PostgreSQL tool on Replit)',
       });
     }
-    if (env.NODE_ENV === 'production' && env.STORAGE_ADAPTER === 'local') {
+    if (env.NODE_ENV === 'production' && (env.STORAGE_ADAPTER === 'local' || (env.STORAGE_ADAPTER === 'memory' && env.MOCK_MODE === 'false'))) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['STORAGE_ADAPTER'],
@@ -54,6 +57,9 @@ const envSchema = z
       });
     }
     const liveMode = env.MOCK_MODE === 'false';
+    if (liveMode && (env.STORAGE_ADAPTER === 'memory' || env.STORAGE_ADAPTER === 'local')) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['STORAGE_ADAPTER'], message: 'STORAGE_ADAPTER must be replit or s3 when MOCK_MODE=false (memory/local lose uploads)' });
+    }
     if (!liveMode) return;
     const required = ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'] as const;
     if ((env.EMAIL_ADAPTER ?? 'resend') === 'resend' && !env.RESEND_API_KEY) {
@@ -77,7 +83,7 @@ export function validateEnv(): void {
 
   const lines = result.error.issues.map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
   const report = `Invalid or missing environment variables:\n${lines.join('\n')}\n\nSee .env.example for the full list and SECURITY.md for rotation steps.`;
-  // eslint-disable-next-line no-console
+   
   console.error(`\n[env] ${report}\n`);
   throw new Error(`Environment validation failed:\n${lines.join('\n')}`);
 }

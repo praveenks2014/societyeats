@@ -13,17 +13,17 @@ let societyId: number;
 beforeAll(async () => {
   process.env.RAZORPAY_KEY_SECRET = 'rzp_test_secret_value';
   process.env.RAZORPAY_WEBHOOK_SECRET = 'whsec_test_secret_value';
-  process.env.MOCK_MODE = 'true';
+  process.env.MOCK_MODE = 'true'; process.env.PAYMENTS_ADAPTER = 'mock';
   db = await useTestDb();
   societyId = (await makeSociety(db)).id;
 });
 beforeEach(() => {
-  process.env.MOCK_MODE = 'true';
+  process.env.MOCK_MODE = 'true'; process.env.PAYMENTS_ADAPTER = 'mock';
 });
 
 async function placeOrder(buyerId: number, sellerId: number, dishId: number, qty = 2, over: Record<string, unknown> = {}) {
   const { createHomeOrder } = await import('@/lib/orders/create');
-  return createHomeOrder({ buyerId, buyerApproved: true, sellerId, items: [{ id: dishId, qty }], fulfillmentType: 'self_pickup', foodPaymentMode: 'upi_now', ...over } as never);
+  return createHomeOrder({ buyerId, sellerId, items: [{ id: dishId, qty }], fulfillmentType: 'self_pickup', ...over } as never);
 }
 const getOrder = async (id: number) => (await db.select().from(s.orders).where(eq(s.orders.id, id)))[0];
 const getDish = async (id: number) => (await db.select().from(s.listings).where(eq(s.listings.id, id)))[0];
@@ -36,7 +36,7 @@ describe('order creation: money model, reservation, snapshots', () => {
     expect(r.quote).toMatchObject({ foodTotalPaise: 20000, platformFeePaise: 2000, onlineChargePaise: 2000, grandTotalPaise: 22000 });
     expect(r.payment).toMatchObject({ mode: 'mock', amountInPaise: 2000 });
     const o = await getOrder(r.orderId);
-    expect(o).toMatchObject({ status: 'placed', foodTotalInPaise: 20000, onlineChargeInPaise: 2000, feeBpsSnapshot: 1000, stockReserved: true, foodPaymentMode: 'upi_now' });
+    expect(o).toMatchObject({ status: 'fee_pending', foodTotalInPaise: 20000, onlineChargeInPaise: 2000, feeBpsSnapshot: 1000, stockReserved: true });
     expect(o.expiresAt!.getTime()).toBeGreaterThan(Date.now());
     expect((await getDish(dish.id)).availableQty).toBe(3);
     const [pay] = await db.select().from(s.payments).where(eq(s.payments.orderId, r.orderId));
@@ -77,10 +77,12 @@ describe('order creation: money model, reservation, snapshots', () => {
     await expect(placeOrder(buyer.id, seller.id, dish.id, 1.5)).rejects.toMatchObject({ status: 400 });
     await db.update(s.sellerProfiles).set({ listingState: 'delisted', isApproved: false }).where(eq(s.sellerProfiles.userId, seller.id));
     await expect(placeOrder(buyer.id, seller.id, dish.id, 1)).rejects.toMatchObject({ status: 400 });
-    await expect(placeOrder(buyer.id, seller.id, dish.id, 1, { buyerApproved: false })).rejects.toMatchObject({ status: 403 });
+    // an unverified email, or a pending membership approval, cannot order
+    const unverified = await makeUser(db, 'buyer', { societyId, emailVerifiedAt: null });
+    await expect(placeOrder(unverified.id, seller.id, dish.id, 1)).rejects.toMatchObject({ status: 403 });
   });
 
-  test('expired subscription / unmoderated dish / no payment mode block ordering', async () => {
+  test('expired subscription / unmoderated dish / unverified UPI block ordering', async () => {
     const { seller, dish } = await makeLiveKitchen(db, { societyId });
     const buyer = await makeUser(db, 'buyer', { societyId });
     await db.update(s.listings).set({ moderationStatus: 'pending' }).where(eq(s.listings.id, dish.id));
@@ -88,10 +90,11 @@ describe('order creation: money model, reservation, snapshots', () => {
     await db.update(s.listings).set({ moderationStatus: 'approved' }).where(eq(s.listings.id, dish.id));
     await db.update(s.kitchenSubscriptions).set({ endsAt: new Date(Date.now() - 10 * 86_400_000), startsAt: new Date(Date.now() - 100 * 86_400_000) }).where(eq(s.kitchenSubscriptions.sellerId, seller.id));
     await expect(placeOrder(buyer.id, seller.id, dish.id, 1)).rejects.toMatchObject({ status: 400 });
-    // pay-at-pickup-only kitchen: upi_now is refused
-    const k2 = await makeLiveKitchen(db, { societyId, upi: false });
-    await expect(placeOrder(buyer.id, k2.seller.id, k2.dish.id, 1, { foodPaymentMode: 'upi_now' })).rejects.toMatchObject({ status: 400 });
-    await expect(placeOrder(buyer.id, k2.seller.id, k2.dish.id, 1, { foodPaymentMode: 'pay_at_pickup' })).resolves.toBeDefined();
+    // a kitchen whose UPI ID has not passed the ₹1 check is not bookable
+    const k2 = await makeLiveKitchen(db, { societyId, upiVerified: false });
+    await expect(placeOrder(buyer.id, k2.seller.id, k2.dish.id, 1)).rejects.toMatchObject({ status: 400 });
+    const k3 = await makeLiveKitchen(db, { societyId });
+    await expect(placeOrder(buyer.id, k3.seller.id, k3.dish.id, 1)).resolves.toBeDefined();
   });
 });
 
@@ -104,12 +107,12 @@ describe('markOrderPaid: exactly once', () => {
     const results = await Promise.all([markOrderPaid(orderId, { razorpayPaymentId: 'pay_A' }), markOrderPaid(orderId, { razorpayPaymentId: 'pay_B' })]);
     expect(results.filter((r) => r.won).length).toBe(1);
     const o = await getOrder(orderId);
-    expect(o.status).toBe('fee_paid');
+    expect(o.status).toBe('booked');
     expect(o.acceptBy!.getTime()).toBeGreaterThan(Date.now());
     expect((await getDish(dish.id)).availableQty).toBe(8); // reserved once, not decremented again
     const notes = await db.select().from(s.notifications).where(and(eq(s.notifications.userId, seller.id), eq(s.notifications.href, '/seller/orders')));
     expect(notes.length).toBe(1);
-    expect((await db.select().from(s.orderEvents).where(and(eq(s.orderEvents.orderId, orderId), eq(s.orderEvents.status, 'fee_paid')))).length).toBe(1);
+    expect((await db.select().from(s.orderEvents).where(and(eq(s.orderEvents.orderId, orderId), eq(s.orderEvents.status, 'booked')))).length).toBe(1);
   });
 
   test('the kitchen cannot see an order before the fee is paid', async () => {
@@ -136,7 +139,7 @@ describe('markOrderPaid: exactly once', () => {
     await db.insert(s.referralCredits).values({ buyerId: buyer.id, referredUserId: referred.id, referredOrderId: o0.id, amountInPaise: 5000 });
     const r = await placeOrder(buyer.id, seller.id, dish.id, 2, { useCredit: true });
     expect(r.payment.mode).toBe('none');
-    expect((await getOrder(r.orderId)).status).toBe('fee_paid');
+    expect((await getOrder(r.orderId)).status).toBe('booked');
   });
 });
 
@@ -167,8 +170,8 @@ describe('verify route: ownership, signature, amount', () => {
     const sigB = checkoutSignature(payB.razorpayOrderId!, 'pay_2');
     const r2 = await verify({ orderId: b.orderId, razorpay_order_id: payB.razorpayOrderId, razorpay_payment_id: 'pay_2', razorpay_signature: sigB });
     expect(r2.status).toBe(400);
-    expect((await getOrder(b.orderId)).status).toBe('placed');
-    expect((await getOrder(a.orderId)).status).toBe('placed');
+    expect((await getOrder(b.orderId)).status).toBe('fee_pending');
+    expect((await getOrder(a.orderId)).status).toBe('fee_pending');
   });
 
   test('malformed or wrong signatures return 400 (never 500)', async () => {
@@ -187,9 +190,9 @@ describe('verify route: ownership, signature, amount', () => {
     await loginAs(buyer.id);
     const body = { orderId: a.orderId, razorpay_order_id: payA.razorpayOrderId, razorpay_payment_id: 'pay_good', razorpay_signature: checkoutSignature(payA.razorpayOrderId!, 'pay_good') };
     expect((await verify(body)).status).toBe(200);
-    expect((await getOrder(a.orderId)).status).toBe('fee_paid');
+    expect((await getOrder(a.orderId)).status).toBe('booked');
     expect((await verify(body)).status).toBe(200); // idempotent
-    expect((await getOrder(a.orderId)).status).toBe('fee_paid');
+    expect((await getOrder(a.orderId)).status).toBe('booked');
   });
 
   test('live mode: payment fetched from Razorpay must be captured and match the stored amount', async () => {
@@ -204,12 +207,12 @@ describe('verify route: ownership, signature, amount', () => {
     const pay = (await db.select().from(s.payments).where(eq(s.payments.orderId, orderId)))[0];
     const razorpay = await import('@/lib/payments/razorpay');
     vi.mocked(razorpay.fetchRazorpayPayment).mockImplementation(async (id: string) => ({ id, order_id: pay.razorpayOrderId!, status: 'captured', amount: id === 'pay_short' ? 1 : 2000 }));
-    process.env.MOCK_MODE = 'false';
+    process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     await loginAs(buyer.id);
     const { verifyAndMarkPaid } = await import('@/lib/payments/verify');
     const base = { userId: buyer.id, orderId, razorpay_order_id: pay.razorpayOrderId!, razorpay_payment_id: 'pay_short', razorpay_signature: checkoutSignature(pay.razorpayOrderId!, 'pay_short') };
     await expect(verifyAndMarkPaid(base)).rejects.toMatchObject({ status: 400 });
-    expect((await getOrder(orderId)).status).toBe('placed');
+    expect((await getOrder(orderId)).status).toBe('fee_pending');
     const good = { ...base, razorpay_payment_id: 'pay_full', razorpay_signature: checkoutSignature(pay.razorpayOrderId!, 'pay_full') };
     await expect(verifyAndMarkPaid(good)).resolves.toMatchObject({ kind: 'order', won: true });
     vi.doUnmock('@/lib/payments/razorpay');

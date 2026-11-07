@@ -7,7 +7,7 @@ import { getPlatformSettings } from '@/lib/db/platform';
 
 export const dynamic = 'force-dynamic';
 
-const schema = z.object({ sales: z.enum(['under_12l', '12l_to_20cr', 'above_20cr']), homeKitchen: z.boolean(), onlyTelangana: z.boolean() });
+const schema = z.object({ sales: z.enum(['up_to_1_5cr', '1_5cr_to_50cr', 'above_50cr']), homeKitchen: z.boolean(), onlyTelangana: z.boolean() });
 
 /** Step 1 of the assistant: which form does this kitchen need? Records the funnel stage. */
 export const POST = api(async (req) => {

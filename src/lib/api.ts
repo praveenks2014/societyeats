@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { log } from '@/lib/log';
+import { log, newRequestId } from '@/lib/log';
 
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** Machine-readable reason the client can act on (e.g. 'mfa_required', 'reauth_required'). */
+    public code?: string,
   ) {
     super(message);
   }
@@ -13,16 +15,21 @@ export class ApiError extends Error {
 type Handler<Ctx> = (req: NextRequest, ctx: Ctx) => Promise<NextResponse | Response>;
 
 /** Wraps a route handler with uniform JSON error handling. */
-export function api<Ctx = unknown>(fn: Handler<Ctx>): Handler<Ctx> {
-  return async (req, ctx) => {
+/** Next 15+ passes route params as a Promise; handlers keep receiving plain `{ params }`. */
+type RouteCtx<Ctx> = Ctx extends { params: infer P } ? Omit<Ctx, 'params'> & { params: Promise<P> | P } : Ctx;
+
+export function api<Ctx = unknown>(fn: Handler<Ctx>): Handler<RouteCtx<Ctx>> {
+  return async (req, rawCtx) => {
     try {
+      const ctx = (rawCtx && typeof rawCtx === 'object' && 'params' in rawCtx ? { ...rawCtx, params: await (rawCtx as { params: unknown }).params } : rawCtx) as Ctx;
       return await fn(req, ctx);
     } catch (err) {
       if (err instanceof ApiError) {
-        return NextResponse.json({ error: err.message }, { status: err.status });
+        return NextResponse.json({ error: err.message, ...(err.code ? { code: err.code } : {}) }, { status: err.status });
       }
-      log.error('api.unhandled', { path: req.nextUrl?.pathname, method: req.method, err });
-      return NextResponse.json({ error: 'Something went wrong' }, { status: 500 });
+      const ref = req.headers?.get?.('x-request-id') ?? newRequestId();
+      log.error('api.unhandled', { path: req.nextUrl?.pathname, method: req.method, ref, err });
+      return NextResponse.json({ error: `Something went wrong (reference ${ref})`, ref }, { status: 500, headers: { 'x-request-id': ref } });
     }
   };
 }

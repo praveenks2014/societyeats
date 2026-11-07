@@ -20,14 +20,14 @@ beforeAll(async () => {
 });
 
 describe('eligibility routing', () => {
-  test('under ₹12 lakh + home kitchen + only Telangana → Form A', () => {
-    expect(checkEligibility({ sales: 'under_12l', homeKitchen: true, onlyTelangana: true })).toMatchObject({ route: 'form_a' });
+  test('up to ₹1.5 crore + home kitchen + only Telangana → Form A', () => {
+    expect(checkEligibility({ sales: 'up_to_1_5cr', homeKitchen: true, onlyTelangana: true })).toMatchObject({ route: 'form_a' });
   });
   test('everything else → a licence, with the right kind', () => {
-    expect(checkEligibility({ sales: '12l_to_20cr', homeKitchen: true, onlyTelangana: true })).toMatchObject({ route: 'licence', kind: 'state' });
-    expect(checkEligibility({ sales: 'above_20cr', homeKitchen: true, onlyTelangana: true })).toMatchObject({ route: 'licence', kind: 'central' });
-    expect(checkEligibility({ sales: 'under_12l', homeKitchen: false, onlyTelangana: true })).toMatchObject({ route: 'licence', kind: 'state' });
-    expect(checkEligibility({ sales: 'under_12l', homeKitchen: true, onlyTelangana: false })).toMatchObject({ route: 'licence', kind: 'central' });
+    expect(checkEligibility({ sales: '1_5cr_to_50cr', homeKitchen: true, onlyTelangana: true })).toMatchObject({ route: 'licence', kind: 'state' });
+    expect(checkEligibility({ sales: 'above_50cr', homeKitchen: true, onlyTelangana: true })).toMatchObject({ route: 'licence', kind: 'central' });
+    expect(checkEligibility({ sales: 'up_to_1_5cr', homeKitchen: false, onlyTelangana: true })).toMatchObject({ route: 'licence', kind: 'state' });
+    expect(checkEligibility({ sales: 'up_to_1_5cr', homeKitchen: true, onlyTelangana: false })).toMatchObject({ route: 'licence', kind: 'central' });
   });
 });
 
@@ -43,7 +43,7 @@ describe('fee by years', () => {
 });
 
 describe('Form A validation and pack', () => {
-  const good = { eligibility: { sales: 'under_12l' as const, homeKitchen: true, onlyTelangana: true }, foodCategories: [FOOD_CATEGORIES[0]], years: 2, waterSource: 'Municipal supply', idType: 'pan' as const, declarations: [...DECLARATIONS] };
+  const good = { eligibility: { sales: 'up_to_1_5cr' as const, homeKitchen: true, onlyTelangana: true }, foodCategories: [FOOD_CATEGORIES[0]], years: 2, waterSource: 'Municipal supply', idType: 'pan' as const, declarations: [...DECLARATIONS] };
   test('accepts a complete answer set, rejects each gap', () => {
     expect(validateFormA(good)).toBeNull();
     expect(validateFormA({ ...good, foodCategories: [] })).toMatch(/category/i);
@@ -51,7 +51,7 @@ describe('Form A validation and pack', () => {
     expect(validateFormA({ ...good, years: 9 })).toMatch(/1–5/);
     expect(validateFormA({ ...good, waterSource: '' })).toMatch(/water/i);
     expect(validateFormA({ ...good, declarations: [DECLARATIONS[0]] })).toMatch(/declarations/i);
-    expect(validateFormA({ ...good, eligibility: { sales: 'above_20cr', homeKitchen: true, onlyTelangana: true } })).toMatch(/Form A/);
+    expect(validateFormA({ ...good, eligibility: { sales: 'above_50cr', homeKitchen: true, onlyTelangana: true } })).toMatch(/Form A/);
   });
   test('filing pack is organised by Form A sections', () => {
     const sections = buildFormASections({ applicantName: 'A', phone: '9', email: null, kitchenName: 'K', kitchenAddress: 'Addr', form: { ...good, feeInPaise: 20000 }, documents: [{ label: 'Photo ID' }] });
@@ -137,7 +137,7 @@ describe('Aadhaar masking', () => {
 });
 
 describe('assistant API + funnel', () => {
-  const body = { applicantName: 'Lakshmi', kitchenAddress: '12 Gachibowli Hyderabad 500032', licenseType: 'registration', filingMode: 'self', documents: ['a', 'b', 'c', 'd'].map((x) => ({ label: x, url: `/api/files/${x}` })), formA: { eligibility: { sales: 'under_12l', homeKitchen: true, onlyTelangana: true }, foodCategories: [FOOD_CATEGORIES[1]], years: 3, waterSource: 'Municipal supply', idType: 'pan', declarations: [...DECLARATIONS] } };
+  const body = { applicantName: 'Lakshmi', kitchenAddress: '12 Gachibowli Hyderabad 500032', licenseType: 'registration', filingMode: 'self', documents: ['a', 'b', 'c', 'd'].map((x) => ({ label: x, url: `/api/files/${x}` })), formA: { eligibility: { sales: 'up_to_1_5cr', homeKitchen: true, onlyTelangana: true }, foodCategories: [FOOD_CATEGORIES[1]], years: 3, waterSource: 'Municipal supply', idType: 'pan', declarations: [...DECLARATIONS] } };
 
   test('creating an application stores Form A, computes the fee server-side and records funnel stages', async () => {
     const { POST } = await import('@/app/api/fssai/applications/route');
@@ -151,7 +151,7 @@ describe('assistant API + funnel', () => {
     const stages = (await db.select().from(s.fssaiFunnelEvents).where(eq(s.fssaiFunnelEvents.sellerId, seller.id))).map((x) => x.stage).sort();
     expect(stages).toEqual(['details_complete', 'documents_ready', 'eligible', 'started']);
     // an ineligible answer set is refused on the server too
-    const bad = await call(POST, jsonReq('/api/fssai/applications', { ...body, formA: { ...body.formA, eligibility: { sales: 'above_20cr', homeKitchen: true, onlyTelangana: true } } }));
+    const bad = await call(POST, jsonReq('/api/fssai/applications', { ...body, formA: { ...body.formA, eligibility: { sales: 'above_50cr', homeKitchen: true, onlyTelangana: true } } }));
     expect(bad.status).toBe(400);
   });
 

@@ -1,12 +1,14 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { isMockMode } from '@/lib/config';
+import { paymentsMode } from '@/lib/payments/mode';
 import { getDb } from '@/lib/db';
 import { notify } from '@/lib/db/notify';
+import { emit } from '@/lib/notify';
+import { preOrderAcceptBy } from '@/lib/orders/preorder';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { orderEvents, orders, payments, restaurantItems, restaurants, orderItems } from '@/lib/db/schema';
 import { log } from '@/lib/log';
 import { consumeReservedCredit } from '@/lib/referrals';
-import { createRazorpayOrder, receiptFor } from './razorpay';
+import { createRazorpayOrder, receiptFor, type PaymentKind } from './razorpay';
 
 export { verifyCheckoutSignature, verifyWebhookSignature } from './signature';
 
@@ -23,11 +25,11 @@ export type CheckoutPayload =
   | { mode: 'razorpay'; orderId: number; amountInPaise: number; keyId: string; razorpayOrderId: string };
 
 /** Creates the Razorpay order (or the mock sheet) for what the platform collects on this order. */
-export async function createOrderPayment(orderId: number, amountInPaise: number, kind: 'order_fee' | 'order_full' = 'order_fee'): Promise<CheckoutPayload> {
+export async function createOrderPayment(orderId: number, amountInPaise: number, kind: 'order_fee' | 'order_full' = 'order_fee', noteKind?: PaymentKind): Promise<CheckoutPayload> {
   const db = await getDb();
-  const rzp = await createRazorpayOrder({ amountInPaise, receipt: receiptFor('o', orderId), notes: { orderId: String(orderId), kind } });
+  const rzp = await createRazorpayOrder({ amountInPaise, receipt: receiptFor('o', orderId), kind: noteKind ?? kind, ref: orderId, notes: { orderId: String(orderId) } });
   await db.insert(payments).values({ orderId, razorpayOrderId: rzp.id, status: 'created', amountInPaise, kind });
-  if (isMockMode() || !rzp.keyId) return { mode: 'mock', orderId, amountInPaise };
+  if (paymentsMode() === 'mock' || !rzp.keyId) return { mode: 'mock', orderId, amountInPaise };
   return { mode: 'razorpay', orderId, amountInPaise, keyId: rzp.keyId, razorpayOrderId: rzp.id };
 }
 
@@ -39,7 +41,7 @@ export async function createPaymentForOrder(orderId: number, amountInPaise: numb
 export type PaidResult = { won: boolean; status?: string };
 
 /**
- * Exactly-once transition placed → fee_paid (home) / paid (mall). The
+ * Exactly-once transition fee_pending → booked (home) / paid (mall). The
  * conditional UPDATE … WHERE status='placed' RETURNING inside a transaction
  * means that if verify, the webhook and the mock sheet race, exactly one
  * caller wins; only the winner runs side effects (notifications, credit
@@ -59,17 +61,18 @@ export async function markOrderPaid(
     const [existing] = await tx.select().from(orders).where(eq(orders.id, orderId));
     if (!existing) return { won: false as const, order: null };
     const home = existing.type === 'home_delivery';
-    const to = home ? 'fee_paid' : 'paid';
+    const to = home ? 'booked' : 'paid';
     const [order] = await tx
       .update(orders)
       .set({
         status: to,
         feePaidAt: now,
+        bookedAt: now,
         expiresAt: null,
-        acceptBy: home ? new Date(now.getTime() + settings.sellerAcceptWindowMinutes * 60_000) : null,
+        acceptBy: home ? (existing.scheduledFor ? preOrderAcceptBy(existing.scheduledFor, now, settings) : new Date(now.getTime() + settings.sellerAcceptWindowMinutes * 60_000)) : null,
         updatedAt: now,
       })
-      .where(and(eq(orders.id, orderId), eq(orders.status, 'placed')))
+      .where(and(eq(orders.id, orderId), eq(orders.status, 'fee_pending')))
       .returning();
     if (!order) return { won: false as const, order: existing };
 
@@ -111,11 +114,18 @@ export async function markOrderPaid(
 
   const order = result.order!;
   if (order.sellerId) {
-    await notify(order.sellerId, `New order #${orderId} 🍲`, 'A neighbour just placed an order. Accept it from your order queue.', '/seller/orders');
+    const fmt = (d: Date) => d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    await emit('order_booked', order.sellerId, order.scheduledFor
+      ? { orderId, items: 'A neighbour pre-ordered', when: `${order.scheduledSlot ?? ''} on ${fmt(order.scheduledFor)}`.trim(), acceptBy: order.acceptBy ? fmt(order.acceptBy) : '' }
+      : { orderId, items: 'A neighbour placed an order', acceptMinutes: settings.sellerAcceptWindowMinutes });
   }
   if (order.restaurantId) {
     const [rest] = await db.select().from(restaurants).where(eq(restaurants.id, order.restaurantId));
     if (rest?.managerUserId) await notify(rest.managerUserId, `New pickup order #${orderId} 🛍️`, 'A buyer just paid for an order-ahead pickup.', '/restaurant');
+  }
+  if (order.mealPlanSubId) {
+    const { onAnchorPaid } = await import('@/lib/meal-plans');
+    await onAnchorPaid(orderId, paymentId, (id, i) => markOrderPaid(id, i));
   }
   return { won: true, status: order.status };
 }
@@ -133,7 +143,7 @@ async function handleLateCapture(orderId: number, paymentId: string, method?: st
   }
 }
 
-/** A failed attempt never downgrades a captured/refunded payment; the order stays 'placed' so the buyer can retry until it expires. */
+/** A failed attempt never downgrades a captured/refunded payment; the order stays 'fee_pending' so the buyer can retry until it expires. */
 export async function markPaymentFailed(orderId: number): Promise<void> {
   const db = await getDb();
   await db.update(payments).set({ status: 'failed' }).where(and(eq(payments.orderId, orderId), inArray(payments.status, ['created', 'authorized'])));

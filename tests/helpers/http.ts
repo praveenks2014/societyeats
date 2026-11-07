@@ -24,9 +24,9 @@ import { createSession } from '@/lib/auth';
 import { resetRequestContext } from './next-headers';
 
 /** Switches the mocked cookie jar to a fresh session for `userId`. */
-export async function loginAs(userId: number) {
+export async function loginAs(userId: number, opts: { mfa?: boolean } = {}) {
   resetRequestContext();
-  await createSession(userId);
+  await createSession(userId, { mfaVerified: opts.mfa ?? true });
 }
 
 export function checkoutSignature(razorpayOrderId: string, paymentId: string, secret = process.env.RAZORPAY_KEY_SECRET!) {

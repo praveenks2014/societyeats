@@ -16,7 +16,8 @@ export function registerFileAccessResolver(r: Resolver) {
 }
 
 export async function canViewPrivateFile(session: Session, file: FileRow): Promise<boolean> {
-  if (session.role === 'admin') return true;
+  // Chat photos are private to the two participants; an admin sees them only through the dispute reader (resolver below).
+  if (session.role === 'admin' && file.purpose !== 'chat_image') return true;
   if (file.ownerId === session.uid) return true;
   for (const r of resolvers) if (await r(session, file)) return true;
   return false;

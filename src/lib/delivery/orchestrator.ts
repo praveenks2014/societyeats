@@ -266,17 +266,17 @@ export async function syncDeliveryTracking(orderId: number): Promise<TrackingSta
   // when the rider picks up, move the order to out_for_delivery
   if (
     ['picked_up', 'in_transit'].includes(tracking.status) &&
-    !['out_for_delivery', 'delivered'].includes(
+    !['on_the_way', 'delivered'].includes(
       (await db.select().from(orders).where(eq(orders.id, orderId)))[0]?.status ?? '',
     )
   ) {
     await db
       .update(orders)
-      .set({ status: 'out_for_delivery', updatedAt: new Date() })
+      .set({ status: 'on_the_way', updatedAt: new Date() })
       .where(eq(orders.id, orderId));
     await db.insert(orderEvents).values({
       orderId,
-      status: 'out_for_delivery',
+      status: 'on_the_way',
       note: `${delivery.riderName ?? 'Rider'} picked up your order`,
     });
     const [order] = await db.select().from(orders).where(eq(orders.id, orderId));

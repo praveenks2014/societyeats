@@ -14,6 +14,10 @@ import {
 import { BRAND } from '@/config/brand';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { splitGst } from '@/lib/money';
+import { ensureInvoiceNumber, invoiceDue } from '@/lib/invoices/order-invoice';
+import { sellerFssai } from '@/lib/fssai/seller-tier';
+import { listings } from '@/lib/db/schema';
+import { inArray } from 'drizzle-orm';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,9 +77,29 @@ export const GET = api<{ params: { id: string } }>(async (_req, { params }) => {
     address: settings.registeredAddress || BRAND.registeredAddress,
   };
 
+  // Home orders get a sequential, gap-free tax invoice number once a fee has been earned; before that the receipt is provisional.
+  const invoiceNumber = home ? (order.invoiceNumber ?? (invoiceDue(order) ? await ensureInvoiceNumber(order.id) : null)) : `PP-INV-${String(order.id).padStart(6, '0')}`;
+  const fssai = order.sellerId ? await sellerFssai(order.sellerId) : null;
+  const dishes = items.length ? await db.select({ id: listings.id, best: listings.bestWithinHours }).from(listings).where(inArray(listings.id, items.map((i) => i.listingId).filter((x): x is number => x != null))) : [];
+  const bestWithinHours = dishes.map((d) => d.best).filter((h): h is number => !!h).sort((a, b) => a - b)[0] ?? null;
+
   return ok({
     model: home ? 'home' : 'mall',
-    invoiceNumber: `PP-INV-${String(order.id).padStart(6, '0')}`,
+    invoiceNumber,
+    pending: home && !invoiceNumber,
+    bestWithinHours,
+    foodBill: home
+      ? {
+          issuedBy: kitchenName ?? 'Kitchen',
+          fssaiLabel: fssai?.label ?? null,
+          fssaiNumber,
+          paidDirectly: true,
+          method: order.foodPaymentMethod,
+          utr: order.foodPaymentUtr,
+          status: order.foodPaymentStatus,
+          billRef: `Order #${order.id}`,
+        }
+      : null,
     invoiceDate: payment?.capturedAt ?? order.createdAt,
     isTaxInvoice: home ? order.platformFeeGstInPaise + order.gstInPaise > 0 : false,
     platform: { name: BRAND.appName, legalName: legal.name, gstin: legal.gstin, address: legal.address },

@@ -7,7 +7,7 @@ Every non-obvious call made while building PadosiPlate in one session, and why.
 ## Stack & infrastructure
 
 1. **PGlite dev fallback.** The spec mandates Postgres via `DATABASE_URL` (kept as the primary path, used on Replit). When the variable is unset, the app falls back to an embedded PGlite (WASM Postgres) at `./.data/pglite` with auto-migrate + auto-seed. Rationale: the build machine and fresh clones have no Postgres, and "fully clickable tonight" beats "install a database first". Same Drizzle API both ways; no native binaries either way.
-2. **(Superseded in Phase 1 Pilot — `src/middleware.ts` now exists, see below.)** Role checks live in layouts (`/seller`, `/admin`, `/restaurant`) and in every API handler via `requireSession(roles)`. Simpler than edge middleware and avoids edge-runtime DB access.
+2. **(Superseded in Phase 1 Pilot — `src/proxy.ts` now exists, see below.)** Role checks live in layouts (`/seller`, `/admin`, `/restaurant`) and in every API handler via `requireSession(roles)`. Simpler than edge middleware and avoids edge-runtime DB access.
 3. **Hand-rolled service worker** instead of `@ducanh2912/next-pwa`: fewer build-time moving parts, and the spec explicitly allowed it. It precaches an offline shell, uses network-first for navigations, SWR for images, and never caches `/api/*`.
 4. **SVG PWA icons.** Chrome accepts SVG manifest icons; shipping raster PNGs would need an image toolchain. Swap in PNGs later if older Android install banners matter.
 5. **`.replit` committed** so "Import from GitHub" runs with zero changes (dev run + autoscale deployment config).
@@ -219,8 +219,8 @@ Every ambiguous call made while turning the codebase into the PadosiPlate pilot.
 - **E-mail tokens are random and stored hashed** (not JWT-signed): they can be revoked, single-use and are not forgeable if `JWT_SECRET` leaks.
 - **Unverified users may still browse and order**, with a persistent banner to verify; only admin access requires a verified e-mail.
 - **Admin = `ADMIN_EMAILS` + verified e-mail only.** The allowlisted account is created with a one-time password and `must_change_password`; nobody else can be promoted through the app. `ADMIN_BOOTSTRAP_PASSWORD` exists only so e2e can log in deterministically.
-- **DB-backed sessions** (revocable, "log out everywhere") with a JWT cookie carrying the session id; a sliding refresh is done in `src/middleware.ts`.
-- **`src/middleware.ts` now exists** for two cross-cutting jobs only: CSRF `Origin` check on mutating `/api/*` requests and sliding session refresh. Role checks stay in layouts and handlers.
+- **DB-backed sessions** (revocable, "log out everywhere") with a JWT cookie carrying the session id; a sliding refresh is done in `src/proxy.ts`.
+- **`src/proxy.ts` now exists** for two cross-cutting jobs only: CSRF `Origin` check on mutating `/api/*` requests and sliding session refresh. Role checks stay in layouts and handlers.
 - Postgres fixed-window **rate limiter** shared by all instances (login, register, reset, uploads, messaging). It is bypassed only when `E2E=true` and `NODE_ENV!=='production'`.
 
 ### Kitchens, moderation, messaging
@@ -245,3 +245,78 @@ Every ambiguous call made while turning the codebase into the PadosiPlate pilot.
 ### Tests
 - Vitest (PGlite) covers fee maths, subscriptions, state machine, auth, payments/webhooks, refunds, moderation, threads, CSRF, FSSAI and a repo-wide scan that fails on legacy brand names. Playwright runs the ten required journeys plus 390px mobile checks (no horizontal scroll, ≥36px targets, AA-checked palette).
 - Bug found by e2e and fixed: the cart was wiped on every full page load because the persist effect ran before hydration.
+
+### Dependency upgrade (Next 16 / React 19)
+
+- Upgraded to Next 16.4.3, React 19.3.1, vitest 5.0.5, drizzle-orm 0.45.4 to clear critical/high advisories; versions of next, react, react-dom, vitest, vite, eslint and drizzle-orm are pinned exactly. See `docs/AUDIT_DEPS.md`.
+- Node 22: vitest 5 needs `^22.12`; `.replit` moved to `nodejs-22` and `package.json` declares `engines.node >=22.12.0`.
+- `cookies()`, `headers()` and route `params` are awaited. The `api()` wrapper resolves `params` so route handlers keep their plain `{ params }` signature; `siteOrigin()`, `joinUrl()` and `whatsappMessage()` became async.
+- `src/middleware.ts` → `src/proxy.ts` (same CSRF + sliding-session logic, exported as `proxy`).
+- `next lint` is gone: `npm run lint` is `eslint .` with a flat `eslint.config.mjs` (eslint-config-next/core-web-vitals). The new `react-hooks/set-state-in-effect` rule is turned off: the app deliberately loads data and hydrates the cart from localStorage inside effects.
+- `next.config.mjs`: `serverExternalPackages` replaces `experimental.serverComponentsExternalPackages`; `instrumentationHook` is no longer needed. Startup validation moved to `src/instrumentation-node.ts` so the Edge bundle never sees `process.exit`.
+- Turbopack is now the default for `next dev` and `next build`. The e2e database moved to the OS temp dir because Turbopack's dev server full-reloads pages when files in the project tree change.
+- verify-email posts its single-use token once (a ref guard) because React dev StrictMode runs effects twice.
+- zod 3 → 4.6.7: a new high advisory (memory exhaustion on oversized constrained collections) landed against zod <4.6.6. Only the error-option names changed in our schemas (`invalid_type_error`/`required_error`/`errorMap` → `error`).
+
+## Pilot v2
+
+- **Order status enum rewritten.** Migration `0015_pilot_v2.sql` is hand-patched to map old values (`placed→fee_pending`, `fee_paid→booked`, `out_for_delivery→on_the_way`) because drizzle-kit drops and recreates enums.
+- **Food money never touches the platform.** The buyer pays the kitchen's verified UPI at the door. The VPA, registered name and QR are shown only in `at_door`/`collected`/`payment_claimed`/`payment_disputed`, only to the buyer or an admin.
+- **Seller declines a booked order:** fee refunded plus equal credit, no strike. Seller cancels after accepting: refund, credit and a strike.
+- **TOTP is hand-written to RFC 6238** (no new dependency) with 10 hashed recovery codes, a 12 h non-sliding admin session and a 10-minute recent-MFA window for sensitive actions.
+- **Google sign-in never auto-links** to an existing email account.
+- **OTP stays for Mall orders only.** Home orders use pay-at-door.
+- **Founding kitchen** is granted as a `waived` 90-day subscription on approval. Reminders send only the tightest threshold (7, 3, 1 days).
+- **PAN** is AES-GCM encrypted at rest and returned masked.
+- **FSSAI** tier is derived, never stored. The Basic registration limit is ₹1.5 crore (2026 rules), and rules text carries "verified Nov 2026".
+- **E2E data and artifacts live in `os.tmpdir()`.** Turbopack full-reloads the page when files in the project tree change.
+- **Security headers** are applied to production builds only. CSP keeps `'unsafe-inline'` for scripts because Next injects inline bootstrap scripts; a nonce-based CSP is follow-up.
+- **Cron heartbeat** warns at `cronStaleMinutes` (default 15). Schedule `POST /api/cron/run` every 5 minutes.
+
+## Pilot v2: completion run
+
+Decisions taken without stopping to ask, in the order they came up. Fixed decisions from the brief are not repeated here.
+
+- **Pricing disclaimer once per feed, not per card.** The `pricing` disclaimer sits above the feed; repeating it on every card hid the dishes on a 390px screen. The `consume-by` disclaimer is on the dish page and the receipt.
+- **Mall (per-restaurant) paths untouched.** The legacy flow is behind its flag and out of the pilot; new rules apply to home kitchens only.
+- **Legal pages say pay-at-the-door.** Terms and refund text describe the real money flow: the platform charges only its fee; food is paid to the kitchen at the door.
+- **Legal and disclaimer text lives in the database** (versioned, `draft` / `reviewed`). Re-consent is a modal that blocks the app only for a *material* change; a non-material change is shown but does not block.
+- **Chat is time-limited** (48 hours after completion, a setting), SSE with a polling fallback; the soft filter warns first and sends on "Send anyway". Admins read a thread only with a reason, a fresh 2FA check and an audit row.
+- **Notifications:** in-app and email always on for transactional events; push needs VAPID, a subscription and the user's preference; quiet hours 22:00–07:00 IST except urgent events; WhatsApp/SMS are mock adapters writing to `message_outbox`.
+- **Settings changes need a reason** and are kept in `settings_history` with restore.
+- **A decline counts against acceptance rate** but earns no strike; more than 5 declines in 7 days nudges admins. An order nobody accepts in time gets a "missed" strike.
+- **Pre-orders reserve no stock.** Capacity is counted on the delivery day (provisional caps and slot capacity), and the accept deadline is set from the slot time.
+- **Plus scales the whole fee** (`feeBps`, `feeMin`, `feeMax` together) and snapshots the scaled configuration on the order; the monthly cap is the sum of `plusDiscountPaise` on the buyer's orders in the IST calendar month. Plus is one paid month, never auto-renewed, with one reminder three days before it ends.
+- **Meal plans share one fee payment.** The week's fee is charged once on the first day's order; the other days get captured `payments` rows (`method='plan_bundle'`) holding their own share so a skipped or declined day refunds exactly its share.
+- **Featured placements are labelled "Sponsored", returned separately from the ranked feed** and never mixed into ranking (`/legal/how-ranking-works` says so).
+- **Bulk orders** are quote-then-accept; accepting creates an ordinary scheduled order, so fee, caps and refunds behave as for any order.
+- **Optional features are API-first with minimal pages** (`/plus`, `/bulk`, `/admin/growth`, `/campaigns/[slug]`); all stay behind admin flags that default off.
+- **CSP:** per-request nonce with `'strict-dynamic'` in `src/proxy.ts`; `style-src` keeps `'unsafe-inline'` (React/Tailwind inline styles); `frame-src` includes OpenStreetMap (order-page map) — the Playwright guard found this missing. All pages are dynamic, which Next requires to attach a nonce.
+- **Playwright guard:** a fixture fails any test with a CSP violation, an uncaught page error or a console error (failed network responses are asserted by the tests themselves).
+- **`/api/dev/*` need `E2E=true`** (the outbox endpoint previously only checked `NODE_ENV`).
+- **500 responses carry a reference** (`x-request-id`) and the same reference is logged, instead of a message that could hold personal data.
+- **Time-dependent test fixed:** a caps test used `maxOrdersPerSlot: 0`, which means "sold out" during a meal slot, so it failed only at certain hours of the day; it now uses 99.
+- **Known gaps:** per-card pricing disclaimer (above); chat attachments beyond images; push to real devices (needs real VAPID keys and a device); WhatsApp/SMS go to the mock outbox only. (The Sponsored feed card and the meal-plan screens, once listed here, were built in the pre-merge fixes below.)
+
+## Pilot v2: pre-merge fixes
+
+- **F1: ordering depends only on configuration.** Go-live rows are now `config` (FSSAI Central licence, GST position, legal entity, grievance officer, support contact, Razorpay keys and webhook secret, UPI provider not `mock`) or `ops` (storage, cron heartbeat, VAPID, legal reviewed). `assertLiveModeReady()` blocks on the config rows only, via `configBlockers()` over the same `buildGoLiveRows` the page uses; it reads settings and env and does no storage or cron I/O. The old tests that listed storage and cron as blockers encoded the bug and were changed on purpose.
+- **F1: alerts instead of blocking.** `checkOpsHealth` (in `src/lib/ops-alerts.ts`) runs from `/api/health` (which also acts as the cron-staleness watchdog) and from every cron run. It notifies both admins (in-app + email) once per incident, suppresses a re-alert if the check flaps within a 2-hour cooldown, and sends one recovery notice only when an alert went out. State is a JSON row in `platform_config` (`opsAlertState`). Mock mode alerts nobody.
+- **F2/F3:** docs now say Node 22, cron every 5 minutes (banner after `cronStaleMinutes`, default 15), one `ADMIN_EMAILS` row and `EMAIL_ADAPTER=resend` at go-live. `next-env.d.ts` is untracked and git-ignored; `pretypecheck` runs `next typegen`, so `npm ci && npm run typecheck` passes on a fresh clone before any build and a build leaves `git status` clean (proved in a fresh clone).
+- **F4: account-delete dialog.** Root cause found: the e2e test waited for `getByText(/open order/i)`, which also matches the modal's own static sentence ("You must have no open orders"), so it passed before the server answered and cancelled the order while the delete request was still in flight. The request then succeeded, the account was deleted, the page navigated away and the fields were gone. The dialog itself was never at fault. The test now waits for the server's refusal text. Independently, the behaviour is now explicit and tested: a refused attempt keeps the dialog open and the typed `DELETE`, clears the password and says "Enter your password again".
+- **F5: Sponsored card and meal plans.** The feed shows at most one labelled "SPONSORED" card above the ranked list, linked to `/legal/how-ranking-works#sponsored` (the section is in the seed text; an already-seeded database gets it when an admin publishes the document). Kitchens manage plans at `/seller/plans` (create, edit, pause; the nav tab appears only while the flag is on); buyers book from the kitchen page and manage weeks at `/plans`. A plan's "price per day" is read from its dishes (food is paid at the door at listed prices), and the skip cut-off can be set per plan (1–72 h) or left at the platform default.
+- **F5: pause vs cancel.** Weeks are booked explicitly, so a buyer's **pause** skips every remaining day that is still beyond the cut-off and keeps the plan on their list to book again; **cancel** does the same and removes it. Each skipped day follows the single-skip rule: its own fee share is refunded if the kitchen has not accepted it, otherwise kept.
+- **F5: bug found and fixed while building it.** A week is one gateway payment held on the first day's order, so cancelling that first day would have refunded the whole week's fee. `refundOrderPayment` now caps a plan order's refund at its own day's share (tested). Also fixed: PadosiPlate Plus never opened the Razorpay sheet in live mode and a buyer who paid and closed the tab got nothing; it now opens checkout, verifies and captures like orders do, and the webhook activates the month too.
+- **F6: mobile coverage.** The money-path scenarios 1, 2, 3, 5, 6, 9, 10, 13 and 23b run on both projects (the other desktop scenarios are skipped on mobile in `beforeEach`). Each project has its own people and kitchen numbers because they share one database; browser contexts opened by the specs use the phone profile. On a phone the QR is hidden by design and the "Pay with UPI app" button is shown, so scenario 3 checks that button and its `upi://pay` link on mobile and the QR on desktop. If only the mobile project is run, the first admin step enrols the admin itself.
+
+## Release: real Razorpay keys
+
+- **Payments mode is its own switch.** `paymentsMode()` (`src/lib/payments/mode.ts`) returns `mock | razorpay_test | razorpay_live` from `PAYMENTS_ADAPTER`, `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`; an unrecognised key prefix makes payments return 503 and logs only a short `abc_def_` style prefix (never the secret part). `MOCK_MODE` stays for geocoding, FSSAI lookup, delivery, SMS/WhatsApp, e-mail and storage. A test that scans the payment modules fails if one imports `isMockMode` again.
+- **The go-live guard follows the mode, not `MOCK_MODE`.** `assertLiveModeReady()` is a no-op for `mock` and `razorpay_test`; for `razorpay_live` it refuses with the instruction "Live Razorpay keys need MOCK_MODE=false…" when `MOCK_MODE=true`, otherwise it checks the configuration rows (still no I/O). It now runs before every money-taking action: order fee (and so meal plans and bulk orders, which create orders), kitchen plan, Plus and the ₹1 UPI check. Kitchen plans and the ₹1 check were unguarded before.
+- **Mock-only routes are 404 outside `mock`** (`mock-complete`, the mock branch of `plus/complete`, `seller/upi-verify/complete` in mock mode), checked before anything else so there is no free-payment path with real keys. Clients only render the fake sheet when the server's payload says `mode: 'mock'`.
+- **Shared account.** Every Razorpay order carries `notes.app='padosiplate'`, `env` (the SITE_URL host), `kind` (`order_fee`, `kitchen_plan`, `plus`, `meal_plan`, `bulk`, `upi_check`, `smoke`) and `ref`; receipts start with `pp-` (the receipt prefix changed from `pp_`). The webhook still checks the signature first (400 on a bad one), then acknowledges events whose order is not ours (no matching row, or a different `notes.app`) with 200 `ignored_foreign`, never calling `ensureCaptured` or refunding. Foreign events leave only the dedupe row, purged after the new setting `webhookEventRetentionDays` (default 30). Unknown refunds, payments with no order and unknown orders are all `ignored_foreign`.
+- **Checkout.** The real Checkout opens in both Razorpay modes through one function (`launchRazorpay`), now also used by the order, ₹1-check, plan, Plus and meal-plan screens; the script gets the page's CSP nonce, prefill is name and e-mail from the payer's own session (`/api/auth/me` now returns the signed-in user's own e-mail), and the theme is the `leaf` token (a test keeps them equal). An e2e-only probe page runs it against a stubbed `checkout.razorpay.com` under the CSP fixture (scenario 24).
+- **Banners and health.** `PaymentsBanner`: amber "Test payments: no real money is charged." on checkout, seller screens (₹1 check, plan purchase) and Plus, and in `/admin`; red in `/admin` for live keys with `MOCK_MODE=true` or an invalid key. `/admin/go-live` has an ops row "Payments mode" (never blocking); `/api/health` adds `paymentsMode` (`mock`, `razorpay_test`, `razorpay_live` or `invalid_key`).
+- **`npm run razorpay:check`** (`scripts/razorpay-check.mjs`) prints the mode and key prefix, creates a ₹1 order (`notes.kind='smoke'`, receipt `pp-smoke-<time>`), reads it back and prints id and status. It refuses `mock`, exits non-zero with the exact "Razorpay rejected the keys" text on a 401 and never captures.
+- **Tests that selected the payment path through `MOCK_MODE`** (capture, orders-payments, caps-tds-upi) now select it through the keys (`rzp_test_` for the real path, `PAYMENTS_ADAPTER=mock` for the fake one). The e2e web server sets `PAYMENTS_ADAPTER=mock`. The go-live "Razorpay keys" configuration row stays on the page but cannot be what stops an order any more (live keys imply keys are present).
+- **Not changed:** the legacy Mall full-payment path (flag off) keeps its own flow; kitchen subscriptions/Plus/meal plans keep their rules.

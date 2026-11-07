@@ -10,6 +10,7 @@ type Policy = {
   visibility: 'public' | 'private';
   allowed: ('image' | 'video' | 'pdf')[];
   encrypt?: boolean;
+  maxBytes?: number;
 };
 
 /**
@@ -27,6 +28,9 @@ const POLICIES: Record<UploadPurpose, Policy> = {
   address_proof: { roles: ['seller'], visibility: 'private', allowed: ['image', 'pdf'], encrypt: true },
   complaint: { roles: ['buyer', 'seller', 'admin'], visibility: 'private', allowed: ['image'] },
   fssai_content: { roles: ['admin'], visibility: 'public', allowed: ['image'] },
+  upi_evidence: { roles: ['seller'], visibility: 'private', allowed: ['image'] },
+  chat_image: { roles: ['buyer', 'seller'], visibility: 'private', allowed: ['image'], maxBytes: 2 * 1024 * 1024 },
+  review_photo: { roles: ['buyer', 'seller'], visibility: 'public', allowed: ['image'], maxBytes: 4 * 1024 * 1024 },
   attachment: { roles: ['seller', 'admin', 'buyer'], visibility: 'private', allowed: ['image', 'pdf'] },
 };
 
@@ -49,6 +53,7 @@ export const POST = api(async (req) => {
   if (purpose === 'id_proof' && form.get('idType') === 'aadhaar' && form.get('aadhaarMasked') !== 'true') {
     throw new ApiError(400, 'Mask the first 8 digits of your Aadhaar before uploading');
   }
+  if (policy.maxBytes && file.size > policy.maxBytes) throw new ApiError(400, `Max file size is ${Math.round(policy.maxBytes / (1024 * 1024))} MB`);
   const buffer = Buffer.from(await file.arrayBuffer());
   const saved = await saveUpload({
     ownerId: session.uid,

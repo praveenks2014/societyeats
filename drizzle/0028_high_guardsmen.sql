@@ -1,0 +1,1 @@
+ALTER TABLE "meal_plans" ADD COLUMN "skip_cutoff_hours" integer;

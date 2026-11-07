@@ -14,7 +14,10 @@ export type UploadPurpose =
   | 'address_proof'
   | 'complaint'
   | 'attachment'
-  | 'fssai_content';
+  | 'fssai_content'
+  | 'upi_evidence'
+  | 'chat_image'
+  | 'review_photo';
 
 export type Detected = { mime: string; ext: string; kind: 'image' | 'video' | 'pdf' };
 

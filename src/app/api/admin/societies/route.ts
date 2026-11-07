@@ -36,7 +36,7 @@ export const POST = api(async (req) => {
   const db = await getDb();
   const [s] = await db
     .insert(societies)
-    .values({ ...v, pincode: v.pincode || null, inviteCode: newInviteCode(v.name), isLive: v.isLive ?? false })
+    .values({ ...v, pincode: v.pincode || null, waGroupName: v.waGroupName || null, inviteCode: newInviteCode(v.name), isLive: v.isLive ?? false })
     .returning();
   await recordAudit({ actorId: admin.uid, action: 'society.create', targetType: 'society', targetId: s.id });
   return ok({ society: s }, 201);

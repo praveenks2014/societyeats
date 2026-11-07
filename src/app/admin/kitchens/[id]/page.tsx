@@ -1,13 +1,17 @@
 'use client';
 
+import { KitchenControls } from './kitchen-controls';
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Modal, Select, Skeleton, Textarea, VegDot } from '@/components/ui';
 import { FoodImage } from '@/components/food-image';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 
 type Detail = {
+  strikes?: { id: number; kind: string; reason: string | null; createdAt: string; liftedAt: string | null }[];
+  capOverride?: { maxOrdersPerDay?: number; maxFoodValuePerDayPaise?: number; maxFoodValueTotalPaise?: number; expiresAt?: string } | null;
+  pausedReason?: string | null;
   kitchen: {
     userId: number;
     kitchenName: string;
@@ -45,8 +49,8 @@ const CATEGORIES = [
 const fmt = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '—');
 type Dialog = null | { kind: 'request_changes' | 'reject' } | { kind: 'delist' } | { kind: 'message' } | { kind: 'grant' } | { kind: 'hide'; dishId: number; title: string } | { kind: 'extend'; subId: number } | { kind: 'cancel'; subId: number } | { kind: 'refund'; subId: number };
 
-export default function KitchenDetail({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export default function KitchenDetail({ params }: { params: Promise<{ id: string }> }) {
+  const id = Number(use(params).id);
   const toast = useToast();
   const [d, setD] = useState<Detail | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -121,6 +125,8 @@ export default function KitchenDetail({ params }: { params: { id: string } }) {
         <Button variant="ghost" onClick={() => act({ action: d.isFeatured ? 'unfeature' : 'feature' }, d.isFeatured ? 'Unfeatured' : 'Featured ⭐')}>{d.isFeatured ? 'Unfeature' : '⭐ Feature'}</Button>
       </Card>
       {k.listingReviewNote && <p className="rounded-xl bg-turmeric-tint px-3 py-2 text-sm"><strong>Last note:</strong> {k.listingReviewNote}</p>}
+
+      <KitchenControls sellerId={id} strikes={d.strikes ?? []} capOverride={d.capOverride ?? null} pausedReason={d.pausedReason ?? null} onDone={load} />
 
       {/* go-live checks */}
       <Card className="p-4">

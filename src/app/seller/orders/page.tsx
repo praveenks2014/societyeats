@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Card, EmptyState, Input, Skeleton } from '@/components/ui';
-import { StatusPill } from '@/components/order-status';
+import { Badge, Button, Card, EmptyState, Field, Input, Modal, Skeleton, Textarea } from '@/components/ui';
+import { FINISHED_STATUSES, StatusPill } from '@/components/order-status';
 import { OrderThread } from '@/components/order-extras';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
@@ -10,8 +10,8 @@ import { formatINR } from '@/lib/money';
 type FulfillmentType = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
 
 const FULFILLMENT_META: Record<FulfillmentType, { emoji: string; label: string }> = {
-  self_pickup: { emoji: '🏠', label: 'Self pickup' },
-  seller_delivery: { emoji: '🛵', label: 'You deliver' },
+  self_pickup: { emoji: '🏠', label: 'Buyer collects' },
+  seller_delivery: { emoji: '🛵', label: 'You deliver to the door' },
   platform_delivery: { emoji: '📦', label: 'Delivery partner' },
 };
 
@@ -21,29 +21,52 @@ type SellerOrder = {
   fulfillmentType: FulfillmentType;
   subtotalInPaise: number;
   foodTotalInPaise: number;
-  foodPaymentMode: 'upi_now' | 'pay_at_pickup' | null;
   foodPaymentStatus: string | null;
   foodPaymentUtr: string | null;
+  foodPaymentMethod: string | null;
   acceptBy: string | null;
+  scheduledFor?: string | null;
+  scheduledSlot?: string | null;
+  atDoorAt: string | null;
   createdAt: string;
   buyerName: string;
+  buyerNote: string | null;
   deliveryAddressJson: { flat: string; societyName: string } | null;
   items: { id: number; titleSnapshot: string; qty: number }[];
-  delivery: { provider: string; riderName: string | null; status: string } | null;
+  actions: string[];
 };
 
-const NEEDS_ACTION = ['fee_paid', 'awaiting_kitchen_payment_confirmation', 'paid'];
-const IN_PROGRESS = ['accepted', 'preparing', 'ready', 'out_for_delivery', 'delivery_unassigned'];
+const LABEL: Record<string, string> = {
+  accept: 'Accept',
+  preparing: 'Start cooking',
+  ready: 'Mark ready',
+  on_the_way: 'On the way',
+  reached_door: 'Reached your door',
+  buyer_arrived: 'Buyer has arrived',
+  confirm_paid: 'Payment received',
+  not_received: 'Not received',
+  raise_dispute: 'Raise a payment dispute',
+  buyer_couldnt_pay: 'Buyer couldn’t pay',
+  no_show: 'Buyer not at the door',
+  seller_cancel: 'Cancel order',
+};
+const PRIMARY = ['accept', 'preparing', 'ready', 'on_the_way', 'reached_door', 'buyer_arrived', 'confirm_paid'];
+const NEEDS_REASON = ['seller_cancel', 'not_received', 'raise_dispute', 'no_show'];
+const NEEDS_ACTION = ['booked', 'paid', 'payment_claimed', 'at_door', 'collected', 'payment_disputed'];
 
 export default function SellerOrders() {
   const [orders, setOrders] = useState<SellerOrder[] | null>(null);
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [unread, setUnread] = useState<Record<number, number>>({});
   const toast = useToast();
 
   const load = useCallback(() => {
     fetch('/api/seller/orders')
       .then((r) => r.json())
       .then((d) => setOrders(d.orders))
+      .catch(() => {});
+    fetch('/api/chat/unread')
+      .then((r) => (r.ok ? r.json() : { byOrder: {} }))
+      .then((d) => setUnread(d.byOrder ?? {}))
       .catch(() => {});
   }, []);
 
@@ -52,33 +75,6 @@ export default function SellerOrders() {
     const t = setInterval(load, 6000);
     return () => clearInterval(t);
   }, [load]);
-
-  async function act(id: number, action: string) {
-    setBusyId(id);
-    const res = await fetch(`/api/orders/${id}/status`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action }),
-    });
-    const d = await res.json();
-    setBusyId(null);
-    if (!res.ok) {
-      toast(d.error || 'Could not update', 'err');
-      return;
-    }
-    if (action === 'reject') {
-      toast(d.refunded ? 'Order declined — the buyer’s platform fee was refunded' : 'Order declined — refund is being processed');
-    } else if (action === 'ready' && d.order.status === 'delivery_unassigned') {
-      toast('All riders busy — admin alerted, will retry', 'err');
-    } else if (action === 'ready' && d.order.fulfillmentType === 'platform_delivery') {
-      toast('Rider assigned! 🛵');
-    } else if (action === 'ready') {
-      toast('Marked ready ✅');
-    } else if (action === 'out_for_delivery') {
-      toast("Buyer notified you're on the way 🛵");
-    }
-    load();
-  }
 
   if (!orders) {
     return (
@@ -90,29 +86,21 @@ export default function SellerOrders() {
   }
 
   const needsAction = orders.filter((o) => NEEDS_ACTION.includes(o.status));
-  const inProgress = orders.filter((o) => IN_PROGRESS.includes(o.status));
-  const past = orders.filter((o) => !NEEDS_ACTION.includes(o.status) && !IN_PROGRESS.includes(o.status) && o.status !== 'placed');
+  const inProgress = orders.filter((o) => !NEEDS_ACTION.includes(o.status) && !FINISHED_STATUSES.includes(o.status));
+  const past = orders.filter((o) => FINISHED_STATUSES.includes(o.status));
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
       <section>
         <h2 className="mb-3 text-lg font-bold">
-          Needs action{' '}
-          {needsAction.length > 0 && <Badge tone="red">{needsAction.length}</Badge>}
+          Needs action {needsAction.length > 0 && <Badge tone="red">{needsAction.length}</Badge>}
         </h2>
         {needsAction.length === 0 ? (
-          <p className="text-sm text-ink-faint">Nothing waiting — new paid orders appear here.</p>
+          <p className="text-sm text-ink-faint">Nothing waiting — new booked orders appear here.</p>
         ) : (
           <div className="space-y-3">
             {needsAction.map((o) => (
-              <OrderCard key={o.id} order={o} busy={busyId === o.id} onReload={load}>
-                <Button size="sm" loading={busyId === o.id} onClick={() => act(o.id, 'accept')}>
-                  Accept
-                </Button>
-                <Button size="sm" variant="danger" disabled={busyId === o.id} onClick={() => act(o.id, 'reject')}>
-                  Reject &amp; refund fee
-                </Button>
-              </OrderCard>
+              <OrderCard key={o.id} order={o} onReload={load} toast={toast} unread={unread[o.id] ?? 0} />
             ))}
           </div>
         )}
@@ -125,34 +113,7 @@ export default function SellerOrders() {
         ) : (
           <div className="space-y-3">
             {inProgress.map((o) => (
-              <OrderCard key={o.id} order={o} busy={busyId === o.id} onReload={load}>
-                {o.status === 'accepted' && (
-                  <Button size="sm" loading={busyId === o.id} onClick={() => act(o.id, 'preparing')}>
-                    Start cooking
-                  </Button>
-                )}
-                {o.status === 'preparing' && (
-                  <Button size="sm" loading={busyId === o.id} onClick={() => act(o.id, 'ready')}>
-                    {o.fulfillmentType === 'platform_delivery' ? 'Mark ready → find rider' : 'Mark ready'}
-                  </Button>
-                )}
-                {o.status === 'ready' && o.fulfillmentType === 'self_pickup' && (
-                  <HandoverEntry order={o} label="Collected" onDone={load} />
-                )}
-                {o.status === 'ready' && o.fulfillmentType === 'seller_delivery' && (
-                  <Button size="sm" loading={busyId === o.id} onClick={() => act(o.id, 'out_for_delivery')}>
-                    Out for delivery
-                  </Button>
-                )}
-                {o.status === 'out_for_delivery' && o.fulfillmentType === 'seller_delivery' && (
-                  <HandoverEntry order={o} label="Delivered" onDone={load} />
-                )}
-                {o.delivery && o.fulfillmentType === 'platform_delivery' && ['ready', 'out_for_delivery'].includes(o.status) && (
-                  <span className="text-xs text-ink-soft">
-                    🛵 {o.delivery.riderName ?? 'Assigning…'} · <span className="capitalize">{o.delivery.provider}</span>
-                  </span>
-                )}
-              </OrderCard>
+              <OrderCard key={o.id} order={o} onReload={load} toast={toast} unread={unread[o.id] ?? 0} />
             ))}
           </div>
         )}
@@ -165,7 +126,7 @@ export default function SellerOrders() {
         ) : (
           <div className="space-y-3">
             {past.slice(0, 10).map((o) => (
-              <OrderCard key={o.id} order={o} busy={false} onReload={load} />
+              <OrderCard key={o.id} order={o} onReload={load} toast={toast} unread={unread[o.id] ?? 0} />
             ))}
           </div>
         )}
@@ -174,149 +135,117 @@ export default function SellerOrders() {
   );
 }
 
-function OrderCard({
-  order,
-  busy,
-  children,
-  onReload,
-}: {
-  order: SellerOrder;
-  busy: boolean;
-  children?: React.ReactNode;
-  onReload: () => void;
-}) {
+function OrderCard({ order, onReload, toast, unread = 0 }: { order: SellerOrder; onReload: () => void; toast: (t: string, k?: 'ok' | 'err') => void; unread?: number }) {
   const fMeta = FULFILLMENT_META[order.fulfillmentType];
   const [chat, setChat] = useState(false);
-  const toast = useToast();
-  const [payBusy, setPayBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [reasonFor, setReasonFor] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
 
-  async function food(action: 'confirm' | 'not_received' | 'paid_at_handover') {
-    setPayBusy(true);
-    const res = await fetch(`/api/orders/${order.id}/food-payment`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) });
+  async function act(action: string, why?: string) {
+    setBusy(action);
+    const res = await fetch(`/api/orders/${order.id}/action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, reason: why }),
+    });
     const d = await res.json().catch(() => ({}));
-    setPayBusy(false);
+    setBusy(null);
     if (!res.ok) return toast(d.error || 'Could not update', 'err');
-    toast(action === 'confirm' ? 'Payment confirmed ✅' : action === 'not_received' ? 'Reported — admin will look into it' : 'Recorded ✅');
+    setReasonFor(null);
+    setReason('');
+    if (action === 'seller_cancel') toast(d.refundedFeePaise ? 'Order cancelled — the buyer’s fee was refunded and they got credit' : 'Order cancelled');
+    else if (action === 'confirm_paid') toast('Payment confirmed ✅');
+    else toast(`${LABEL[action] ?? 'Updated'} ✅`);
     onReload();
   }
 
-  const open = !['cancelled', 'expired'].includes(order.status);
+  const finished = FINISHED_STATUSES.includes(order.status);
+  const primary = order.actions.filter((a) => PRIMARY.includes(a));
+  const secondary = order.actions.filter((a) => !PRIMARY.includes(a) && a !== 'seller_cancel');
+  const canCancel = order.actions.includes('seller_cancel');
+
   return (
-    <Card className={`p-4 ${busy ? 'opacity-70' : ''}`} data-testid={`seller-order-${order.id}`}>
+    <Card className="p-4" data-testid={`seller-order-${order.id}`}>
       <div className="flex items-center justify-between gap-2">
         <span className="font-semibold">#{order.id} · {order.buyerName}</span>
         <StatusPill status={order.status} />
       </div>
+      {order.scheduledFor && (
+        <div className="mt-1.5 rounded-xl bg-turmeric-tint px-3 py-1.5 text-xs font-semibold text-turmeric-deep" data-testid="scheduled-badge">
+          🗓 Scheduled for {new Date(order.scheduledFor).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}{order.scheduledSlot ? ` (${order.scheduledSlot})` : ''}
+        </div>
+      )}
       <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-leaf">
         <span>{fMeta.emoji}</span>
         <span>{fMeta.label}</span>
       </div>
       <div className="mt-1.5 text-sm text-ink-soft">{order.items.map((i) => `${i.titleSnapshot} ×${i.qty}`).join(', ')}</div>
-      {order.deliveryAddressJson && (
-        <div className="mt-1 text-xs text-ink-faint">📍 {order.deliveryAddressJson.flat}, {order.deliveryAddressJson.societyName}</div>
-      )}
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm">
-          Collect <strong>{formatINR(order.foodTotalInPaise || order.subtotalInPaise)}</strong>{' '}
-          <span className="text-xs text-ink-faint">
-            {order.foodPaymentMode === 'upi_now' ? '· by UPI to your ID' : order.foodPaymentMode === 'pay_at_pickup' ? '· at handover (UPI/cash)' : ''}
-          </span>
-        </span>
-        <div className="flex flex-wrap items-center justify-end gap-2">{children}</div>
+      {order.deliveryAddressJson && <div className="mt-1 text-xs text-ink-faint" data-testid="order-address">📍 {order.deliveryAddressJson.flat}, {order.deliveryAddressJson.societyName}</div>}
+      {order.buyerNote && <div className="mt-1 text-xs text-ink-soft">“{order.buyerNote}”</div>}
+      <div className="mt-2 text-sm">
+        Collect <strong>{formatINR(order.foodTotalInPaise || order.subtotalInPaise)}</strong>{' '}
+        <span className="text-xs text-ink-faint">· paid to you at the door, by UPI to your verified ID</span>
       </div>
 
-      {order.foodPaymentMode === 'upi_now' && order.foodPaymentStatus && open && (
-        <div className="mt-3 rounded-xl bg-rice px-3 py-2 text-sm" data-testid="seller-food-payment">
-          {order.foodPaymentStatus === 'pending' && <span className="text-ink-soft">Waiting for the buyer to pay you by UPI…</span>}
-          {order.foodPaymentStatus === 'buyer_claimed' && (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span>Buyer says they paid{order.foodPaymentUtr ? <> (UTR <strong>{order.foodPaymentUtr}</strong>)</> : ''}. Check your UPI app.</span>
-              <span className="flex gap-2">
-                <Button size="sm" loading={payBusy} onClick={() => food('confirm')} data-testid="payment-received">Payment received</Button>
-                <Button size="sm" variant="secondary" disabled={payBusy} onClick={() => food('not_received')}>Not received</Button>
-              </span>
-            </div>
+      {order.status === 'booked' && order.acceptBy && (
+        <div className="mt-2 text-xs text-ink-faint">Accept by {new Date(order.acceptBy).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} or it auto-cancels, the buyer’s fee is refunded and you get a strike.</div>
+      )}
+      {order.status === 'at_door' && <div className="mt-2 rounded-xl bg-rice px-3 py-2 text-sm">Waiting at the door. The buyer sees your QR now and pays after collecting the food.</div>}
+      {order.status === 'collected' && <div className="mt-2 rounded-xl bg-rice px-3 py-2 text-sm">Buyer has the food and is paying you.</div>}
+      {order.status === 'payment_claimed' && (
+        <div className="mt-2 rounded-xl bg-rice px-3 py-2 text-sm" data-testid="seller-food-payment">
+          Buyer says they paid {order.foodPaymentMethod === 'cash' ? 'in cash' : 'by UPI'}{order.foodPaymentUtr ? <> (UTR <strong>{order.foodPaymentUtr}</strong>)</> : ''}. Check your UPI app.
+        </div>
+      )}
+      {order.status === 'payment_disputed' && <div className="mt-2 rounded-xl bg-chili-tint px-3 py-2 text-sm text-chili-dark">Payment dispute open — PadosiPlate is reviewing.</div>}
+
+      {!finished && order.actions.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {primary.map((a) => (
+            <Button key={a} size="sm" loading={busy === a} disabled={!!busy} onClick={() => act(a)} data-testid={`act-${a}`}>
+              {LABEL[a]}
+            </Button>
+          ))}
+          {secondary.map((a) => (
+            <Button key={a} size="sm" variant="secondary" disabled={!!busy} onClick={() => (NEEDS_REASON.includes(a) ? setReasonFor(a) : act(a))} data-testid={`act-${a}`}>
+              {LABEL[a]}
+            </Button>
+          ))}
+          {canCancel && (
+            <Button size="sm" variant="danger" disabled={!!busy} onClick={() => setReasonFor('seller_cancel')} data-testid="act-seller_cancel">
+              {order.status === 'booked' ? 'Decline & refund fee' : 'Cancel order'}
+            </Button>
           )}
-          {order.foodPaymentStatus === 'confirmed' && <span className="text-leaf">✅ UPI payment confirmed</span>}
-          {order.foodPaymentStatus === 'not_received' && <span className="text-chili-dark">Reported as not received — admin is reviewing</span>}
         </div>
       )}
-      {order.acceptBy && ['fee_paid', 'awaiting_kitchen_payment_confirmation'].includes(order.status) && (
-        <div className="mt-2 text-xs text-ink-faint">Accept by {new Date(order.acceptBy).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} or it auto-cancels and the buyer’s fee is refunded.</div>
-      )}
-      {order.foodPaymentMode === 'pay_at_pickup' && ['ready', 'out_for_delivery'].includes(order.status) && order.foodPaymentStatus !== 'at_handover' && (
-        <div className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-rice px-3 py-2 text-sm">
-          <span>Collect {formatINR(order.foodTotalInPaise)} at handover, then record it:</span>
-          <Button size="sm" loading={payBusy} onClick={() => food('paid_at_handover')} data-testid="paid-at-handover">Paid at handover</Button>
-        </div>
-      )}
-      {open && (
+
+      {!finished && (
         <div className="mt-2">
-          <button className="min-h-[36px] text-xs font-semibold text-leaf underline" onClick={() => setChat((c) => !c)}>
-            {chat ? 'Hide messages' : '💬 Message buyer'}
+          <button className="min-h-[44px] text-xs font-semibold text-leaf underline" onClick={() => setChat((c) => !c)}>
+            {chat ? 'Hide messages' : `💬 Message buyer${unread > 0 ? ` (${unread} new)` : ''}`}
           </button>
           {chat && <OrderThread orderId={order.id} />}
         </div>
       )}
+
+      <Modal open={!!reasonFor} onClose={() => setReasonFor(null)} title={reasonFor ? LABEL[reasonFor] : ''} sheet>
+        <div className="space-y-3">
+          {reasonFor === 'seller_cancel' && (
+            <p className="text-sm text-ink-soft" data-testid="seller-cancel-policy">
+              {order.status === 'booked'
+                ? 'The buyer’s platform fee is refunded in full and they get the same amount as credit.'
+                : 'The buyer’s platform fee is refunded in full, they get the same amount as credit, and you get a strike. Three strikes in 30 days pause your kitchen.'}
+            </p>
+          )}
+          <Field label="Reason (the buyer will see it)">
+            <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} data-testid="reason-input" />
+          </Field>
+          <Button className="w-full" loading={!!busy} disabled={reason.trim().length < 3} onClick={() => reasonFor && act(reasonFor, reason.trim())} data-testid="confirm-reason">
+            Confirm
+          </Button>
+        </div>
+      </Modal>
     </Card>
-  );
-}
-
-/** Pay-at-pickup orders need "paid at handover" recorded before the OTP; UPI orders need the payment confirmed. */
-function HandoverEntry({ order, label, onDone }: { order: SellerOrder; label: string; onDone: () => void }) {
-  const blocked =
-    (order.foodPaymentMode === 'pay_at_pickup' && order.foodPaymentStatus !== 'at_handover') ||
-    (order.foodPaymentMode === 'upi_now' && order.foodPaymentStatus !== 'confirmed');
-  if (blocked) {
-    return <span className="text-xs text-ink-faint">{order.foodPaymentMode === 'upi_now' ? 'Confirm the UPI payment first' : 'Record payment at handover first'}</span>;
-  }
-  return <SellerOtpEntry orderId={order.id} label={label} onDone={onDone} />;
-}
-
-/** Seller enters the buyer's 4-digit OTP at pickup/handover — same endpoint the buyer's mock rider screen uses. */
-function SellerOtpEntry({
-  orderId,
-  label,
-  onDone,
-}: {
-  orderId: number;
-  label: string;
-  onDone: () => void;
-}) {
-  const [otp, setOtp] = useState('');
-  const [busy, setBusy] = useState(false);
-  const toast = useToast();
-
-  async function submit() {
-    setBusy(true);
-    const res = await fetch(`/api/orders/${orderId}/verify-otp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ otp }),
-    });
-    const d = await res.json();
-    setBusy(false);
-    if (!res.ok) {
-      toast(d.error || 'Wrong OTP', 'err');
-      return;
-    }
-    toast(`${label} ✅`);
-    onDone();
-  }
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <Input
-        inputMode="numeric"
-        maxLength={4}
-        placeholder="Buyer's OTP"
-        value={otp}
-        onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-        className="!h-9 w-24 !py-1 text-sm"
-      />
-      <Button size="sm" onClick={submit} loading={busy} disabled={otp.length !== 4}>
-        {label}
-      </Button>
-    </div>
   );
 }

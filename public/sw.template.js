@@ -84,3 +84,40 @@ async function cacheFirst(request) {
   if (fresh.ok) cache.put(request, fresh.clone());
   return fresh;
 }
+
+// ---- web push (Pilot v2 step 13) ----
+self.addEventListener('push', (event) => {
+  let data = { title: 'PadosiPlate', body: '', href: '/' };
+  try {
+    data = { ...data, ...(event.data ? event.data.json() : {}) };
+  } catch {
+    /* a malformed payload still shows a generic notification */
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      tag: data.tag || undefined,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: { href: data.href || '/' },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const href = (event.notification.data && event.notification.data.href) || '/';
+  // Only ever open a path on this site.
+  const target = href.startsWith('/') ? href : '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      for (const w of wins) {
+        if ('focus' in w) {
+          w.navigate(target);
+          return w.focus();
+        }
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});

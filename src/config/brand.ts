@@ -19,7 +19,7 @@ export const BRAND = {
   grievanceOfficer: 'Grievance Officer (placeholder) — grievance@padosiplate.example',
   platformFssaiLicenceNo: '',
   /** Prefix for Razorpay receipts. */
-  receiptPrefix: 'pp_',
+  receiptPrefix: 'pp-',
   /** Session cookie name. */
   cookieName: 'padosi_session',
   /** Convenience alias kept for older call sites. */

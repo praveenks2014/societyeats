@@ -1,12 +1,14 @@
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { ApiError } from '@/lib/api';
 import { recordAudit } from '@/lib/audit';
-import { isMockMode } from '@/lib/config';
+import { paymentsMode } from '@/lib/payments/mode';
+import { assertLiveModeReady } from '@/lib/live-guard';
 import { getDb } from '@/lib/db';
 import { notify, notifyUser } from '@/lib/db/notify';
+import { emit } from '@/lib/notify';
 import { getPlatformSettings } from '@/lib/db/platform';
-import { kitchenSubscriptions, notifications, subscriptionPlans } from '@/lib/db/schema';
-import { effectiveGstBps, subscriptionCharge } from '@/lib/money';
+import { kitchenSubscriptions, notifications, sellerProfiles, subscriptionPlans } from '@/lib/db/schema';
+import { subscriptionCharge, subscriptionGstBps } from '@/lib/money';
 import { createRazorpayOrder, receiptFor } from '@/lib/payments/razorpay';
 import { addDays, DAY_MS } from '@/lib/time';
 import { parseReminderDays } from '@/lib/settings/defs';
@@ -24,11 +26,12 @@ export type SubscriptionCheckout =
 
 /** Creates (or reuses) a pending subscription for `planId` and its Razorpay order. */
 export async function startSubscriptionPayment(sellerId: number, planId: number): Promise<SubscriptionCheckout> {
+  await assertLiveModeReady(); // real money: configuration must be complete (no-op in mock and test-key modes)
   const db = await getDb();
   const [plan] = await db.select().from(subscriptionPlans).where(and(eq(subscriptionPlans.id, planId), eq(subscriptionPlans.active, true)));
   if (!plan) throw new ApiError(404, 'That plan is not available');
   const settings = await getPlatformSettings();
-  const gstBps = effectiveGstBps(settings.platformFeeGstBps, settings.platformGstin);
+  const gstBps = subscriptionGstBps(settings);
   const charge = subscriptionCharge(plan.pricePaise, gstBps);
 
   const pendings = await db
@@ -55,12 +58,12 @@ export async function startSubscriptionPayment(sellerId: number, planId: number)
         status: 'pending_payment',
       })
       .returning();
-    const rzp = await createRazorpayOrder({ amountInPaise: charge.totalPaise, receipt: receiptFor('s', sub.id), notes: { subscriptionId: String(sub.id), sellerId: String(sellerId) } });
+    const rzp = await createRazorpayOrder({ amountInPaise: charge.totalPaise, receipt: receiptFor('s', sub.id), kind: 'kitchen_plan', ref: sub.id, notes: { subscriptionId: String(sub.id), sellerId: String(sellerId) } });
     [sub] = await db.update(kitchenSubscriptions).set({ razorpayOrderId: rzp.id }).where(eq(kitchenSubscriptions.id, sub.id)).returning();
-    if (!isMockMode() && rzp.keyId) return { mode: 'razorpay', subscriptionId: sub.id, amountInPaise: charge.totalPaise, keyId: rzp.keyId, razorpayOrderId: rzp.id };
+    if (paymentsMode() !== 'mock' && rzp.keyId) return { mode: 'razorpay', subscriptionId: sub.id, amountInPaise: charge.totalPaise, keyId: rzp.keyId, razorpayOrderId: rzp.id };
     return { mode: 'mock', subscriptionId: sub.id, amountInPaise: charge.totalPaise };
   }
-  if (!isMockMode()) {
+  if (paymentsMode() !== 'mock') {
     const keyId = process.env.RAZORPAY_KEY_ID!;
     return { mode: 'razorpay', subscriptionId: sub.id, amountInPaise: charge.totalPaise, keyId, razorpayOrderId: sub.razorpayOrderId! };
   }
@@ -118,6 +121,27 @@ export async function grantSubscription(opts: { adminId: number; sellerId: numbe
   await recordAudit({ actorId: opts.adminId, action: 'subscription.grant', targetType: 'subscription', targetId: row.id, meta: { sellerId: opts.sellerId, months: opts.months, reason: opts.reason } });
   await notifyUser(opts.sellerId, 'You have been given free listing time 🎁', `${opts.months} month(s) complimentary — ${opts.reason.trim()}`, '/seller/subscription', { email: true, emailKind: 'subscription_granted' });
   return row;
+}
+
+/**
+ * "Founding kitchen": 90 days free, assigned automatically when an admin approves a kitchen that has never had a
+ * plan (setting `foundingKitchenOffer`). Stacks like any other period; never granted twice.
+ */
+export async function grantFoundingKitchen(sellerId: number, adminId: number | null): Promise<boolean> {
+  const db = await getDb();
+  const settings = await getPlatformSettings();
+  if (!settings.foundingKitchenOffer) return false;
+  const [p] = await db.select({ granted: sellerProfiles.foundingGrantedAt }).from(sellerProfiles).where(eq(sellerProfiles.userId, sellerId));
+  if (!p || p.granted) return false;
+  const now = new Date();
+  const subs = await sellerSubscriptions(sellerId);
+  const { startsAt } = nextPeriod(subs, 3, now);
+  const endsAt = new Date(startsAt.getTime() + 90 * 24 * 60 * 60 * 1000);
+  const [claimed] = await db.update(sellerProfiles).set({ foundingGrantedAt: now }).where(and(eq(sellerProfiles.userId, sellerId), isNull(sellerProfiles.foundingGrantedAt))).returning({ id: sellerProfiles.userId });
+  if (!claimed) return false;
+  await db.insert(kitchenSubscriptions).values({ sellerId, planNameSnapshot: 'Founding kitchen', durationMonthsSnapshot: 3, status: 'waived', startsAt, endsAt, grantedByAdminId: adminId, notes: 'Founding kitchen — free for the first 90 days', paidAt: null });
+  await notifyUser(sellerId, 'Founding kitchen: 90 days free 🎁', 'Your first 90 days on PadosiPlate are free. After that the Monthly plan is ₹199.', '/seller/subscription', { email: true, emailKind: 'subscription_granted' });
+  return true;
 }
 
 export async function extendSubscription(opts: { adminId: number; subscriptionId: number; days: number; reason: string }) {
@@ -183,8 +207,16 @@ export async function syncSubscriptions(now: Date = new Date()): Promise<{ moved
     }
     if (r.endsAt && ['active', 'waived'].includes(eff)) {
       const left = Math.ceil((r.endsAt.getTime() - now.getTime()) / DAY_MS);
-      for (const d of reminderDays) {
-        if (left <= d && left > 0 && (await notifyOnce(r.sellerId, `Subscription ends in ${d} day${d === 1 ? '' : 's'}`, 'Renew from Seller → Subscription to stay visible without a break.', `remind${d}`, r.id, true))) reminded++;
+      // Only the tightest threshold that applies is sent, so a missed run never produces a burst of reminders.
+      const d = reminderDays.filter((x) => left <= x).sort((a, b) => a - b)[0];
+      if (d !== undefined && left > 0) {
+        // The href doubles as the once-per-threshold key; the wording and channels come from the notification catalogue.
+        const href = `/seller/subscription?r=remind${d}-${r.id}`;
+        const [seen] = await db.select({ id: notifications.id }).from(notifications).where(and(eq(notifications.userId, r.sellerId), eq(notifications.href, href)));
+        if (!seen) {
+          await emit('plan_expiring', r.sellerId, { days: d, href }, now);
+          reminded++;
+        }
       }
     }
   }

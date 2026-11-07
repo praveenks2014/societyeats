@@ -3,6 +3,9 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getStorage } from '@/lib/storage';
 import { log } from '@/lib/log';
+import { isMockMode } from '@/lib/config';
+import { paymentsModeInfo } from '@/lib/payments/mode';
+import { getCronStatus } from '@/lib/cron-status';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +27,20 @@ export async function GET() {
     checks.storage = 'fail';
     log.error('health.storage', { err: e });
   }
+  let cronAgeMinutes: number | null = null;
+  try {
+    const c = await getCronStatus();
+    cronAgeMinutes = c.lastRunAt ? Math.round((Date.now() - c.lastRunAt.getTime()) / 60_000) : null;
+  } catch {
+    /* heartbeat is informational; it never fails the probe */
+  }
+  // The probe doubles as the cron-staleness watchdog: external monitors call this even when the scheduler has stopped.
+  try {
+    const { checkOpsHealth, currentCronFacts } = await import('@/lib/ops-alerts');
+    await checkOpsHealth(new Date(), { storageOk: checks.storage === 'ok', ...(await currentCronFacts()) });
+  } catch {
+    /* alerting never fails the probe */
+  }
   const healthy = Object.values(checks).every((v) => v === 'ok');
-  return NextResponse.json({ status: healthy ? 'ok' : 'degraded', checks, time: new Date().toISOString() }, { status: healthy ? 200 : 503 });
+  return NextResponse.json({ status: healthy ? 'ok' : 'degraded', checks, cronAgeMinutes, mockMode: isMockMode(), paymentsMode: paymentsModeInfo().mode ?? 'invalid_key', time: new Date().toISOString() }, { status: healthy ? 200 : 503 });
 }

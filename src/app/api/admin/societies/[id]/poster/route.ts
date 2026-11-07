@@ -17,7 +17,7 @@ export const GET = api<{ params: { id: string } }>(async (_req, { params }) => {
   const db = await getDb();
   const [s] = await db.select().from(societies).where(eq(societies.id, Number(params.id)));
   if (!s || !s.inviteCode) throw new ApiError(404, 'Society not found');
-  const url = joinUrl(s.inviteCode);
+  const url = await joinUrl(s.inviteCode);
   const qrPng = await QRCode.toBuffer(url, { type: 'png', margin: 1, width: 640, errorCorrectionLevel: 'M', color: { dark: '#1E4D2B', light: '#FFFFFF' } });
 
   const pdf = await PDFDocument.create();

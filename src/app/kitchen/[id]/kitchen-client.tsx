@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { FavouriteButton } from '@/components/favourite-button';
 import { Badge, Card, EmptyState, SectionTitle, Stars } from '@/components/ui';
 import { FoodImage } from '@/components/food-image';
 import { DishCard } from '@/components/dish-card';
 import { ShareButton } from '@/components/share-button';
 import { CartBar } from '@/components/cart-bar';
+import { MealPlans } from '@/components/meal-plans';
 import { BADGE_TIER_LABEL } from '@/lib/reputation-labels';
 import { fssaiBadge } from '@/lib/fssai/badge';
 
@@ -45,10 +47,11 @@ type Props = {
     buyerName: string;
     createdAt: string;
     sellerReplyText: string | null;
+    photos?: string[];
   }[];
 };
 
-export function KitchenProfile({ seller, listings, reviews }: Props) {
+export function KitchenProfile({ seller, listings, reviews, closedToday = false, topKitchen = false }: Props & { closedToday?: boolean; topKitchen?: boolean }) {
   return (
     <div className="mx-auto max-w-2xl pt-4">
       {seller.isFeatured && (
@@ -84,7 +87,7 @@ export function KitchenProfile({ seller, listings, reviews }: Props) {
           </div>
         )}
         {seller.kitchenVideoUrl && (
-          // eslint-disable-next-line jsx-a11y/media-has-caption
+           
           <video src={seller.kitchenVideoUrl} controls className="mt-3 w-full rounded-xl bg-ink" />
         )}
 
@@ -93,12 +96,14 @@ export function KitchenProfile({ seller, listings, reviews }: Props) {
           {seller.orderedByCount > 0 && (
             <Badge tone="neutral">Ordered by {seller.orderedByCount} neighbours</Badge>
           )}
+          {topKitchen && <span data-testid="top-kitchen"><Badge tone="green">🏆 Top Kitchen</Badge></span>}
           {seller.badgeTier && (
             <Badge tone="green">{BADGE_TIER_LABEL[seller.badgeTier] ?? `🏅 ${seller.badgeTier}+ orders`}</Badge>
           )}
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 space-y-3">
+          <FavouriteButton sellerId={seller.id} />
           <ShareButton
             text={`Check out ${seller.kitchenName} on PadosiPlate — home-cooked food from our society 🍲`}
           />
@@ -109,7 +114,11 @@ export function KitchenProfile({ seller, listings, reviews }: Props) {
       <section className="mt-8">
         <SectionTitle eyebrow="ON THE MENU" title={`Dishes from ${seller.kitchenName}`} />
         {listings.length === 0 ? (
+          closedToday ? (
+          <EmptyState emoji="🌙" title="Closed today" body="This kitchen is not taking orders today. It reopens tomorrow." />
+        ) : (
           <EmptyState emoji="🍳" title="Nothing on sale right now" body="Check back at the next meal slot." />
+        )
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {listings.map((d) => (
@@ -131,12 +140,19 @@ export function KitchenProfile({ seller, listings, reviews }: Props) {
             {reviews.map((r) => (
               <Card key={r.id} className="p-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold">{r.buyerName}</span>
+                  <span className="text-sm font-semibold">{r.buyerName} <span className="ml-1 text-[11px] font-semibold text-leaf" data-testid="verified-order">✔ Verified order</span></span>
                   <span className="rounded-md bg-leaf px-1.5 py-0.5 text-xs font-bold text-white">
                     ★ {r.rating}
                   </span>
                 </div>
                 {r.text && <p className="mt-1.5 text-sm text-ink-soft">{r.text}</p>}
+                {r.photos && r.photos.length > 0 && (
+                  <div className="mt-2 flex gap-2" data-testid="review-photos">
+                    {r.photos.map((k) => (
+                      <img key={k} src={`/api/files/${k}`} alt="Photo from the buyer" className="h-20 w-20 rounded-xl object-cover" />
+                    ))}
+                  </div>
+                )}
                 {r.sellerReplyText && (
                   <div className="mt-2 rounded-xl bg-rice-deep px-3 py-2 text-sm">
                     <span className="font-semibold">{seller.kitchenName} replied: </span>
@@ -154,6 +170,7 @@ export function KitchenProfile({ seller, listings, reviews }: Props) {
           ← Back to browsing
         </Link>
       </div>
+      <MealPlans sellerId={seller.id} />
       <CartBar />
     </div>
   );
