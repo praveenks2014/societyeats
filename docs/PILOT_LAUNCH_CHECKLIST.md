@@ -9,16 +9,16 @@ Work top to bottom. Everything up to step 6 can be done with `MOCK_MODE=true`; s
 - [ ] **5. Legal placeholders.** Enter legal entity name, GSTIN (GST is only added once a GSTIN is set), registered address, grievance officer and `platformFssaiCentralLicenseNo` in `/admin/settings`. Replace the draft legal pages with lawyer-reviewed text when you have it.
 - [ ] **6. Onboard the first 5 kitchens.** Each kitchen: profile, UPI VPA, FSSAI (assistant or licence number), dishes with photos, subscription, **Submit listing request**. Review in `/admin/kitchens/requests`, message them from the inbox if photos need work, approve dishes, then approve the kitchen.
 - [ ] **7. Share the join links** in the two societies' WhatsApp groups. Watch `/admin` (requests, users, complaints) daily.
-- [ ] **8. Schedule the cron job (required on Autoscale).** Autoscale has no built-in cron, so `/api/cron/run` never runs on its own. Set `CRON_SECRET` in Secrets, then schedule it hourly with cron-job.org:
+- [ ] **8. Schedule the cron job (required on Autoscale).** Autoscale has no built-in cron, so `/api/cron/run` never runs on its own. Set `CRON_SECRET` in Secrets, then schedule it every 5 minutes with cron-job.org:
    1. Sign up at [cron-job.org](https://cron-job.org) and click **Create cronjob**.
    2. **Title:** `PadosiPlate scheduled jobs`. **URL:** `https://<SITE_URL>/api/cron/run` (your deployed domain, e.g. `https://padosiplate.replit.app/api/cron/run`).
-   3. **Execution schedule:** every hour (e.g. "Every 1 hour", minute 0). Hourly is enough; every 15–30 minutes gives faster unpaid-order expiry.
+   3. **Execution schedule:** **Every 5 minutes** (cron-job.org: "Every 5 minutes"). The jobs also run the order timers (accept deadlines, unpaid-order expiry, reminders), so a long gap delays those.
    4. Open the **Advanced** tab:
       - **Request method:** `POST`
       - **Headers → Add:** name `Authorization`, value `Bearer <CRON_SECRET>` (the exact value you stored in Replit Secrets, after the word `Bearer` and one space)
    5. Save, then press **Test run**. A healthy response is HTTP `200` with `{"ok":true, ...}`. `401` means the secret is wrong or `CRON_SECRET` is not set on the deployment.
    6. In cron-job.org enable **notifications on failure**, so you hear about it if the endpoint starts failing.
-   7. Open `/admin`: the red "Scheduled jobs have not run" banner disappears once a run has been recorded. It comes back whenever there has been no successful run for **3 hours**.
+   7. Open `/admin`: the red "Scheduled jobs have not run" banner disappears once a run has been recorded. It comes back whenever there has been no successful run for **`cronStaleMinutes` (default 15 minutes, an admin setting)**, and both admins also get an in-app and e-mail alert once per incident. A late run never stops ordering.
 
    **What stops working if this is not scheduled** (Autoscale has no built-in cron, so nothing calls the route by itself):
    - **Subscription expiry and grace:** status is still derived from dates on read, but reminder emails and the expiry sweep do not run.
