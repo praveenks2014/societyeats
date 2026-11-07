@@ -13,7 +13,9 @@ export async function runScheduledJobs(now: Date = new Date()) {
   const grievanceAlerts = await alertOverdueGrievances(now);
   const { runRetention } = await import('@/lib/retention');
   const retention = await runRetention(now);
+  const { plusReminders } = await import('@/lib/plus');
+  const plusExpiring = await plusReminders(now);
   await pruneRateLimits();
   await recordCronRun(now);
-  return { orderTimers, subscriptions: subs, fssai, retention, grievanceAlerts };
+  return { orderTimers, subscriptions: subs, fssai, retention, grievanceAlerts, plusExpiring };
 }

@@ -123,6 +123,10 @@ export async function markOrderPaid(
     const [rest] = await db.select().from(restaurants).where(eq(restaurants.id, order.restaurantId));
     if (rest?.managerUserId) await notify(rest.managerUserId, `New pickup order #${orderId} 🛍️`, 'A buyer just paid for an order-ahead pickup.', '/restaurant');
   }
+  if (order.mealPlanSubId) {
+    const { onAnchorPaid } = await import('@/lib/meal-plans');
+    await onAnchorPaid(orderId, paymentId, (id, i) => markOrderPaid(id, i));
+  }
   return { won: true, status: order.status };
 }
 

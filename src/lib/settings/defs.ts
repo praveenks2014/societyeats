@@ -110,6 +110,8 @@ export const SETTING_DEFS = {
   plusPriceMonthlyPaise: { kind: 'int', unit: 'paise', min: 0, max: 100_000, def: 9900, group: 'Feature flags', label: 'Plus: monthly price (₹)' },
   plusFeeDiscountBps: { kind: 'int', unit: 'bps', min: 0, max: 10_000, def: 5000, group: 'Feature flags', label: 'Plus: platform-fee discount (%)' },
   plusMonthlyDiscountCapPaise: { kind: 'int', unit: 'paise', min: 0, max: 100_000, def: 20_000, group: 'Feature flags', label: 'Plus: monthly discount cap (₹)' },
+  mealPlanSkipCutoffHours: { kind: 'int', unit: 'count', min: 1, max: 72, def: 12, group: 'Feature flags', label: 'Meal plans: skip a day this many hours before its slot' },
+  bulkMinPortions: { kind: 'int', unit: 'count', min: 2, max: 500, def: 15, group: 'Feature flags', label: 'Bulk orders: minimum portions' },
   bulkOrdersEnabled: { kind: 'bool', def: false, group: 'Feature flags', label: 'Bulk and party orders' },
   campaignsEnabled: { kind: 'bool', def: false, group: 'Feature flags', label: 'Festival campaigns' },
   favouritesEnabled: { kind: 'bool', def: true, group: 'Feature flags', label: 'Favourites and "kitchen is cooking" alerts' },

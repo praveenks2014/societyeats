@@ -577,6 +577,9 @@ export const orders = pgTable('orders', {
   // Platform-fee tax invoice number: PP/2026-27/000123, sequential and gap-free per financial year.
   invoiceNumber: varchar('invoice_number', { length: 24 }).unique(),
   invoiceIssuedAt: timestamp('invoice_issued_at'),
+  // Flag-off features: a day of a meal plan, and the Plus discount taken off this order's fee.
+  mealPlanSubId: integer('meal_plan_sub_id'),
+  plusDiscountPaise: integer('plus_discount_paise').notNull().default(0),
   sellerRegisteredNameSnapshot: varchar('seller_registered_name_snapshot', { length: 160 }),
   gstModeSnapshot: varchar('gst_mode_snapshot', { length: 30 }).notNull().default('unregistered'),
   bookedAt: timestamp('booked_at'),
@@ -1490,3 +1493,77 @@ export const visitCounters = pgTable(
   },
   (t) => [uniqueIndex('visit_counters_pk').on(t.day, t.societyId)],
 );
+
+// ---------- revenue features (all behind flags, off for the pilot) ----------
+
+export const mealPlans = pgTable('meal_plans', {
+  id: serial('id').primaryKey(),
+  sellerId: integer('seller_id').notNull().references(() => users.id),
+  name: varchar('name', { length: 80 }).notNull(),
+  days: jsonb('days').$type<string[]>().notNull(), // mon..sun
+  slot: varchar('slot', { length: 10 }).notNull(), // breakfast | lunch | dinner
+  rotationJson: jsonb('rotation_json').$type<number[]>().notNull(), // listing ids, cycled day by day
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const mealPlanSubs = pgTable('meal_plan_subs', {
+  id: serial('id').primaryKey(),
+  planId: integer('plan_id').notNull().references(() => mealPlans.id),
+  buyerId: integer('buyer_id').notNull().references(() => users.id),
+  anchorOrderId: integer('anchor_order_id'), // the first day's order: carries the one combined fee payment
+  weekStart: varchar('week_start', { length: 10 }).notNull(), // IST date of the first booked day
+  status: varchar('status', { length: 12 }).notNull().default('active'), // active | cancelled
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const featuredPlacements = pgTable('featured_placements', {
+  id: serial('id').primaryKey(),
+  sellerId: integer('seller_id').notNull().references(() => users.id),
+  societyId: integer('society_id').notNull().references(() => societies.id),
+  startsOn: varchar('starts_on', { length: 10 }).notNull(),
+  endsOn: varchar('ends_on', { length: 10 }).notNull(),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const plusMemberships = pgTable('plus_memberships', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  startsAt: timestamp('starts_at'),
+  endsAt: timestamp('ends_at'),
+  pricePaise: integer('price_paise').notNull(),
+  gstPaise: integer('gst_paise').notNull().default(0),
+  status: varchar('status', { length: 16 }).notNull().default('pending_payment'), // pending_payment | active | expired | cancelled
+  razorpayOrderId: varchar('razorpay_order_id', { length: 80 }),
+  razorpayPaymentId: varchar('razorpay_payment_id', { length: 80 }),
+  reminderSentAt: timestamp('reminder_sent_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const bulkRequests = pgTable('bulk_requests', {
+  id: serial('id').primaryKey(),
+  buyerId: integer('buyer_id').notNull().references(() => users.id),
+  sellerId: integer('seller_id').notNull().references(() => users.id),
+  description: text('description').notNull(),
+  portions: integer('portions').notNull(),
+  forDate: varchar('for_date', { length: 10 }).notNull(),
+  status: varchar('status', { length: 12 }).notNull().default('requested'), // requested | quoted | accepted | declined | cancelled
+  quoteItemsJson: jsonb('quote_items_json').$type<{ listingId: number; qty: number }[]>(),
+  quoteNote: text('quote_note'),
+  orderId: integer('order_id'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  quotedAt: timestamp('quoted_at'),
+});
+
+export const campaigns = pgTable('campaigns', {
+  id: serial('id').primaryKey(),
+  slug: varchar('slug', { length: 60 }).notNull().unique(),
+  title: varchar('title', { length: 120 }).notNull(),
+  body: text('body').notNull(),
+  startsOn: varchar('starts_on', { length: 10 }).notNull(),
+  endsOn: varchar('ends_on', { length: 10 }).notNull(),
+  sellerIdsJson: jsonb('seller_ids_json').$type<number[]>().notNull(),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});

@@ -3,6 +3,7 @@ import { isPilotMember } from '@/lib/access';
 import { getSession } from '@/lib/auth';
 import { browseListings, comingSoonKitchens } from '@/lib/browse';
 import { getPlatformSettings } from '@/lib/db/platform';
+import { sponsoredFor } from '@/lib/featured';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,5 +26,5 @@ export const GET = api(async (req) => {
     cuisine: sp.get('cuisine') || undefined,
     q: sp.get('q') || undefined,
   });
-  return ok({ ...result, comingSoon: await comingSoonKitchens(session?.societyId) });
+  return ok({ ...result, comingSoon: await comingSoonKitchens(session?.societyId), sponsored: await sponsoredFor(session?.societyId) });
 });

@@ -16,6 +16,8 @@ import { fssaiApplications } from '@/lib/db/schema';
 import { desc } from 'drizzle-orm';
 import { sellerCapUsage, sellerFySalesPaise } from './caps';
 import { reserveStock } from './stock';
+import { plusDiscountFor } from '@/lib/plus';
+import { platformFeeBase } from '@/lib/money/fees';
 import { assertSlotCapacity, checkPreOrderTime } from './preorder';
 
 export type HomeOrderInput = {
@@ -28,6 +30,8 @@ export type HomeOrderInput = {
   /** Pre-order for a later slot (IST). Needs the preOrdersEnabled flag. */
   scheduledFor?: Date | null;
   buyerNote?: string;
+  /** Meal plan day: its fee is paid together with the rest of the week (see lib/meal-plans.ts). */
+  mealPlanSubId?: number | null;
 };
 
 /**
@@ -110,7 +114,13 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
   }
 
   const deliveryFee = input.fulfillmentType === 'seller_delivery' && settings.sellerDeliveryFeeEnabled ? profile.sellerDeliveryFeeInPaise : 0;
-  const cfg = feeConfigFromSettings(settings);
+  const baseCfg = feeConfigFromSettings(settings);
+  // PadosiPlate Plus (flag off by default): a percentage off the platform fee, within a monthly cap. Scaling the percentage, floor and
+  // cap together scales every fee by the same factor, so GST and the fee clamps stay consistent.
+  const baseFee = platformFeeBase(subtotal, baseCfg);
+  const plus = await plusDiscountFor(input.buyerId, baseFee);
+  const scale = (n: number) => Math.round((n * (10_000 - plus.discountBps)) / 10_000);
+  const cfg = plus.discountBps > 0 ? { ...baseCfg, feeBps: scale(baseCfg.feeBps), feeMinPaise: scale(baseCfg.feeMinPaise), feeMaxPaise: scale(baseCfg.feeMaxPaise) } : baseCfg;
   const now = new Date();
   const [application] = await db.select().from(fssaiApplications).where(eq(fssaiApplications.sellerId, input.sellerId)).orderBy(desc(fssaiApplications.createdAt)).limit(1);
   const tierInfo = fssaiTierInfo(profile, application ?? null, { deemedDays: settings.fssaiDeemedGrantDaysRegistration, provisionalMaxDays: settings.provisionalMaxDays, now });
@@ -178,6 +188,8 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
         otpCode: otp4(),
         scheduledFor: input.scheduledFor ?? null,
         scheduledSlot: pre?.slot ?? null,
+        mealPlanSubId: input.mealPlanSubId ?? null,
+        plusDiscountPaise: Math.max(0, platformFeeBase(subtotal, baseCfg) - quote.feeBeforeCreditPaise),
         buyerNote: input.buyerNote?.slice(0, 300) ?? null,
         expiresAt: new Date(now.getTime() + settings.unpaidOrderExpiryMinutes * 60_000),
         stockReserved: !input.scheduledFor,
@@ -200,6 +212,7 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
   });
 
   const { order, quote } = created;
+  if (input.mealPlanSubId) return { orderId: order.id, quote, payment: { mode: 'none', orderId: order.id, amountInPaise: 0 } }; // paid with the week's bundle
   if (quote.onlineChargePaise === 0) {
     // Nothing for Razorpay to collect (0% fee, or fully covered by credit).
     await markOrderPaid(order.id, { method: 'none' });

@@ -351,7 +351,7 @@ describe('F3: scheduled pre-orders', () => {
     const { setPlatformSetting } = await import('@/lib/db/platform');
     await setPlatformSetting('provisionalMaxOrdersPerDay', '1');
     const k = await makeLiveKitchen(db, { societyId, qty: 50, fssai: 'provisional' });
-    await db.update(s.sellerProfiles).set({ offersSelfPickup: true, maxOrdersPerSlot: 0 }).where(eq(s.sellerProfiles.userId, k.seller.id));
+    await db.update(s.sellerProfiles).set({ offersSelfPickup: true, maxOrdersPerSlot: 99 }).where(eq(s.sellerProfiles.userId, k.seller.id));
     const buyer = await makeUser(db, 'buyer', { societyId });
     const place = (when?: Date) => createHomeOrder({ buyerId: buyer.id, sellerId: k.seller.id, items: [{ id: k.dish.id, qty: 1 }], fulfillmentType: 'self_pickup', ...(when ? { scheduledFor: when } : {}) });
     await place(day(2, 13)); // books for the day after tomorrow
