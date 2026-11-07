@@ -376,7 +376,13 @@ test('3. delivery happy path: book (fee only) → accept → cook → on the way
   await expect(page.getByTestId('collect')).toBeVisible({ timeout: 20_000 });
   await page.getByTestId('collect').click();
   await expect(page.getByTestId('qr-check')).toContainText(`COOK ${kitchenN}`);
-  await expect(page.getByTestId('upi-qr')).toBeVisible();
+  if (mobileEnv.mobile) {
+    // a phone opens the UPI app (the QR is for scanning from another screen, so it is hidden below the md breakpoint)
+    await expect(page.getByTestId('upi-intent')).toBeVisible();
+    await expect(page.getByTestId('upi-intent')).toHaveAttribute('href', new RegExp(`^upi://pay\\?pa=kitchen${kitchenN}(@|%40)okbank`));
+  } else {
+    await expect(page.getByTestId('upi-qr')).toBeVisible();
+  }
   await expect(page.getByTestId('upi-id')).toContainText(`kitchen${kitchenN}@okbank`);
   await expect(page.getByTestId('door-amount')).toHaveText('₹200');
   await page.getByPlaceholder(/12-digit/).fill('1234');
@@ -698,7 +704,8 @@ test('16. account deletion is blocked while an order is open, then succeeds and 
   await b.page.getByLabel('Your password').fill(PW);
   await b.page.getByTestId('delete-confirm').fill('DELETE');
   await b.page.getByTestId('confirm-delete').click();
-  await expect(b.page.getByText(/open order/i)).toBeVisible();
+  // wait for the server's refusal itself (the modal's own text also says "open orders", so matching that would race the request)
+  await expect(b.page.getByText(/You still have an open order/)).toBeVisible();
   await orderAction(b.page.request, orderId, 'buyer_cancel');
   // a refused attempt keeps the dialog and the typed DELETE, clears the password and says so
   await expect(b.page.getByTestId('delete-confirm')).toHaveValue('DELETE');
