@@ -926,10 +926,11 @@ test('21. favourites and today’s menu: follow a kitchen, the kitchen publishes
   await seller.getByTestId('menu-note').fill('Fresh biryani today');
   await seller.getByTestId('menu-publish').click();
   await expect(seller.getByTestId('menu-url')).toBeVisible();
+  const menuUrl = new URL((await seller.getByTestId('menu-url').innerText()).trim());
 
   const notes = (await api(b.page.request, 'get', '/api/notifications')).json.notifications as { title: string; body: string }[];
   expect(notes.some((n) => /Fresh biryani today/.test(n.body))).toBe(true);
-  await b.page.goto(`/menu/${k.sellerId}`);
+  await b.page.goto(menuUrl.pathname);
   await expect(b.page.getByText('Fresh biryani today')).toBeVisible();
   await ctx.close();
 });
