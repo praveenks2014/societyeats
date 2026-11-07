@@ -17,5 +17,14 @@ export async function runScheduledJobs(now: Date = new Date()) {
   const plusExpiring = await plusReminders(now);
   await pruneRateLimits();
   await recordCronRun(now);
-  return { orderTimers, subscriptions: subs, fssai, retention, grievanceAlerts, plusExpiring };
+  // Operational watchdog: a storage failure (or a late run that just recovered) is an alert, never a blocked order.
+  let storageOk = true;
+  try {
+    await (await (await import('@/lib/storage')).getStorage()).ping();
+  } catch {
+    storageOk = false;
+  }
+  const { checkOpsHealth } = await import('@/lib/ops-alerts');
+  const ops = await checkOpsHealth(now, { storageOk, cronStale: false, cronAgeMinutes: 0 });
+  return { orderTimers, subscriptions: subs, fssai, retention, grievanceAlerts, plusExpiring, ops };
 }

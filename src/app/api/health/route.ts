@@ -33,6 +33,13 @@ export async function GET() {
   } catch {
     /* heartbeat is informational; it never fails the probe */
   }
+  // The probe doubles as the cron-staleness watchdog: external monitors call this even when the scheduler has stopped.
+  try {
+    const { checkOpsHealth, currentCronFacts } = await import('@/lib/ops-alerts');
+    await checkOpsHealth(new Date(), { storageOk: checks.storage === 'ok', ...(await currentCronFacts()) });
+  } catch {
+    /* alerting never fails the probe */
+  }
   const healthy = Object.values(checks).every((v) => v === 'ok');
   return NextResponse.json({ status: healthy ? 'ok' : 'degraded', checks, cronAgeMinutes, mockMode: isMockMode(), time: new Date().toISOString() }, { status: healthy ? 200 : 503 });
 }

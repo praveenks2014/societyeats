@@ -297,3 +297,8 @@ Decisions taken without stopping to ask, in the order they came up. Fixed decisi
 - **500 responses carry a reference** (`x-request-id`) and the same reference is logged, instead of a message that could hold personal data.
 - **Time-dependent test fixed:** a caps test used `maxOrdersPerSlot: 0`, which means "sold out" during a meal slot, so it failed only at certain hours of the day; it now uses 99.
 - **Known gaps:** per-card pricing disclaimer (above); chat attachments beyond images; push to real devices (needs real VAPID keys and a device); WhatsApp/SMS go to the mock outbox only.
+
+## Pilot v2: pre-merge fixes
+
+- **F1: ordering depends only on configuration.** Go-live rows are now `config` (FSSAI Central licence, GST position, legal entity, grievance officer, support contact, Razorpay keys and webhook secret, UPI provider not `mock`) or `ops` (storage, cron heartbeat, VAPID, legal reviewed). `assertLiveModeReady()` blocks on the config rows only, via `configBlockers()` over the same `buildGoLiveRows` the page uses; it reads settings and env and does no storage or cron I/O. The old tests that listed storage and cron as blockers encoded the bug and were changed on purpose.
+- **F1: alerts instead of blocking.** `checkOpsHealth` (in `src/lib/ops-alerts.ts`) runs from `/api/health` (which also acts as the cron-staleness watchdog) and from every cron run. It notifies both admins (in-app + email) once per incident, suppresses a re-alert if the check flaps within a 2-hour cooldown, and sends one recovery notice only when an alert went out. State is a JSON row in `platform_config` (`opsAlertState`). Mock mode alerts nobody.

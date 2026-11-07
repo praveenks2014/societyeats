@@ -15,8 +15,13 @@ describe('go-live checklist', () => {
   test('everything missing: all blocking rows are red; vapid and legal review only warn', () => {
     const rows = buildGoLiveRows(settings({ upiVerifyProvider: 'mock' }), {}, { storageReachable: false, cronFresh: false, legalAllReviewed: false, legalCount: 10 });
     const blockers = liveBlockers(rows).map((r) => r.key);
-    expect(blockers).toEqual(expect.arrayContaining(['platformFssaiCentralLicenseNo', 'gstPosition', 'legalEntity', 'grievanceOfficer', 'support', 'razorpayKeys', 'razorpayWebhook', 'upiProvider', 'storage', 'cron']));
-    expect(rows.find((r) => r.key === 'vapid')).toMatchObject({ status: 'warn', blocking: false });
+    expect(blockers).toEqual(expect.arrayContaining(['platformFssaiCentralLicenseNo', 'gstPosition', 'legalEntity', 'grievanceOfficer', 'support', 'razorpayKeys', 'razorpayWebhook', 'upiProvider']));
+    // operational checks are red on the page but never blockers
+    expect(rows.find((r) => r.key === 'storage')).toMatchObject({ status: 'missing', kind: 'ops', blocking: false });
+    expect(rows.find((r) => r.key === 'cron')).toMatchObject({ status: 'missing', kind: 'ops', blocking: false });
+    expect(blockers).not.toContain('storage');
+    expect(blockers).not.toContain('cron');
+    expect(rows.find((r) => r.key === 'vapid')).toMatchObject({ status: 'warn', kind: 'ops', blocking: false });
     expect(rows.find((r) => r.key === 'legalReviewed')).toMatchObject({ status: 'warn', blocking: false });
     expect(blockers).not.toContain('vapid');
   });

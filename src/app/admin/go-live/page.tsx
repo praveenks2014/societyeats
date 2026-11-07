@@ -6,7 +6,7 @@ import { Badge, Button, Card, Field, Input, Select, Skeleton } from '@/component
 import { useToast } from '@/components/providers';
 
 type Fix = { kind: 'setting'; keys: string[] } | { kind: 'secret'; names: string[] } | { kind: 'link'; href: string; text: string } | { kind: 'info'; text: string };
-type Row = { key: string; label: string; status: 'ok' | 'missing' | 'warn'; blocking: boolean; fix: Fix; detail?: string };
+type Row = { key: string; label: string; status: 'ok' | 'missing' | 'warn'; kind: 'config' | 'ops'; blocking: boolean; fix: Fix; detail?: string };
 type Def = { key: string; kind: string; label: string; hint?: string; options?: string[] };
 
 export default function GoLivePage() {
@@ -48,8 +48,9 @@ export default function GoLivePage() {
             <div>
               <div className="font-semibold">{r.label}</div>
               {r.detail && <div className="mt-0.5 text-xs text-ink-faint">{r.detail}</div>}
+              {r.kind === 'ops' && <div className="mt-0.5 text-xs text-ink-faint">Operational check: admins are alerted, but ordering is never stopped by it.</div>}
             </div>
-            <Badge tone={r.status === 'ok' ? 'green' : r.status === 'warn' ? 'amber' : 'red'}>{r.status === 'ok' ? 'Done' : r.status === 'warn' ? 'Recommended' : 'Missing'}</Badge>
+            <Badge tone={r.status === 'ok' ? 'green' : r.status === 'warn' ? 'amber' : 'red'}>{r.status === 'ok' ? 'Done' : r.status === 'warn' ? 'Recommended' : r.kind === 'ops' ? 'Needs attention' : 'Missing'}</Badge>
           </div>
           {r.status !== 'ok' && r.fix.kind === 'setting' && (
             <div className="mt-3 space-y-2">
