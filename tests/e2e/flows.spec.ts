@@ -942,7 +942,7 @@ test('22. pre-order: a buyer schedules an order for a later day; the fee is paid
   when.setUTCHours(7, 30, 0, 0); // 13:00 IST
   const r = await api(b.page.request, 'post', '/api/orders', { type: 'home_delivery', sellerId: k.sellerId, items: [{ id: k.dishId, qty: 1 }], fulfillmentType: 'self_pickup', scheduledFor: when.toISOString() });
   expect(r.status, JSON.stringify(r.json)).toBe(200);
-  const tooSoon = await api(b.page.request, 'post', '/api/orders', { type: 'home_delivery', sellerId: k.sellerId, items: [{ id: k.dishId, qty: 1 }], fulfillmentType: 'self_pickup', scheduledFor: new Date(Date.now() + 3_600_000).toISOString() });
+  const tooSoon = await api(b.page.request, 'post', '/api/orders', { type: 'home_delivery', sellerId: k.sellerId, items: [{ id: k.dishId, qty: 1 }], fulfillmentType: 'self_pickup', scheduledFor: new Date(Date.now() + 10 * 60_000).toISOString() });
   expect(tooSoon.status).toBe(400);
   const paid = await api(b.page.request, 'post', '/api/payments/mock-complete', { orderId: r.json.orderId, outcome: 'success' });
   expect(paid.status).toBe(200);
