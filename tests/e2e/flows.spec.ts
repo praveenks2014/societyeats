@@ -615,8 +615,9 @@ test('12b. admin changes the platform fee 10% → 8%: new orders snapshot 8%, th
   await row.getByRole('button', { name: /Restore the previous value/ }).click();
   await admin.getByTestId('restore-reason').fill('back to the standard fee');
   await admin.getByTestId('restore-confirm').click();
-  await expect(admin.getByText('Restored')).toBeVisible();
+  // the toast is transient; the durable outcome is the setting itself
   await expect(admin.getByTestId('setting-buyerPlatformFeeBps')).toHaveValue('10');
+  expect(((await api(admin.request, 'get', '/api/admin/settings')).json.settings as Record<string, unknown>).buyerPlatformFeeBps).toBe(10);
   await ctx.close();
   await b.ctx.close();
 });
