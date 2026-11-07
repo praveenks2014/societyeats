@@ -90,3 +90,16 @@ rather than opening a public issue.
 - **Webhooks:** Razorpay signatures verified, events de-duplicated, amounts asserted, captured payments never downgraded.
 - **FSSAI:** the assistant never asks for FoSCoS passwords/OTPs and never files on a seller's behalf.
 - Dev endpoints (`/api/dev/*`) return 404 in production.
+
+## Pilot v2 hardening (completion run)
+
+**Content Security Policy.** `src/proxy.ts` issues a fresh nonce per request:
+`script-src 'self' 'nonce-…' 'strict-dynamic' https://checkout.razorpay.com` (no `'unsafe-inline'` or `'unsafe-eval'` for scripts in production), `style-src 'self' 'unsafe-inline'` (Tailwind and React inline styles), `frame-src` limited to Razorpay and OpenStreetMap (the order-page map), `object-src 'none'`, `frame-ancestors 'none'`, and `report-uri /api/csp-report` plus `report-to csp`. Violation reports are logged (directive and blocked origin only, no query strings). Every page is rendered dynamically, which is what lets Next attach the nonce. The Playwright fixture (`tests/e2e/fixtures.ts`) fails any test that sees a CSP violation, an uncaught page error or a console error.
+
+**Access control tests** (`tests/unit/security-idor.test.ts`). The route tree is walked from disk: every `src/app/api/**/route.ts` must call a session guard, or be on an explicit public list, or authenticate by secret (webhook, cron). Anonymous callers must get 401/403 on every protected route and method; a buyer must get 403 on every `/api/admin/*` and `/api/seller/*` route; a seller on every admin route; a stranger or another kitchen gets 403/404 on someone else's order, invoice, chat, review, complaint and actions. `/api/dev/*` answers 404 unless `E2E=true` and not production.
+
+**Serialisation** (`tests/unit/security-serialisation.test.ts`). The field set of the order view for buyer, kitchen and admin, before and after booking, is snapshotted; no response may contain a secret-like key (hashes, TOTP secrets, API keys) at any depth; the buyer's phone is not in the kitchen's view.
+
+**Logging** (`src/lib/log.ts`). JSON lines with PII-named keys redacted and phone numbers or emails inside free text masked (`maskPii`). `x-request-id` is set by the proxy and echoed on responses; an unexpected 500 returns `Something went wrong (reference <id>)` and logs the same reference, so support can find the line without the user's data in it.
+
+**Rate limits** (`tests/unit/security-ratelimit.test.ts`). Login, register, forgot/reset password, login-code request/verify, email verification and society access requests answer 429 after their configured burst per IP (and per identifier where the route has one); another IP is unaffected.

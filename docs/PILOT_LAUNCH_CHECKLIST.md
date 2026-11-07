@@ -39,3 +39,18 @@ Work top to bottom. Everything up to step 6 can be done with `MOCK_MODE=true`; s
 - **WhatsApp Business relay** for order notifications (today: in-app and e-mail).
 - **Trademark search** for "PadosiPlate" before spending on branding.
 - Bank account / PAN collection, kitchen payouts and platform delivery are intentionally **not** part of this phase.
+
+## Before go-live (Pilot v2): founder's tasks
+
+Open `/admin/go-live`: it lists every blocker and links each to the screen that fixes it. The app refuses to start with `MOCK_MODE=false` while a blocking row is open (same function). In practice:
+
+1. **Legal review.** Have a lawyer review every document in `/admin/legal`, then mark each one *reviewed* (they ship as *draft*). Fill the grievance officer's name and email, the registered address and the GSTIN in `/admin/settings`.
+2. **Platform FSSAI** e-commerce registration number in `/admin/settings`.
+3. **Razorpay** keys and webhook secret (platform fees only); UPI verification provider `razorpay_checkout_vpa`. Add `RAZORPAYX_ACCOUNT_NUMBER` only if you switch to `razorpayx_rpd`.
+4. **Real e-mail**: `EMAIL_ADAPTER=resend`, `RESEND_API_KEY`, `EMAIL_FROM` on a verified domain.
+5. **Object Storage**: create the Replit bucket, `STORAGE_ADAPTER=replit`.
+6. **Push (optional)**: `npm run vapid:generate`, then set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.
+7. **Cron**: schedule `POST /api/cron/run` every 5 minutes with `CRON_SECRET`.
+8. **Admins**: both `ADMIN_EMAILS` accounts log in, change the one-time password and enrol two-factor; keep the recovery codes.
+9. **Backups**: schedule `npm run db:backup` and test one restore.
+10. **GST by a CA** (see below) and a **breach drill** from `docs/BREACH_RUNBOOK.md`.

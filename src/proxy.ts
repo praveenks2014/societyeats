@@ -29,6 +29,25 @@ function allowedHosts(req: NextRequest): Set<string> {
   return hosts;
 }
 
+/** Per-request nonce CSP. 'strict-dynamic' lets the nonce'd Next bootstrap load its own chunks; Razorpay checkout is allow-listed explicitly. */
+export function buildCsp(nonce: string, dev: boolean): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://checkout.razorpay.com${dev ? " 'unsafe-eval'" : ''}`,
+    "style-src 'self' 'unsafe-inline'",
+    'frame-src https://api.razorpay.com https://checkout.razorpay.com https://www.openstreetmap.org',
+    `connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com${dev ? ' ws: wss:' : ''}`,
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    'report-uri /api/csp-report',
+    'report-to csp',
+  ].join('; ');
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -47,7 +66,17 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  const res = NextResponse.next();
+  const nonce = btoa(crypto.randomUUID());
+  const csp = buildCsp(nonce, process.env.NODE_ENV !== 'production');
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set('x-nonce', nonce);
+  const requestId = req.headers.get('x-request-id')?.slice(0, 40) || crypto.randomUUID().slice(0, 8);
+  requestHeaders.set('x-request-id', requestId);
+  requestHeaders.set('Content-Security-Policy', csp);
+  const res = NextResponse.next({ request: { headers: requestHeaders } });
+  res.headers.set('Content-Security-Policy', csp);
+  res.headers.set('x-request-id', requestId);
+  res.headers.set('Reporting-Endpoints', 'csp="/api/csp-report"');
   const token = req.cookies.get(COOKIE)?.value;
   const secret = process.env.JWT_SECRET;
   if (token && secret && !pathname.startsWith('/_next')) {

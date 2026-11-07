@@ -66,6 +66,7 @@ Demo accounts (development only, password `demo1234`): buyer `9999999901`, selle
 | `DOC_ENCRYPTION_KEY` | optional | 32-byte hex key for the AES-GCM encryption of id/address-proof uploads (derived from `JWT_SECRET` when absent — set it separately so rotating `JWT_SECRET` does not orphan stored documents) |
 | `GEOCODE_API_KEY` | optional | society/kitchen geocoding; mock otherwise |
 | `FSSAI_VERIFY_API_KEY` | optional | live licence lookup; mock otherwise |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | optional | browser push; generate with `npm run vapid:generate`. Push is off without them |
 
 The platform's own FSSAI central licence number is entered in `/admin/settings` (`platformFssaiCentralLicenseNo`).
 
@@ -135,4 +136,7 @@ The legal pages under `/legal/*` are **drafts, to be reviewed by a lawyer**. `BR
 - Cron: call `POST /api/cron/run` every 5 minutes (the admin banner appears after 15 minutes of silence; `/api/health` shows `cronAgeMinutes` and `mockMode`).
 - `npm run db:bootstrap` — production-safe setup. `npm run db:seed:demo` — demo data, refuses in production. `npm run db:backup` — gzip `pg_dump` into `./backups`.
 - Webhook events handled at `/api/webhooks/razorpay`: payments, refunds, `fund_account.validation.*` and the ₹1 UPI check orders.
+- Go-live: `/admin/go-live` shows every blocker (the live guard that refuses to start with `MOCK_MODE=false` uses the same check). UPI provider at launch is `razorpay_checkout_vpa`; `mock` is refused when `MOCK_MODE=false`.
+- End-to-end tests (`npm run e2e`) run `next dev` on port 3100 against a throw-away PGlite database in `os.tmpdir()/padosiplate-e2e`; a fixture fails any test with a CSP violation or console error. Pass `--trace off` for speed.
+- Optional features (meal plans, featured placement, Plus, bulk orders, campaigns) are admin flags and default off.
 - Docs: [ADMIN_RUNBOOK](docs/ADMIN_RUNBOOK.md), [SELLER_GUIDE](docs/SELLER_GUIDE.md), [BUYER_FAQ](docs/BUYER_FAQ.md), [DECISIONS](DECISIONS.md#pilot-v2).

@@ -272,3 +272,28 @@ Every ambiguous call made while turning the codebase into the PadosiPlate pilot.
 - **E2E data and artifacts live in `os.tmpdir()`.** Turbopack full-reloads the page when files in the project tree change.
 - **Security headers** are applied to production builds only. CSP keeps `'unsafe-inline'` for scripts because Next injects inline bootstrap scripts; a nonce-based CSP is follow-up.
 - **Cron heartbeat** warns at `cronStaleMinutes` (default 15). Schedule `POST /api/cron/run` every 5 minutes.
+
+## Pilot v2: completion run
+
+Decisions taken without stopping to ask, in the order they came up. Fixed decisions from the brief are not repeated here.
+
+- **Pricing disclaimer once per feed, not per card.** The `pricing` disclaimer sits above the feed; repeating it on every card hid the dishes on a 390px screen. The `consume-by` disclaimer is on the dish page and the receipt.
+- **Mall (per-restaurant) paths untouched.** The legacy flow is behind its flag and out of the pilot; new rules apply to home kitchens only.
+- **Legal pages say pay-at-the-door.** Terms and refund text describe the real money flow: the platform charges only its fee; food is paid to the kitchen at the door.
+- **Legal and disclaimer text lives in the database** (versioned, `draft` / `reviewed`). Re-consent is a modal that blocks the app only for a *material* change; a non-material change is shown but does not block.
+- **Chat is time-limited** (48 hours after completion, a setting), SSE with a polling fallback; the soft filter warns first and sends on "Send anyway". Admins read a thread only with a reason, a fresh 2FA check and an audit row.
+- **Notifications:** in-app and email always on for transactional events; push needs VAPID, a subscription and the user's preference; quiet hours 22:00–07:00 IST except urgent events; WhatsApp/SMS are mock adapters writing to `message_outbox`.
+- **Settings changes need a reason** and are kept in `settings_history` with restore.
+- **A decline counts against acceptance rate** but earns no strike; more than 5 declines in 7 days nudges admins. An order nobody accepts in time gets a "missed" strike.
+- **Pre-orders reserve no stock.** Capacity is counted on the delivery day (provisional caps and slot capacity), and the accept deadline is set from the slot time.
+- **Plus scales the whole fee** (`feeBps`, `feeMin`, `feeMax` together) and snapshots the scaled configuration on the order; the monthly cap is the sum of `plusDiscountPaise` on the buyer's orders in the IST calendar month. Plus is one paid month, never auto-renewed, with one reminder three days before it ends.
+- **Meal plans share one fee payment.** The week's fee is charged once on the first day's order; the other days get captured `payments` rows (`method='plan_bundle'`) holding their own share so a skipped or declined day refunds exactly its share.
+- **Featured placements are labelled "Sponsored", returned separately from the ranked feed** and never mixed into ranking (`/legal/how-ranking-works` says so).
+- **Bulk orders** are quote-then-accept; accepting creates an ordinary scheduled order, so fee, caps and refunds behave as for any order.
+- **Optional features are API-first with minimal pages** (`/plus`, `/bulk`, `/admin/growth`, `/campaigns/[slug]`); all stay behind admin flags that default off.
+- **CSP:** per-request nonce with `'strict-dynamic'` in `src/proxy.ts`; `style-src` keeps `'unsafe-inline'` (React/Tailwind inline styles); `frame-src` includes OpenStreetMap (order-page map) — the Playwright guard found this missing. All pages are dynamic, which Next requires to attach a nonce.
+- **Playwright guard:** a fixture fails any test with a CSP violation, an uncaught page error or a console error (failed network responses are asserted by the tests themselves).
+- **`/api/dev/*` need `E2E=true`** (the outbox endpoint previously only checked `NODE_ENV`).
+- **500 responses carry a reference** (`x-request-id`) and the same reference is logged, instead of a message that could hold personal data.
+- **Time-dependent test fixed:** a caps test used `maxOrdersPerSlot: 0`, which means "sold out" during a meal slot, so it failed only at certain hours of the day; it now uses 99.
+- **Known gaps:** per-card pricing disclaimer (above); chat attachments beyond images; push to real devices (needs real VAPID keys and a device); WhatsApp/SMS go to the mock outbox only.

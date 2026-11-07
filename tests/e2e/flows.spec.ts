@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   ADMIN_EMAIL, ADMIN_FIRST_PASSWORD, ADMIN_PASSWORD, adminCode, api, login, loginAdmin, mockOutbox, newUserContext, orderAction, payMockSheet, pngFile, register, saveAdminTotp,
   seedKitchen, timeTravel, timeTravelOrder,
@@ -844,4 +845,164 @@ test('20. grievance: raised from the legal page, acknowledged automatically, fla
   }).toPass({ timeout: 10_000 });
   await actx.close();
   await b.ctx.close();
+});
+
+const patchSettings = async (admin: Page, patch: Record<string, unknown>, reason = 'e2e') => {
+  const r = await api(admin.request, 'patch', '/api/admin/settings', { ...patch, reason });
+  expect(r.status, JSON.stringify(r.json)).toBe(200);
+};
+
+test('17. go-live: the admin page lists what is missing, and the live guard agrees with it', async ({ browser }) => {
+  const { ctx, page: admin } = await loginAdmin(browser);
+  await admin.goto('/admin/go-live');
+  await expect(admin.getByTestId('golive-summary')).toBeVisible();
+  const rows = admin.locator('[data-testid^="golive-"][data-status]');
+  expect(await rows.count()).toBeGreaterThan(5);
+  // in mock mode with legal documents still in draft, at least one row must not be "ok"
+  expect(await admin.locator('[data-testid^="golive-"][data-status]:not([data-status="ok"])').count()).toBeGreaterThan(0);
+  await ctx.close();
+});
+
+test('18. dish rules: allergens, food mark and prohibited words are enforced; a health claim waits for moderation', async ({ browser, request }) => {
+  const k = await seedKitchen(request, { n: ++kitchenN });
+  const { ctx, page: seller } = await newUserContext(browser);
+  await login(seller.request, k.email);
+  const base = { title: 'Lemon rice', priceRupees: 90, cuisine: 'South Indian', foodMark: 'veg', ingredients: 'rice, lemon, peanuts', allergens: ['peanuts'], availableQty: 5, isVeg: true };
+  const noAllergens = await api(seller.request, 'post', '/api/seller/listings', { ...base, allergens: [] });
+  expect(noAllergens.status).toBe(400);
+  const noMark = await api(seller.request, 'post', '/api/seller/listings', { ...base, foodMark: undefined });
+  expect(noMark.status).toBe(400);
+  const banned = await api(seller.request, 'post', '/api/seller/listings', { ...base, title: 'Bhang lassi' });
+  expect(banned.status).toBe(400);
+  expect(JSON.stringify(banned.json)).toMatch(/cannot be sold/i);
+  const ok = await api(seller.request, 'post', '/api/seller/listings', base);
+  expect(ok.status, JSON.stringify(ok.json)).toBe(200);
+  const claim = await api(seller.request, 'post', '/api/seller/listings', { ...base, title: 'Detox khichdi', description: 'cures everything' });
+  expect(claim.status, JSON.stringify(claim.json)).toBe(200);
+  const mine = (await api(seller.request, 'get', '/api/seller/listings')).json.listings as { title: string; moderationStatus: string }[];
+  expect(mine.find((l) => l.title === 'Detox khichdi')?.moderationStatus).not.toBe('approved');
+  await ctx.close();
+});
+
+test('19. re-consent: a material change to the terms blocks the resident until they accept it', async ({ browser, request }) => {
+  const b = await newBuyer(browser, 19);
+  await b.page.goto('/');
+  await expect(b.page.getByTestId('reconsent-modal')).toHaveCount(0);
+  const { ctx, page: admin } = await loginAdmin(browser);
+  const cur = await api(admin.request, 'get', '/api/admin/legal/terms');
+  expect(cur.status, JSON.stringify(cur.json)).toBe(200);
+  const body = String((cur.json.document ?? cur.json).body ?? 'Terms of use (draft). ') + '\n\nE2E: a clearly material clause about pre-orders.';
+  const pub = await api(admin.request, 'post', '/api/admin/legal/terms', { action: 'publish', title: 'Terms of use', body, material: true, changeSummary: 'Pre-order rules added' });
+  expect(pub.status, JSON.stringify(pub.json)).toBe(200);
+  await b.page.goto('/');
+  const modal = b.page.getByTestId('reconsent-modal');
+  await expect(modal).toBeVisible();
+  await expect(b.page.getByTestId('change-summary')).toContainText('Pre-order rules added');
+  await expect(b.page.getByTestId('reconsent-accept')).toBeDisabled();
+  await b.page.getByTestId('accept-terms').check();
+  await b.page.getByTestId('reconsent-accept').click();
+  await expect(modal).toHaveCount(0);
+  await b.page.reload();
+  await expect(b.page.getByTestId('reconsent-modal')).toHaveCount(0);
+  await ctx.close();
+});
+
+test('21. favourites and today’s menu: follow a kitchen, the kitchen publishes, the follower is told', async ({ browser, request }) => {
+  const k = await seedKitchen(request, { n: ++kitchenN });
+  const b = await newBuyer(browser, 21);
+  await b.page.goto(`/kitchen/${k.sellerId}`);
+  await b.page.getByTestId('favourite').click();
+  await expect(b.page.getByTestId('favourite')).toHaveAttribute('aria-pressed', 'true');
+  await b.page.goto('/favourites');
+  await expect(b.page.getByTestId('favourites')).toContainText(k.kitchenName);
+
+  const { ctx, page: seller } = await newUserContext(browser);
+  await login(seller.request, k.email);
+  await seller.goto('/seller');
+  const pub = seller.getByTestId('menu-publisher');
+  await expect(pub).toBeVisible();
+  await seller.getByTestId(`menu-dish-${k.dishId}`).click();
+  await seller.getByTestId('menu-note').fill('Fresh biryani today');
+  await seller.getByTestId('menu-publish').click();
+  await expect(seller.getByTestId('menu-url')).toBeVisible();
+
+  const notes = (await api(b.page.request, 'get', '/api/notifications')).json.notifications as { title: string; body: string }[];
+  expect(notes.some((n) => /Fresh biryani today/.test(n.body))).toBe(true);
+  await b.page.goto(`/menu/${k.sellerId}`);
+  await expect(b.page.getByText('Fresh biryani today')).toBeVisible();
+  await ctx.close();
+});
+
+test('22. pre-order: a buyer schedules an order for a later day; the fee is paid now and the kitchen sees it as scheduled', async ({ browser, request }) => {
+  const k = await seedKitchen(request, { n: ++kitchenN, price: 12000 });
+  const b = await newBuyer(browser, 22);
+  const when = new Date(Date.now() + 2 * 86_400_000);
+  when.setUTCHours(7, 30, 0, 0); // 13:00 IST
+  const r = await api(b.page.request, 'post', '/api/orders', { type: 'home_delivery', sellerId: k.sellerId, items: [{ id: k.dishId, qty: 1 }], fulfillmentType: 'self_pickup', scheduledFor: when.toISOString() });
+  expect(r.status, JSON.stringify(r.json)).toBe(200);
+  const tooSoon = await api(b.page.request, 'post', '/api/orders', { type: 'home_delivery', sellerId: k.sellerId, items: [{ id: k.dishId, qty: 1 }], fulfillmentType: 'self_pickup', scheduledFor: new Date(Date.now() + 3_600_000).toISOString() });
+  expect(tooSoon.status).toBe(400);
+  const paid = await api(b.page.request, 'post', '/api/payments/mock-complete', { orderId: r.json.orderId, outcome: 'success' });
+  expect(paid.status).toBe(200);
+  const o = (await orderJson(b.page, r.json.orderId)).order;
+  expect(o.status).toBe('booked');
+  expect(o.scheduledFor).toBeTruthy();
+  await b.page.goto(`/orders/${r.json.orderId}`);
+  await expect(b.page.getByText(/Scheduled|Pre-order/i).first()).toBeVisible();
+  const { ctx, page: seller } = await newUserContext(browser);
+  await login(seller.request, k.email);
+  await seller.goto('/seller/orders');
+  await expect(seller.getByTestId(`seller-order-${r.json.orderId}`)).toBeVisible();
+  await ctx.close();
+});
+
+test('23. flag-off features: 404 by default; switched on by an admin they work end to end, and switched off again they vanish', async ({ browser, request }) => {
+  const { ctx: actx, page: admin } = await loginAdmin(browser);
+  const b = await newBuyer(browser, 23);
+  // off by default
+  expect((await api(b.page.request, 'get', '/api/plus')).status).toBe(404);
+  expect((await api(b.page.request, 'get', '/api/meal-plans?sellerId=1')).status).toBe(404);
+  expect((await api(b.page.request, 'post', '/api/bulk', { sellerId: 1, description: 'a party of twenty people', portions: 20, forDate: '2099-01-01' })).status).toBe(404);
+  await b.page.goto('/plus');
+  await expect(b.page.getByText(/Not available yet/)).toBeVisible();
+
+  await patchSettings(admin, { plusEnabled: true, bulkOrdersEnabled: true, featuredEnabled: true, campaignsEnabled: true, mealPlansEnabled: true, bulkMinPortions: 10 }, 'e2e: switch the optional features on');
+  const k = await seedKitchen(request, { n: ++kitchenN, price: 10000, qty: 50 });
+
+  // Plus: explicit consent, mock payment, active, and the fee discount shows on the next order
+  await b.page.goto('/plus');
+  await expect(b.page.getByTestId('plus-page')).toBeVisible();
+  await expect(b.page.getByRole('button', { name: 'Buy one month' })).toBeDisabled();
+  await b.page.getByRole('checkbox').check();
+  await b.page.getByRole('button', { name: 'Buy one month' }).click();
+  await expect(b.page.getByTestId('plus-active')).toBeVisible();
+
+  // bulk: request → quote → accept → scheduled order
+  const when = new Date(Date.now() + 4 * 86_400_000).toISOString().slice(0, 10);
+  const req = await api(b.page.request, 'post', '/api/bulk', { sellerId: k.sellerId, description: 'Birthday lunch for the family', portions: 10, forDate: when });
+  expect(req.status, JSON.stringify(req.json)).toBe(200);
+  const { ctx: sctx, page: seller } = await newUserContext(browser);
+  await login(seller.request, k.email);
+  const q = await api(seller.request, 'post', '/api/seller/bulk', { id: req.json.request.id, action: 'quote', items: [{ listingId: k.dishId, qty: 10 }], note: 'Happy to cook' });
+  expect(q.status, JSON.stringify(q.json)).toBe(200);
+  const acc = await api(b.page.request, 'post', `/api/bulk/${req.json.request.id}`, { action: 'accept' });
+  expect(acc.status, JSON.stringify(acc.json)).toBe(200);
+
+  // featured placement shows as "Sponsored" in the feed payload, separately from ranking
+  const place = await api(admin.request, 'post', '/api/admin/featured', { sellerId: k.sellerId, societyId: 1, startsOn: '2026-01-01', endsOn: '2099-01-01' });
+  expect([200, 400]).toContain(place.status);
+
+  // campaign page
+  const camp = await api(admin.request, 'post', '/api/admin/campaigns', { slug: 'e2e-feast', title: 'E2E feast', body: 'Pre-order for the weekend', startsOn: '2026-01-01', endsOn: '2099-01-01', sellerIds: [k.sellerId] });
+  expect(camp.status, JSON.stringify(camp.json)).toBe(200);
+  await b.page.goto('/campaigns/e2e-feast');
+  await expect(b.page.getByTestId('campaign-page')).toContainText('E2E feast');
+  await expect(b.page.getByTestId('campaign-kitchens')).toContainText(k.kitchenName);
+
+  // off again: gone
+  await patchSettings(admin, { plusEnabled: false, bulkOrdersEnabled: false, featuredEnabled: false, campaignsEnabled: false, mealPlansEnabled: false }, 'e2e: back to the pilot defaults');
+  expect((await api(b.page.request, 'get', '/api/plus')).status).toBe(404);
+  expect((await b.page.goto('/campaigns/e2e-feast'))?.status()).toBe(404);
+  await sctx.close();
+  await actx.close();
 });

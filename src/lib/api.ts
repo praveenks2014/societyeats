@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { log } from '@/lib/log';
+import { log, newRequestId } from '@/lib/log';
 
 export class ApiError extends Error {
   constructor(
@@ -27,8 +27,9 @@ export function api<Ctx = unknown>(fn: Handler<Ctx>): Handler<RouteCtx<Ctx>> {
       if (err instanceof ApiError) {
         return NextResponse.json({ error: err.message, ...(err.code ? { code: err.code } : {}) }, { status: err.status });
       }
-      log.error('api.unhandled', { path: req.nextUrl?.pathname, method: req.method, err });
-      return NextResponse.json({ error: 'Something went wrong' }, { status: 500 });
+      const ref = req.headers?.get?.('x-request-id') ?? newRequestId();
+      log.error('api.unhandled', { path: req.nextUrl?.pathname, method: req.method, ref, err });
+      return NextResponse.json({ error: `Something went wrong (reference ${ref})`, ref }, { status: 500, headers: { 'x-request-id': ref } });
     }
   };
 }

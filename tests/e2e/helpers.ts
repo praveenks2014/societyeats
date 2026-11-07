@@ -43,8 +43,28 @@ export function png(color: [number, number, number] = [200, 120, 60], size = 64)
 }
 export const pngFile = (name = 'photo.png', color?: [number, number, number]) => ({ name, mimeType: 'image/png', buffer: png(color) });
 
-export async function newUserContext(browser: Browser): Promise<{ ctx: BrowserContext; page: Page }> {
-  const ctx = await browser.newContext({ baseURL: 'http://localhost:3100' });
+/** Every CSP violation, page error and console error seen by any guarded context; the fixture in fixtures.ts fails the test if this is not empty. */
+export const guardLog: string[] = [];
+
+/** Watches every page of a context: CSP violations (a document-level event), uncaught page errors and console errors (failed network responses are asserted by the tests themselves). */
+export function guardContext(ctx: BrowserContext): void {
+  void ctx.addInitScript(() => {
+    document.addEventListener('securitypolicyviolation', (e) => console.error(`CSP violation: ${e.violatedDirective} blocked ${e.blockedURI}`));
+  });
+  ctx.on('page', (page) => {
+    page.on('pageerror', (e) => guardLog.push(`pageerror: ${e.message}`));
+    page.on('console', (m) => {
+      if (m.type() !== 'error') return;
+      const t = m.text();
+      if (t.startsWith('Failed to load resource')) return;
+      guardLog.push(`console.error: ${t.slice(0, 300)} @ ${page.url()}`);
+    });
+  });
+}
+
+export async function newUserContext(browser: Browser, opts: { viewport?: { width: number; height: number } } = {}): Promise<{ ctx: BrowserContext; page: Page }> {
+  const ctx = await browser.newContext({ baseURL: 'http://localhost:3100', ...opts });
+  guardContext(ctx);
   return { ctx, page: await ctx.newPage() };
 }
 
