@@ -125,7 +125,11 @@ async function handle(event: string, payload: Payload): Promise<string> {
     const entity = payload.payload?.fund_account_validation?.entity;
     if (!entity?.id) return 'no_validation';
     const v = parseValidation(entity as Record<string, any>);
-    await completeRpdValidation({ ...v, status: event.endsWith('failed') ? 'failed' : 'completed' });
+    const known = await completeRpdValidation({ ...v, status: event.endsWith('failed') ? 'failed' : 'completed' });
+    if (known === null) {
+      const [mine] = await db.select({ id: upiVerifications.id }).from(upiVerifications).where(eq(upiVerifications.validationId, v.id));
+      if (!mine) return 'ignored_foreign'; // another app's RazorpayX validation on the same account
+    }
     return 'upi_validation_recorded';
   }
 

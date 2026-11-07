@@ -249,6 +249,13 @@ describe('R4: a shared Razorpay account', () => {
     expect(f.json).toMatchObject({ outcome: 'ignored_foreign' });
   });
 
+  test('a foreign RazorpayX validation event is ignored too', async () => {
+    env({ PAYMENTS_ADAPTER: undefined, ...TEST_KEYS });
+    const r = await post({ event: 'fund_account.validation.completed', payload: { fund_account_validation: { entity: { id: 'fav_other_app', status: 'completed' } } } }, { eventId: 'evt_foreign_5' });
+    expect(r.status).toBe(200);
+    expect(r.json).toMatchObject({ outcome: 'ignored_foreign' });
+  });
+
   test('a bad signature is still a 400, and our own events behave exactly as before', async () => {
     env({ PAYMENTS_ADAPTER: undefined, ...TEST_KEYS });
     const bad = await post({ event: 'payment.captured', payload: {} }, { eventId: 'evt_bad', badSig: true });
