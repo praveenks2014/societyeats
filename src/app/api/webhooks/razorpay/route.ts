@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { getDb } from '@/lib/db';
-import { kitchenSubscriptions, orders, payments, refunds, upiVerifications, webhookEvents } from '@/lib/db/schema';
+import { plusMemberships, kitchenSubscriptions, orders, payments, refunds, upiVerifications, webhookEvents } from '@/lib/db/schema';
 import { isMockMode } from '@/lib/config';
 import { log } from '@/lib/log';
 import { ensureCaptured } from '@/lib/payments/capture';
@@ -73,6 +73,16 @@ async function handle(event: string, payload: Payload): Promise<string> {
     const [pay] = await db.select().from(payments).where(eq(payments.razorpayOrderId, entity.order_id));
     const [sub] = pay ? [] : await db.select().from(kitchenSubscriptions).where(eq(kitchenSubscriptions.razorpayOrderId, entity.order_id));
     if (!pay && !sub) {
+      // A PadosiPlate Plus month (flag-off feature): same rules, so a buyer who pays and closes the tab still gets the membership.
+      const [plus] = await db.select().from(plusMemberships).where(eq(plusMemberships.razorpayOrderId, entity.order_id));
+      if (plus) {
+        if (event === 'payment.failed') return 'plus_failed_recorded';
+        const want = plus.pricePaise + plus.gstPaise;
+        if (entity.amount !== want || !entity.id) return 'amount_mismatch';
+        if (!isMockMode()) await ensureCaptured({ paymentId: entity.id, razorpayOrderId: entity.order_id, amountInPaise: want });
+        const { activatePurchase } = await import('@/lib/plus');
+        return (await activatePurchase(plus.id, entity.id)) ? 'plus_activated' : 'plus_already_active';
+      }
       // A ₹1 UPI-ownership check for a kitchen (razorpay_checkout_vpa provider).
       const [ver] = await db.select().from(upiVerifications).where(eq(upiVerifications.razorpayOrderId, entity.order_id));
       if (ver && event !== 'payment.failed') {

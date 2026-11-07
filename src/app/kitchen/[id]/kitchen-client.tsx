@@ -7,6 +7,7 @@ import { FoodImage } from '@/components/food-image';
 import { DishCard } from '@/components/dish-card';
 import { ShareButton } from '@/components/share-button';
 import { CartBar } from '@/components/cart-bar';
+import { MealPlans } from '@/components/meal-plans';
 import { BADGE_TIER_LABEL } from '@/lib/reputation-labels';
 import { fssaiBadge } from '@/lib/fssai/badge';
 
@@ -169,6 +170,7 @@ export function KitchenProfile({ seller, listings, reviews, closedToday = false,
           ← Back to browsing
         </Link>
       </div>
+      <MealPlans sellerId={seller.id} />
       <CartBar />
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Button, Card } from '@/components/ui';
+import { launchRazorpay } from '@/components/razorpay';
 
 type Info = { active: boolean; endsAt: string | null; pricePaise: number; discountBps: number; capPaise: number };
 
@@ -25,7 +26,19 @@ export default function PlusPage() {
       setMsg(c.ok ? 'Plus is active.' : 'Payment failed');
       return void load();
     }
-    setMsg('Open Razorpay checkout to finish paying.');
+    launchRazorpay({
+      keyId: j.keyId,
+      razorpayOrderId: j.razorpayOrderId,
+      amountInPaise: j.amountInPaise,
+      description: 'PadosiPlate Plus: one month',
+      onSuccess: async (resp) => {
+        const c = await fetch('/api/plus/complete', { method: 'POST', body: JSON.stringify({ membershipId: j.membershipId, ...resp }) });
+        setMsg(c.ok ? 'Plus is active.' : 'We could not confirm that payment. If money left your account it will be refunded.');
+        void load();
+      },
+      onDismiss: () => setMsg('Payment not completed.'),
+      onLoadError: () => setMsg('Could not open the payment sheet.'),
+    });
   }
   if (off) return <div className="mx-auto max-w-lg pt-6"><h1 className="text-2xl font-bold">PadosiPlate Plus</h1><p className="mt-2 text-sm text-ink-soft">Not available yet.</p></div>;
   if (!info) return <div className="pt-6 text-sm text-ink-faint">Loading…</div>;

@@ -1,21 +1,19 @@
-import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { api, ApiError, ok, readJson } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
-import { getDb } from '@/lib/db';
-import { mealPlans } from '@/lib/db/schema';
-import { createPlan, mySubs } from '@/lib/meal-plans';
 import { getPlatformSettings } from '@/lib/db/platform';
+import { createPlan, mySubs, sellerPlans } from '@/lib/meal-plans';
 
 export const dynamic = 'force-dynamic';
 
-/** Plans of one kitchen (?sellerId=) for a buyer, plus the buyer's own booked weeks. */
+/** `?sellerId=` → that kitchen's live plans (buyers); `?mine=1` → the signed-in kitchen's own plans, paused ones too. Also returns the buyer's own booked weeks. */
 export const GET = api(async (req) => {
   const session = await requireSession(['buyer', 'seller']);
   if (!(await getPlatformSettings()).mealPlansEnabled) throw new ApiError(404, 'Meal plans are not available');
-  const sellerId = Number(req.nextUrl.searchParams.get('sellerId')) || session.uid;
-  const db = await getDb();
-  return ok({ plans: await db.select().from(mealPlans).where(and(eq(mealPlans.sellerId, sellerId), eq(mealPlans.active, true))), mine: await mySubs(session.uid) });
+  const mine = req.nextUrl.searchParams.get('mine') === '1' && session.role === 'seller';
+  const sellerId = mine ? session.uid : Number(req.nextUrl.searchParams.get('sellerId')) || session.uid;
+  const plans = (await sellerPlans(sellerId)).filter((p) => mine || p.active);
+  return ok({ plans, mine: session.role === 'buyer' ? await mySubs(session.uid) : [], skipCutoffHours: (await getPlatformSettings()).mealPlanSkipCutoffHours });
 });
 
 export const POST = api(async (req) => {

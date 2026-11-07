@@ -84,6 +84,12 @@ export async function onAnchorPaid(anchorOrderId: number, paymentId: string, mar
   }
 }
 
+async function skipCutoffFor(subId: number, platformDefault: number): Promise<number> {
+  const db = await getDb();
+  const [row] = await db.select({ c: mealPlans.skipCutoffHours }).from(mealPlanSubs).innerJoin(mealPlans, eq(mealPlans.id, mealPlanSubs.planId)).where(eq(mealPlanSubs.id, subId));
+  return row?.c ?? platformDefault;
+}
+
 /** Skip one day of a booked week, up to `mealPlanSkipCutoffHours` before its slot. Before the kitchen accepts, that day's fee is refunded. */
 export async function skipDay(buyerId: number, orderId: number, now: Date = new Date()) {
   await assertOn();
@@ -91,7 +97,8 @@ export async function skipDay(buyerId: number, orderId: number, now: Date = new 
   const settings = await getPlatformSettings();
   const [o] = await db.select().from(orders).where(and(eq(orders.id, orderId), eq(orders.buyerId, buyerId)));
   if (!o || !o.mealPlanSubId || !o.scheduledFor) throw new ApiError(404, 'Meal plan day not found');
-  if (o.scheduledFor.getTime() - now.getTime() < settings.mealPlanSkipCutoffHours * 3_600_000) throw new ApiError(409, `A day can be skipped up to ${settings.mealPlanSkipCutoffHours} hours before it`);
+  const cutoff = await skipCutoffFor(o.mealPlanSubId, settings.mealPlanSkipCutoffHours);
+  if (o.scheduledFor.getTime() - now.getTime() < cutoff * 3_600_000) throw new ApiError(409, `A day can be skipped up to ${cutoff} hours before it`);
   return performOrderAction(orderId, { action: 'buyer_cancel', actor: 'buyer', actorId: buyerId, reason: 'Skipped a meal plan day' } as never);
 }
 
@@ -101,4 +108,75 @@ export async function mySubs(buyerId: number) {
   const out = [];
   for (const s of subs) out.push({ ...s, days: await db.select({ id: orders.id, status: orders.status, scheduledFor: orders.scheduledFor }).from(orders).where(eq(orders.mealPlanSubId, s.id)).orderBy(asc(orders.scheduledFor)) });
   return out;
+}
+
+const ALLOWED_SLOTS = ['breakfast', 'lunch', 'dinner'] as const;
+
+/** The kitchen's own plans (paused ones too) with each day's food price, so the page can show "₹X a day". */
+export async function sellerPlans(sellerId: number) {
+  const db = await getDb();
+  const plans = await db.select().from(mealPlans).where(eq(mealPlans.sellerId, sellerId)).orderBy(asc(mealPlans.id));
+  const dishes = await db.select({ id: listings.id, title: listings.title, price: listings.priceInPaise }).from(listings).where(eq(listings.sellerId, sellerId));
+  return plans.map((p) => ({ ...p, dishes: p.rotationJson.map((id) => dishes.find((d) => d.id === id)).filter(Boolean) as { id: number; title: string; price: number }[] }));
+}
+
+/** Edit or pause a plan. Weeks already booked are untouched (they are ordinary orders); the change applies to the next booking. */
+export async function updatePlan(sellerId: number, planId: number, patch: { name?: string; days?: string[]; slot?: string; listingIds?: number[]; skipCutoffHours?: number | null; active?: boolean }) {
+  await assertOn();
+  const db = await getDb();
+  const [plan] = await db.select().from(mealPlans).where(and(eq(mealPlans.id, planId), eq(mealPlans.sellerId, sellerId)));
+  if (!plan) throw new ApiError(404, 'Plan not found');
+  const set: Partial<typeof mealPlans.$inferInsert> = {};
+  if (patch.name !== undefined) {
+    if (patch.name.trim().length < 3) throw new ApiError(400, 'Give the plan a name');
+    set.name = patch.name.trim();
+  }
+  if (patch.days !== undefined) {
+    if (!patch.days.length || patch.days.some((d) => !(DAYS as readonly string[]).includes(d))) throw new ApiError(400, 'Choose the days you cook this plan');
+    set.days = patch.days;
+  }
+  if (patch.slot !== undefined) {
+    if (!(ALLOWED_SLOTS as readonly string[]).includes(patch.slot)) throw new ApiError(400, 'Choose breakfast, lunch or dinner');
+    set.slot = patch.slot;
+  }
+  if (patch.listingIds !== undefined) {
+    const dishes = await db.select().from(listings).where(eq(listings.sellerId, sellerId));
+    if (!patch.listingIds.length || patch.listingIds.some((id) => !dishes.some((d) => d.id === id && d.isActive && d.moderationStatus === 'approved'))) throw new ApiError(400, 'Only your own live dishes can be in a plan');
+    set.rotationJson = patch.listingIds;
+  }
+  if (patch.skipCutoffHours !== undefined) {
+    if (patch.skipCutoffHours !== null && (!Number.isInteger(patch.skipCutoffHours) || patch.skipCutoffHours < 1 || patch.skipCutoffHours > 72)) throw new ApiError(400, 'The skip cut-off must be between 1 and 72 hours');
+    set.skipCutoffHours = patch.skipCutoffHours;
+  }
+  if (patch.active !== undefined) set.active = patch.active;
+  if (!Object.keys(set).length) return plan;
+  const [row] = await db.update(mealPlans).set(set).where(eq(mealPlans.id, planId)).returning();
+  return row;
+}
+
+/**
+ * Pause or cancel the rest of a booked week: every day still beyond the skip cut-off is skipped one by one (each day's own fee share is refunded
+ * if the kitchen has not accepted it yet; otherwise it is kept, exactly as for a single skip). Days inside the cut-off stay booked.
+ * Weeks are booked explicitly, so "paused" keeps the plan on the buyer's list ready to book again and "cancelled" removes it.
+ */
+export async function endSub(buyerId: number, subId: number, to: 'paused' | 'cancelled', now: Date = new Date()) {
+  await assertOn();
+  const db = await getDb();
+  const [sub] = await db.select().from(mealPlanSubs).where(and(eq(mealPlanSubs.id, subId), eq(mealPlanSubs.buyerId, buyerId)));
+  if (!sub) throw new ApiError(404, 'Meal plan not found');
+  if (sub.status !== 'active') throw new ApiError(409, `This plan is already ${sub.status}`);
+  const days = await db.select().from(orders).where(eq(orders.mealPlanSubId, subId));
+  let skipped = 0;
+  let kept = 0;
+  for (const o of days) {
+    if (!o.scheduledFor || o.scheduledFor <= now || ['cancelled_by_buyer', 'cancelled_by_seller', 'expired', 'completed'].includes(o.status) || o.status.startsWith('cancelled')) continue;
+    try {
+      await skipDay(buyerId, o.id, now);
+      skipped++;
+    } catch {
+      kept++; // inside the cut-off, or already in progress
+    }
+  }
+  await db.update(mealPlanSubs).set({ status: to }).where(eq(mealPlanSubs.id, subId));
+  return { skipped, kept };
 }

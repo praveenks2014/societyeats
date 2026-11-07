@@ -27,7 +27,10 @@ export async function refundOrderPayment(opts: {
   if (!pay || !pay.razorpayPaymentId || !['captured', 'refunded'].includes(pay.status)) {
     throw new ApiError(409, 'There is no captured platform payment to refund on this order');
   }
-  const refundable = pay.amountInPaise - pay.refundedInPaise;
+  // A meal-plan week is ONE gateway payment held on the first day's order; that order may only ever get back its own day's share.
+  const [ord] = await db.select({ planSub: orders.mealPlanSubId, fee: orders.onlineChargeInPaise }).from(orders).where(eq(orders.id, opts.orderId));
+  const cap = ord?.planSub ? Math.min(pay.amountInPaise, ord.fee) : pay.amountInPaise;
+  const refundable = cap - pay.refundedInPaise;
   const amount = opts.amountInPaise ?? refundable;
   if (!Number.isInteger(amount) || amount <= 0) throw new ApiError(400, 'Enter a valid refund amount');
   if (amount > refundable) throw new ApiError(409, `Only ${formatINR(refundable)} can still be refunded on this order`);
@@ -36,7 +39,7 @@ export async function refundOrderPayment(opts: {
   const [reserved] = await db
     .update(payments)
     .set({ refundedInPaise: sql`${payments.refundedInPaise} + ${amount}` })
-    .where(and(eq(payments.id, pay.id), sql`${payments.refundedInPaise} + ${amount} <= ${payments.amountInPaise}`))
+    .where(and(eq(payments.id, pay.id), sql`${payments.refundedInPaise} + ${amount} <= ${cap}`))
     .returning();
   if (!reserved) throw new ApiError(409, 'That refund is no longer available');
 

@@ -193,7 +193,11 @@ Allergens (gluten, milk, nuts, peanuts, soy, egg, fish, shellfish, sesame, musta
 
 Kitchens in your own society appear first. After that we order by distance, then by rating, then by how recently a kitchen was active.
 
-Ranking is never sold. Kitchens cannot pay to move up. Any promoted placement would be clearly labelled "Sponsored" and is switched off during the pilot.`,
+Ranking is never sold. Kitchens cannot pay to move up.
+
+## Sponsored kitchens {#sponsored}
+
+When this feature is switched on, a kitchen can be shown in its own clearly labelled "Sponsored" card at the top of the feed, for a fixed set of dates in one society. It is separate from the list below it: it does not change anyone's position in the ranking, and the same kitchen still appears in the ranked list where it would normally appear. At most one Sponsored card is shown at a time. It is switched off unless an admin turns it on.`,
   },
   {
     slug: 'grievance',

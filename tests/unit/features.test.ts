@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { beforeAll, describe, expect, test, vi } from 'vitest';
-import { call, jsonReq, loginAs } from '../helpers/http';
+import { call, jsonReq, loginAs, webhookReq } from '../helpers/http';
 import { makeLiveKitchen, makeSociety, makeUser } from '../helpers/fixtures';
 import { useTestDb } from '../helpers/db';
 import * as s from '@/lib/db/schema';
@@ -12,6 +12,7 @@ let societyId: number;
 beforeAll(async () => {
   process.env.MOCK_MODE = 'true';
   process.env.RAZORPAY_KEY_SECRET = 'rzp_test_secret_value';
+  process.env.RAZORPAY_WEBHOOK_SECRET = 'whsec_test_secret_value';
   db = await useTestDb();
   societyId = (await makeSociety(db)).id;
 });
@@ -152,3 +153,95 @@ describe('F7: meal plans', () => {
     await setPlatformSetting('mealPlansEnabled', 'false');
   });
 });
+
+describe('F5: meal-plan management and refunds', () => {
+  async function bookedWeek() {
+    const { setPlatformSetting } = await import('@/lib/db/platform');
+    const { createPlan, bookWeek } = await import('@/lib/meal-plans');
+    const { markOrderPaid } = await import('@/lib/payments');
+    await setPlatformSetting('mealPlansEnabled', 'true');
+    await setPlatformSetting('preOrderMaxDays', '14');
+    const k = await makeLiveKitchen(db, { societyId });
+    await db.update(s.sellerProfiles).set({ offersSelfPickup: true }).where(eq(s.sellerProfiles.userId, k.seller.id));
+    const u = await makeUser(db, 'buyer', { societyId });
+    const plan = await createPlan(k.seller.id, { name: 'Tiffin week', days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], slot: 'lunch', listingIds: [k.dish.id] });
+    const b = await bookWeek(u.id, plan.id, new Date(Date.now() + 3 * 86_400_000));
+    await markOrderPaid(b.orderIds[0], { razorpayPaymentId: 'pay_wk' });
+    return { k, u, plan, b };
+  }
+
+  test('skipping the FIRST day refunds only that day’s share, never the whole week’s payment', async () => {
+    const { skipDay } = await import('@/lib/meal-plans');
+    const { u, b } = await bookedWeek();
+    const [anchor] = await db.select().from(s.orders).where(eq(s.orders.id, b.orderIds[0]));
+    await skipDay(u.id, b.orderIds[0]);
+    const [pay] = await db.select().from(s.payments).where(eq(s.payments.orderId, b.orderIds[0]));
+    expect(pay.amountInPaise).toBe(b.weekFeePaise); // one gateway payment for the week
+    expect(pay.refundedInPaise).toBe(anchor.onlineChargeInPaise); // …but only the first day's fee goes back
+    expect(pay.refundedInPaise).toBeLessThan(b.weekFeePaise);
+    const refundRows = await db.select().from(s.refunds).where(eq(s.refunds.orderId, b.orderIds[0]));
+    expect(refundRows.reduce((a, r) => a + r.amountInPaise, 0)).toBe(anchor.onlineChargeInPaise);
+  });
+
+  test('a kitchen edits and pauses a plan; a paused plan cannot be booked and other kitchens cannot touch it', async () => {
+    const { updatePlan, bookWeek, sellerPlans } = await import('@/lib/meal-plans');
+    const { k, plan } = await bookedWeek();
+    const other = await makeLiveKitchen(db, { societyId });
+    await expect(updatePlan(other.seller.id, plan.id, { active: false })).rejects.toMatchObject({ status: 404 });
+    await expect(updatePlan(k.seller.id, plan.id, { name: 'x' })).rejects.toMatchObject({ status: 400 });
+    await expect(updatePlan(k.seller.id, plan.id, { listingIds: [other.dish.id] })).rejects.toMatchObject({ status: 400 });
+    await expect(updatePlan(k.seller.id, plan.id, { skipCutoffHours: 0 })).rejects.toMatchObject({ status: 400 });
+    await updatePlan(k.seller.id, plan.id, { name: 'Tiffin week (veg)', skipCutoffHours: 24 });
+    await updatePlan(k.seller.id, plan.id, { active: false });
+    const mine = await sellerPlans(k.seller.id);
+    expect(mine[0]).toMatchObject({ name: 'Tiffin week (veg)', active: false, skipCutoffHours: 24 });
+    expect(mine[0].dishes[0].price).toBeGreaterThan(0);
+    const buyer = await makeUser(db, 'buyer', { societyId });
+    await expect(bookWeek(buyer.id, plan.id, new Date(Date.now() + 3 * 86_400_000))).rejects.toMatchObject({ status: 404 });
+  });
+
+  test('the plan’s own skip cut-off overrides the platform default', async () => {
+    const { updatePlan, skipDay } = await import('@/lib/meal-plans');
+    const { k, u, plan, b } = await bookedWeek();
+    const [o] = await db.select().from(s.orders).where(eq(s.orders.id, b.orderIds[1] ?? b.orderIds[0]));
+    const hoursAway = (o.scheduledFor!.getTime() - Date.now()) / 3_600_000;
+    await db.update(s.mealPlans).set({ skipCutoffHours: Math.ceil(hoursAway) + 1 }).where(eq(s.mealPlans.id, plan.id)); // a cut-off longer than the time left
+    await expect(skipDay(u.id, o.id)).rejects.toMatchObject({ status: 409 });
+    await updatePlan(k.seller.id, plan.id, { skipCutoffHours: null });
+    await expect(skipDay(u.id, o.id)).resolves.toBeTruthy();
+  });
+
+  test('pause and cancel skip the days still beyond the cut-off, once, and the plan stays on the list only when paused', async () => {
+    const { endSub } = await import('@/lib/meal-plans');
+    const { u, b } = await bookedWeek();
+    const r = await endSub(u.id, b.subId, 'paused');
+    expect(r.skipped).toBe(b.orderIds.length);
+    const days = await db.select().from(s.orders).where(eq(s.orders.mealPlanSubId, b.subId));
+    expect(days.every((d) => d.status.startsWith('cancelled'))).toBe(true);
+    const [sub] = await db.select().from(s.mealPlanSubs).where(eq(s.mealPlanSubs.id, b.subId));
+    expect(sub.status).toBe('paused');
+    await expect(endSub(u.id, b.subId, 'cancelled')).rejects.toMatchObject({ status: 409 });
+    const stranger = await makeUser(db, 'buyer', { societyId });
+    await expect(endSub(stranger.id, b.subId, 'cancelled')).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('F5: Plus is activated by the webhook too', () => {
+  test('a buyer who pays and closes the tab still gets the month; a wrong amount does nothing', async () => {
+    const { setPlatformSetting } = await import('@/lib/db/platform');
+    const { startPurchase, activePlus } = await import('@/lib/plus');
+    const { POST } = await import('@/app/api/webhooks/razorpay/route');
+    await setPlatformSetting('plusEnabled', 'true');
+    const u = await makeUser(db, 'buyer', { societyId });
+    const p = await startPurchase(u.id, true);
+    const [m] = await db.select().from(s.plusMemberships).where(eq(s.plusMemberships.id, p.membershipId));
+    const evt = (amount: number, id: string) => ({ event: 'payment.captured', payload: { payment: { entity: { id, order_id: m.razorpayOrderId, amount, method: 'upi' } } } });
+    const wrong = await call(POST as never, webhookReq(evt(m.pricePaise + m.gstPaise + 1, 'pay_p1'), { eventId: 'evt_plus_wrong' }) as never);
+    expect(wrong.status).toBe(200);
+    expect(await activePlus(u.id)).toBeNull();
+    await call(POST as never, webhookReq(evt(m.pricePaise + m.gstPaise, 'pay_p2'), { eventId: 'evt_plus_ok' }) as never);
+    expect(await activePlus(u.id)).not.toBeNull();
+    await setPlatformSetting('plusEnabled', 'false');
+  });
+});
+

@@ -1503,6 +1503,7 @@ export const mealPlans = pgTable('meal_plans', {
   days: jsonb('days').$type<string[]>().notNull(), // mon..sun
   slot: varchar('slot', { length: 10 }).notNull(), // breakfast | lunch | dinner
   rotationJson: jsonb('rotation_json').$type<number[]>().notNull(), // listing ids, cycled day by day
+  skipCutoffHours: integer('skip_cutoff_hours'), // null = the platform default (mealPlanSkipCutoffHours)
   active: boolean('active').notNull().default(true),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
@@ -1513,7 +1514,7 @@ export const mealPlanSubs = pgTable('meal_plan_subs', {
   buyerId: integer('buyer_id').notNull().references(() => users.id),
   anchorOrderId: integer('anchor_order_id'), // the first day's order: carries the one combined fee payment
   weekStart: varchar('week_start', { length: 10 }).notNull(), // IST date of the first booked day
-  status: varchar('status', { length: 12 }).notNull().default('active'), // active | cancelled
+  status: varchar('status', { length: 12 }).notNull().default('active'), // active | paused | cancelled
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 

@@ -7,6 +7,7 @@ import { getDb } from '@/lib/db';
 import { plusMemberships } from '@/lib/db/schema';
 import { activatePurchase } from '@/lib/plus';
 import { verifyCheckoutSignature } from '@/lib/payments';
+import { ensureCaptured } from '@/lib/payments/capture';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,7 @@ export const POST = api(async (req) => {
   } else {
     if (!m.razorpayOrderId || !parsed.data.razorpay_payment_id || !parsed.data.razorpay_signature || !verifyCheckoutSignature(m.razorpayOrderId, parsed.data.razorpay_payment_id, parsed.data.razorpay_signature)) throw new ApiError(400, 'Payment could not be verified');
     paymentId = parsed.data.razorpay_payment_id;
+    await ensureCaptured({ paymentId, razorpayOrderId: m.razorpayOrderId, amountInPaise: m.pricePaise + m.gstPaise });
   }
   const won = await activatePurchase(m.id, paymentId);
   return ok({ active: !!won || m.status === 'active' });

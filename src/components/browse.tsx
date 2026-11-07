@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Chip, EmptyState, Input, SectionTitle, Skeleton } from '@/components/ui';
 import { DishCard } from '@/components/dish-card';
@@ -11,7 +12,7 @@ import { DisclaimerClient } from '@/components/disclaimer-client';
 
 export function Browse() {
   const { loc, openPicker } = useLocation();
-  const [data, setData] = useState<{ listings: ListingCard[]; cuisines: string[]; radiusKm: number; comingSoon?: { sellerId: number; kitchenName: string; societyName: string | null }[] } | null>(null);
+  const [data, setData] = useState<{ listings: ListingCard[]; cuisines: string[]; radiusKm: number; comingSoon?: { sellerId: number; kitchenName: string; societyName: string | null }[]; sponsored?: { sellerId: number; kitchen: string }[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [veg, setVeg] = useState(false);
   const [cuisine, setCuisine] = useState<string | null>(null);
@@ -154,6 +155,17 @@ export function Browse() {
             }
           />
         ) : (
+          <>
+          {data.sponsored && data.sponsored[0] && (
+            <div className="mb-4 rounded-card border border-turmeric bg-turmeric-tint p-4" data-testid="sponsored-card">
+              <span className="eyebrow !text-turmeric-deep" data-testid="sponsored-label">SPONSORED</span>
+              <Link href={`/kitchen/${data.sponsored[0].sellerId}`} className="mt-0.5 flex min-h-[44px] items-center justify-between gap-3 text-base font-bold">
+                <span>{data.sponsored[0].kitchen}</span>
+                <span aria-hidden>›</span>
+              </Link>
+              <p className="text-xs text-ink-soft">Shown for a fixed period. It does not change the ranking below. <Link href="/legal/how-ranking-works#sponsored" className="inline-flex min-h-[44px] items-center underline" data-testid="sponsored-why">Why am I seeing this?</Link></p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {data.listings.map((dish) => (
               <DishCard
@@ -163,6 +175,7 @@ export function Browse() {
               />
             ))}
           </div>
+          </>
         )}
         {data?.comingSoon && data.comingSoon.length > 0 && (
           <div className="mt-8" data-testid="coming-soon">

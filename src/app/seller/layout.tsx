@@ -17,6 +17,7 @@ export default async function SellerLayout({ children }: { children: React.React
   if (!session) redirect('/login?next=/seller');
   if (session.role !== 'seller' && session.role !== 'admin') redirect('/');
 
+  const flags = await getPlatformSettings();
   let unread = 0;
   let subStatus: string = 'active';
   let state = 'approved';
@@ -46,6 +47,7 @@ export default async function SellerLayout({ children }: { children: React.React
           { href: '/seller/earnings', label: 'Sales' },
           { href: '/seller/reviews', label: 'Reviews' },
           { href: '/seller/compliance', label: 'FSSAI' },
+          ...(flags.mealPlansEnabled ? [{ href: '/seller/plans', label: 'Meal plans' }] : []),
         ]}
       />
       {session.role === 'seller' && subStatus === 'grace' && (
