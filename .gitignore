@@ -27,3 +27,4 @@ playwright-report/
 .DS_Store
 tsconfig.tsbuildinfo
 backups/
+next-env.d.ts

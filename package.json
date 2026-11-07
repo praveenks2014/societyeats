@@ -12,6 +12,7 @@
     "db:seed": "tsx src/lib/db/seed.ts",
     "test": "vitest run",
     "prebuild": "node scripts/gen-sw.mjs",
+    "pretypecheck": "next typegen",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
     "verify": "npm run typecheck && npm run lint && npm test && npm run test:e2e",
