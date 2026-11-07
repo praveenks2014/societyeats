@@ -17,6 +17,7 @@ export function AccountClient({ name, email, role }: { name: string; email: stri
   const [pw, setPw] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState(false);
 
   const load = useCallback(() => {
     fetch('/api/auth/sessions').then((r) => r.json()).then((d) => setSessions(d.sessions ?? [])).catch(() => {});
@@ -39,7 +40,12 @@ export function AccountClient({ name, email, role }: { name: string; email: stri
     const res = await fetch('/api/account/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw, confirm }) });
     const d = await res.json().catch(() => ({}));
     setBusy(false);
-    if (!res.ok) return toast(d.error || 'Could not delete the account', 'err');
+    if (!res.ok) {
+      // A refused attempt (an open order, a wrong password) keeps the dialog and the typed DELETE, but never keeps the password in memory.
+      setPw('');
+      setRefused(true);
+      return toast(d.error || 'Could not delete the account', 'err');
+    }
     router.push('/');
     router.refresh();
   }
@@ -83,10 +89,10 @@ export function AccountClient({ name, email, role }: { name: string; email: stri
         <p className="text-xs text-ink-faint">Questions or complaints? <Link href="/legal/grievance" className="underline">Contact the grievance officer</Link>.</p>
       </Card>
 
-      <Modal open={del} onClose={() => setDel(false)} title="Delete your account?" sheet>
+      <Modal open={del} onClose={() => { setDel(false); setPw(''); setRefused(false); }} title="Delete your account?" sheet>
         <p className="text-sm text-ink-soft">This cannot be undone. You must have no open orders.</p>
         <div className="mt-3 space-y-3">
-          <Field label="Your password"><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} /></Field>
+          <Field label="Your password" hint={refused ? 'Enter your password again. We clear it after every attempt for your security.' : undefined}><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} data-testid="delete-password" autoComplete="current-password" /></Field>
           <Field label="Type DELETE to confirm"><Input value={confirm} onChange={(e) => setConfirm(e.target.value)} data-testid="delete-confirm" /></Field>
           <Button variant="danger" className="w-full" loading={busy} disabled={confirm !== 'DELETE' || !pw} onClick={remove} data-testid="confirm-delete">Delete my account</Button>
         </div>
