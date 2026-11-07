@@ -62,8 +62,12 @@ export function guardContext(ctx: BrowserContext): void {
   });
 }
 
+/** Set by the specs: when true every context opened with `newUserContext` uses the 390px phone profile (the `browser` fixture does not inherit the project's device settings). */
+export const mobileEnv = { mobile: false };
+export const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } as const;
+
 export async function newUserContext(browser: Browser, opts: { viewport?: { width: number; height: number } } = {}): Promise<{ ctx: BrowserContext; page: Page }> {
-  const ctx = await browser.newContext({ baseURL: 'http://localhost:3100', ...opts });
+  const ctx = await browser.newContext({ baseURL: 'http://localhost:3100', ...(mobileEnv.mobile ? PHONE : {}), ...opts });
   guardContext(ctx);
   return { ctx, page: await ctx.newPage() };
 }
@@ -127,6 +131,8 @@ export const adminCode = () => totpAt(adminTotpSecret(), Date.now());
 
 /** Password login, then the TOTP step — a fresh admin context in one call. */
 export async function loginAdmin(browser: Browser): Promise<{ ctx: BrowserContext; page: Page }> {
+  // a database nobody has enrolled an admin on yet (e.g. only the mobile project is run): do the first-login set-up
+  if (!fs.existsSync(SECRET_FILE)) return enrolAdminFresh(browser);
   const { ctx, page } = await newUserContext(browser);
   await page.goto('/login');
   await page.getByLabel('Email or phone number').fill(ADMIN_EMAIL);

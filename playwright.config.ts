@@ -33,7 +33,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop', testMatch: /flows\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 900 } } },
-    { name: 'mobile-390', testMatch: /mobile\.spec\.ts/, use: { ...devices['Pixel 5'], viewport: { width: 390, height: 844 } } },
+    { name: 'mobile-390', testMatch: /(mobile|flows)\.spec\.ts/, use: { ...devices['Pixel 5'], viewport: { width: 390, height: 844 } } },
   ],
   webServer: {
     command: `sh -c "rm -rf ${E2E_DIR} && mkdir -p ${E2E_DIR} && tsx scripts/e2e-bootstrap.ts && next dev -p ${PORT}"`,

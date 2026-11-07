@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { flagUiJourney } from './flag-ui';
 import { api, adminSession, mockOutbox, newUserContext, register, seedKitchen } from './helpers';
 
 /** 390px smoke checks: no horizontal overflow, 44px touch targets on the main public pages. */
@@ -72,4 +73,10 @@ test('mobile: the admin console pages fit 390px', async ({ browser }) => {
     await noOverflow(page, path);
   }
   await ctx.close();
+});
+
+test('mobile: Sponsored feed card and meal plans work at 390px with the flags on', async ({ browser, request }) => {
+  const b = await phoneBuyer(browser);
+  await flagUiJourney({ browser, request, buyer: b.page, kitchenNo: 950 + ++m, viewport: { width: 390, height: 844 } });
+  await b.ctx.close();
 });

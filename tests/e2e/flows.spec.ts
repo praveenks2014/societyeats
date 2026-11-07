@@ -1,10 +1,12 @@
-import { type Page } from '@playwright/test';
+import type { Page, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions, TestInfo } from '@playwright/test';
 import { expect, test } from './fixtures';
 import {
   ADMIN_EMAIL, ADMIN_FIRST_PASSWORD, ADMIN_PASSWORD, adminCode, api, login, loginAdmin, mockOutbox, newUserContext, orderAction, payMockSheet, pngFile, register, saveAdminTotp,
   seedKitchen, timeTravel, timeTravelOrder,
 } from './helpers';
 import { totpAt } from '../../src/lib/auth/totp';
+import { flagUiJourney } from './flag-ui';
+import { mobileEnv } from './helpers';
 
 /**
  * Serial journey through the whole pilot, against MOCK_MODE + PGlite.
@@ -15,6 +17,31 @@ test.describe.configure({ mode: 'serial', timeout: 180_000 });
 const PW = 'Sturdy-pass-42';
 const RESIDENT = { phone: '9100000001', email: 'resident@e2e.example', name: 'Rhea Resident' };
 const COOK = { phone: '9100000002', email: 'cook@e2e.example', name: 'Kamala Cook', kitchenName: 'Kamala’s Kitchen' };
+
+/**
+ * The same journeys run on the desktop project and on mobile-390 (the money paths: 1, 2, 3, 5, 6, 9, 10, 13 and 23b). Each project gets its own people
+ * (phone/e-mail offset) and its own kitchen numbers, because both run against one database, and every browser context it opens uses the phone viewport.
+ */
+const MOBILE_SCENARIOS = new Set(['1', '2', '3', '5', '6', '9', '10', '13', '23b']);
+const RESIDENT_BASE = { ...RESIDENT };
+const COOK_BASE = { ...COOK };
+let userOffset = 0;
+test.beforeEach((_args, info) => {
+  const mobile = info.project.name === 'mobile-390';
+  mobileEnv.mobile = mobile;
+  userOffset = mobile ? 500 : 0;
+  Object.assign(RESIDENT, mobile ? { phone: '9100000501', email: 'm-resident@e2e.example' } : RESIDENT_BASE);
+  Object.assign(COOK, mobile ? { phone: '9100000502', email: 'm-cook@e2e.example' } : COOK_BASE);
+  if (mobile && kitchenN < 600) kitchenN = 600;
+});
+type Args = PlaywrightTestArgs & PlaywrightTestOptions & PlaywrightWorkerArgs & PlaywrightWorkerOptions;
+function scenario(title: string, fn: (args: Args, info: TestInfo) => Promise<void>) {
+  const id = title.split('. ')[0].trim();
+  test(title, async (args, info) => {
+    test.skip(info.project.name === 'mobile-390' && !MOBILE_SCENARIOS.has(id), 'desktop-only scenario');
+    await fn(args, info);
+  });
+}
 let sellerId = 0;
 let dishId = 0;
 let kitchenN = 100; // seeded kitchens get unique numbers
@@ -37,7 +64,7 @@ async function verifyEmail(request: Parameters<typeof mockOutbox>[0], email: str
 /** A buyer with a verified email in the E2E society; returns a logged-in context. */
 async function newBuyer(browser: Parameters<typeof newUserContext>[0], n: number) {
   const { ctx, page } = await newUserContext(browser);
-  const u = { phone: `91000${String(1000 + n).padStart(5, '0')}`, email: `buyer${n}@e2e.example`, name: `Buyer ${n}` };
+  const u = { phone: `91000${String(1000 + n + userOffset).padStart(5, '0')}`, email: `buyer${n + userOffset}@e2e.example`, name: `Buyer ${n + userOffset}` };
   await register(page.request, u);
   await verifyEmail(page.request, u.email);
   return { ctx, page, ...u };
@@ -84,7 +111,7 @@ async function openCheckout(page: Page, k: { sellerId: number; dishId: number; k
   await page.goto('/checkout');
 }
 
-test('1. resident joins via invite link (18+ and terms, tower/flat), registers and verifies email through the mock outbox', async ({ page, request }) => {
+scenario('1. resident joins via invite link (18+ and terms, tower/flat), registers and verifies email through the mock outbox', async ({ page, request }) => {
   await page.goto('/join/E2E-ONE');
   await expect(page.getByTestId('join-society')).toHaveText('E2E Heights');
   // Next 16 dev (Turbopack) reloads the page once while it compiles; retry the click until navigation sticks
@@ -120,7 +147,7 @@ test('1. resident joins via invite link (18+ and terms, tower/flat), registers a
   await expect(page.getByText('Please verify your email')).toHaveCount(0);
 });
 
-test('12a. a non-allowlisted user is denied /admin; the allowlisted admin changes the one-time password, then must enrol two-factor', async ({ page, browser }) => {
+scenario('12a. a non-allowlisted user is denied /admin; the allowlisted admin changes the one-time password, then must enrol two-factor', async ({ page, browser }) => {
   await loginUI(page, RESIDENT.email, PW);
   await page.goto('/admin');
   await expect(page).not.toHaveURL(/\/admin/);
@@ -177,7 +204,7 @@ test('12a. a non-allowlisted user is denied /admin; the allowlisted admin change
   await second.ctx.close();
 });
 
-test('2. seller onboards: wizard, ₹1 UPI check, FSSAI "help me apply", dish → admin approves → live with the provisional badge', async ({ page, request, browser }) => {
+scenario('2. seller onboards: wizard, ₹1 UPI check, FSSAI "help me apply", dish → admin approves → live with the provisional badge', async ({ page, request, browser }) => {
   await register(page.request, { ...COOK, role: 'seller' });
   await verifyEmail(page.request, COOK.email);
   const me = await api(page.request, 'get', '/api/auth/me');
@@ -316,7 +343,7 @@ test('2. seller onboards: wizard, ₹1 UPI check, FSSAI "help me apply", dish �
 
 let k1 = { sellerId: 0, dishId: 0, kitchenName: '', email: '' };
 
-test('3. delivery happy path: book (fee only) → accept → cook → on the way → at the door → QR → collected → paid with UTR → confirmed → review', async ({ page, browser, request }) => {
+scenario('3. delivery happy path: book (fee only) → accept → cook → on the way → at the door → QR → collected → paid with UTR → confirmed → review', async ({ page, browser, request }) => {
   k1 = await seedKitchen(request, { n: ++kitchenN, cash: true });
   await login(page.request, RESIDENT.email);
   await openCheckout(page, k1, 2);
@@ -374,7 +401,7 @@ test('3. delivery happy path: book (fee only) → accept → cook → on the way
   await sctx.close();
 });
 
-test('4. pickup happy path with cash: "buyer has arrived" → collected → cash → confirmed', async ({ page, browser }) => {
+scenario('4. pickup happy path with cash: "buyer has arrived" → collected → cash → confirmed', async ({ page, browser }) => {
   await login(page.request, RESIDENT.email);
   const { orderId } = await bookApi(page, { sellerId: k1.sellerId, dishId: k1.dishId, fulfillment: 'self_pickup', qty: 1 });
   const { ctx, page: seller } = await newUserContext(browser);
@@ -392,7 +419,7 @@ test('4. pickup happy path with cash: "buyer has arrived" → collected → cash
   await ctx.close();
 });
 
-test("5. before the door the buyer's network responses never contain the kitchen's UPI ID or QR; the flat is hidden from the kitchen until it accepts", async ({ page, browser }) => {
+scenario("5. before the door the buyer's network responses never contain the kitchen's UPI ID or QR; the flat is hidden from the kitchen until it accepts", async ({ page, browser }) => {
   await login(page.request, RESIDENT.email);
   const { orderId } = await bookApi(page, { sellerId: k1.sellerId, dishId: k1.dishId, qty: 1 });
   const bodies: string[] = [];
@@ -429,7 +456,7 @@ test("5. before the door the buyer's network responses never contain the kitchen
   await ctx.close();
 });
 
-test('6. the kitchen cancels after accepting: fee refunded in full + equal credit + a strike; the credit pays the next fee', async ({ page, browser, request }) => {
+scenario('6. the kitchen cancels after accepting: fee refunded in full + equal credit + a strike; the credit pays the next fee', async ({ page, browser, request }) => {
   const k = await seedKitchen(request, { n: ++kitchenN });
   await login(page.request, RESIDENT.email);
   const { orderId } = await bookApi(page, { sellerId: k.sellerId, dishId: k.dishId, qty: 2 });
@@ -458,7 +485,7 @@ test('6. the kitchen cancels after accepting: fee refunded in full + equal credi
   await ctx.close();
 });
 
-test('7. a kitchen that does not accept in time: the order auto-cancels, the fee is refunded in full', async ({ page, request }) => {
+scenario('7. a kitchen that does not accept in time: the order auto-cancels, the fee is refunded in full', async ({ page, request }) => {
   const k = await seedKitchen(request, { n: ++kitchenN });
   await login(page.request, RESIDENT.email);
   const { orderId } = await bookApi(page, { sellerId: k.sellerId, dishId: k.dishId, qty: 1 });
@@ -469,7 +496,7 @@ test('7. a kitchen that does not accept in time: the order auto-cancels, the fee
   expect((await orderJson(page, orderId)).payment.refundedInPaise).toBe(1000);
 });
 
-test('8. buyer cancels: before acceptance the fee is refunded; after acceptance it is kept (and the screen says so first)', async ({ page, browser, request }) => {
+scenario('8. buyer cancels: before acceptance the fee is refunded; after acceptance it is kept (and the screen says so first)', async ({ page, browser, request }) => {
   const k = await seedKitchen(request, { n: ++kitchenN });
   const b = await newBuyer(browser, 8);
   const first = await bookApi(b.page, { sellerId: k.sellerId, dishId: k.dishId, qty: 2 });
@@ -495,7 +522,7 @@ test('8. buyer cancels: before acceptance the fee is refunded; after acceptance 
   void page;
 });
 
-test("9. at the door the buyer can't pay: fee kept, buyer strike; three strikes pause ordering", async ({ page, browser, request }) => {
+scenario("9. at the door the buyer can't pay: fee kept, buyer strike; three strikes pause ordering", async ({ page, browser, request }) => {
   void page;
   const k = await seedKitchen(request, { n: ++kitchenN });
   const b = await newBuyer(browser, 9);
@@ -521,7 +548,7 @@ test("9. at the door the buyer can't pay: fee kept, buyer strike; three strikes 
   await b.ctx.close();
 });
 
-test('10. a payment dispute: the kitchen says "not received", admin resolves it both ways', async ({ page, browser, request }) => {
+scenario('10. a payment dispute: the kitchen says "not received", admin resolves it both ways', async ({ page, browser, request }) => {
   void page;
   const k = await seedKitchen(request, { n: ++kitchenN });
   const b = await newBuyer(browser, 10);
@@ -552,7 +579,7 @@ test('10. a payment dispute: the kitchen says "not received", admin resolves it 
   await b.ctx.close();
 });
 
-test('11. provisional caps: the 9th order of the day is blocked ("Fully booked today"); a verified FSSAI certificate lifts the cap', async ({ page, browser, request }) => {
+scenario('11. provisional caps: the 9th order of the day is blocked ("Fully booked today"); a verified FSSAI certificate lifts the cap', async ({ page, browser, request }) => {
   void page;
   const k = await seedKitchen(request, { n: ++kitchenN, fssai: 'provisional', price: 5000, qty: 100 });
   const b = await newBuyer(browser, 11);
@@ -574,7 +601,7 @@ test('11. provisional caps: the 9th order of the day is blocked ("Fully booked t
   await b.ctx.close();
 });
 
-test('12b. admin changes the platform fee 10% → 8%: new orders snapshot 8%, the old order keeps 10%', async ({ page, browser, request }) => {
+scenario('12b. admin changes the platform fee 10% → 8%: new orders snapshot 8%, the old order keeps 10%', async ({ page, browser, request }) => {
   void page;
   const k = await seedKitchen(request, { n: ++kitchenN, price: 10000 });
   const b = await newBuyer(browser, 12);
@@ -622,7 +649,7 @@ test('12b. admin changes the platform fee 10% → 8%: new orders snapshot 8%, th
   await b.ctx.close();
 });
 
-test('14. a visitor sees the invite-only page and can request access for their society', async ({ browser }) => {
+scenario('14. a visitor sees the invite-only page and can request access for their society', async ({ browser }) => {
   const { ctx, page } = await newUserContext(browser);
   await page.goto('/');
   await expect(page.getByTestId('invite-only')).toContainText('invite-only during the pilot');
@@ -639,7 +666,7 @@ test('14. a visitor sees the invite-only page and can request access for their s
   await ctx.close();
 });
 
-test('15. GST mode registered_eco_9_5: the upfront lines show fee GST and food GST, and the invoice is correct', async ({ page, browser, request }) => {
+scenario('15. GST mode registered_eco_9_5: the upfront lines show fee GST and food GST, and the invoice is correct', async ({ page, browser, request }) => {
   void page;
   const k = await seedKitchen(request, { n: ++kitchenN });
   const b = await newBuyer(browser, 15);
@@ -666,7 +693,7 @@ test('15. GST mode registered_eco_9_5: the upfront lines show fee GST and food G
   await b.ctx.close();
 });
 
-test('16. account deletion is blocked while an order is open, then succeeds and anonymises', async ({ page, browser, request }) => {
+scenario('16. account deletion is blocked while an order is open, then succeeds and anonymises', async ({ page, browser, request }) => {
   void page;
   const k = await seedKitchen(request, { n: ++kitchenN });
   const b = await newBuyer(browser, 16);
@@ -692,7 +719,7 @@ test('16. account deletion is blocked while an order is open, then succeeds and 
   await b.ctx.close();
 });
 
-test('8b. admin delists the kitchen: dishes vanish from the feed, the kitchen is notified (with a fresh 2FA check), relisting restores them', async ({ browser, request }) => {
+scenario('8b. admin delists the kitchen: dishes vanish from the feed, the kitchen is notified (with a fresh 2FA check), relisting restores them', async ({ browser, request }) => {
   const { ctx: rctx, page: resident } = await newUserContext(browser);
   await login(resident.request, RESIDENT.email);
   const inFeed = async () => ((await api(resident.request, 'get', '/api/listings')).json.listings as { id: number }[]).some((l) => l.id === dishId);
@@ -722,7 +749,7 @@ test('8b. admin delists the kitchen: dishes vanish from the feed, the kitchen is
   await rctx.close();
 });
 
-test('9b. founding-kitchen plan expiry: past ends_at + grace the listings hide automatically; renewing restores them', async ({ page, request }) => {
+scenario('9b. founding-kitchen plan expiry: past ends_at + grace the listings hide automatically; renewing restores them', async ({ page, request }) => {
   await login(page.request, COOK.email);
   const inFeedAs = async () => {
     const { ctx, page: r } = await newUserContext((await page.context().browser())!);
@@ -752,7 +779,7 @@ test('9b. founding-kitchen plan expiry: past ends_at + grace the listings hide a
   expect(await inFeedAs()).toBe(true);
 });
 
-test('13. chat: live between two browsers, quick reply, soft-filter warning, report opens a grievance, read-only after 48 hours, admin read is gated and logged', async ({ browser, request }) => {
+scenario('13. chat: live between two browsers, quick reply, soft-filter warning, report opens a grievance, read-only after 48 hours, admin read is gated and logged', async ({ browser, request }) => {
   const k = await seedKitchen(request, { n: ++kitchenN });
   const b = await newBuyer(browser, 13);
   const { orderId } = await bookApi(b.page, { sellerId: k.sellerId, dishId: k.dishId, qty: 1, fulfillment: 'self_pickup' });
@@ -814,7 +841,7 @@ test('13. chat: live between two browsers, quick reply, soft-filter warning, rep
   await b.ctx.close();
 });
 
-test('20. grievance: raised from the legal page, acknowledged automatically, flagged after 48 hours, picked up, noted and resolved by an admin', async ({ browser, request }) => {
+scenario('20. grievance: raised from the legal page, acknowledged automatically, flagged after 48 hours, picked up, noted and resolved by an admin', async ({ browser, request }) => {
   const b = await newBuyer(browser, 20);
   await b.page.goto('/legal/grievance');
   await expect(b.page.getByTestId('grievance-form')).toBeVisible();
@@ -859,7 +886,7 @@ const patchSettings = async (admin: Page, patch: Record<string, unknown>, reason
   expect(r.status, JSON.stringify(r.json)).toBe(200);
 };
 
-test('17. go-live: the admin page lists what is missing, and the live guard agrees with it', async ({ browser }) => {
+scenario('17. go-live: the admin page lists what is missing, and the live guard agrees with it', async ({ browser }) => {
   const { ctx, page: admin } = await loginAdmin(browser);
   await admin.goto('/admin/go-live');
   await expect(admin.getByTestId('golive-summary')).toBeVisible();
@@ -870,7 +897,7 @@ test('17. go-live: the admin page lists what is missing, and the live guard agre
   await ctx.close();
 });
 
-test('18. dish rules: allergens, food mark and prohibited words are enforced; a health claim waits for moderation', async ({ browser, request }) => {
+scenario('18. dish rules: allergens, food mark and prohibited words are enforced; a health claim waits for moderation', async ({ browser, request }) => {
   const k = await seedKitchen(request, { n: ++kitchenN });
   const { ctx, page: seller } = await newUserContext(browser);
   await login(seller.request, k.email);
@@ -891,7 +918,7 @@ test('18. dish rules: allergens, food mark and prohibited words are enforced; a 
   await ctx.close();
 });
 
-test('19. re-consent: a material change to the terms blocks the resident until they accept it', async ({ browser, request }) => {
+scenario('19. re-consent: a material change to the terms blocks the resident until they accept it', async ({ browser, request }) => {
   const b = await newBuyer(browser, 19);
   await b.page.goto('/');
   await expect(b.page.getByTestId('reconsent-modal')).toHaveCount(0);
@@ -914,7 +941,7 @@ test('19. re-consent: a material change to the terms blocks the resident until t
   await ctx.close();
 });
 
-test('21. favourites and today’s menu: follow a kitchen, the kitchen publishes, the follower is told', async ({ browser, request }) => {
+scenario('21. favourites and today’s menu: follow a kitchen, the kitchen publishes, the follower is told', async ({ browser, request }) => {
   const k = await seedKitchen(request, { n: ++kitchenN });
   const b = await newBuyer(browser, 21);
   await b.page.goto(`/kitchen/${k.sellerId}`);
@@ -941,7 +968,7 @@ test('21. favourites and today’s menu: follow a kitchen, the kitchen publishes
   await ctx.close();
 });
 
-test('22. pre-order: a buyer schedules an order for a later day; the fee is paid now and the kitchen sees it as scheduled', async ({ browser, request }) => {
+scenario('22. pre-order: a buyer schedules an order for a later day; the fee is paid now and the kitchen sees it as scheduled', async ({ browser, request }) => {
   const k = await seedKitchen(request, { n: ++kitchenN, price: 12000 });
   const b = await newBuyer(browser, 22);
   const when = new Date(Date.now() + 2 * 86_400_000);
@@ -964,7 +991,7 @@ test('22. pre-order: a buyer schedules an order for a later day; the fee is paid
   await ctx.close();
 });
 
-test('23. flag-off features: 404 by default; switched on by an admin they work end to end, and switched off again they vanish', async ({ browser, request }) => {
+scenario('23. flag-off features: 404 by default; switched on by an admin they work end to end, and switched off again they vanish', async ({ browser, request }) => {
   const { ctx: actx, page: admin } = await loginAdmin(browser);
   const b = await newBuyer(browser, 23);
   // off by default
@@ -1013,4 +1040,10 @@ test('23. flag-off features: 404 by default; switched on by an admin they work e
   expect((await b.page.goto('/campaigns/e2e-feast'))?.status()).toBe(404);
   await sctx.close();
   await actx.close();
+});
+
+scenario('23b. flag-off UIs: Sponsored feed card and meal plans (kitchen create/edit/pause, buyer book/skip/pause) when switched on', async ({ browser, request }) => {
+  const b = await newBuyer(browser, 230);
+  await flagUiJourney({ browser, request, buyer: b.page, kitchenNo: ++kitchenN });
+  await b.ctx.close();
 });
