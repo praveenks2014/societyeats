@@ -1,4 +1,5 @@
 import { isMockMode } from '@/lib/config';
+import { paymentsModeInfo } from '@/lib/payments/mode';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { getCronStatus } from '@/lib/cron-status';
 import { listLegalDocuments } from '@/lib/legal/docs';
@@ -22,7 +23,7 @@ export type GoLiveRow = {
 };
 
 type Env = Record<string, string | undefined>;
-type Facts = { storageReachable: boolean; cronFresh: boolean; legalAllReviewed: boolean; legalCount: number };
+type Facts = { storageReachable: boolean; cronFresh: boolean; legalAllReviewed: boolean; legalCount: number; /** how payments are taken (see payments/mode.ts) */ paymentsMode?: 'mock' | 'razorpay_test' | 'razorpay_live' | 'invalid_key'; mockMode?: boolean; keyPrefix?: string | null };
 
 /**
  * The single list of live-mode checks. The /admin/go-live page renders all of it; the live-mode guard blocks on exactly its
@@ -42,9 +43,23 @@ export function buildGoLiveRows(s: PlatformSettings, env: Env, facts: Facts): Go
     row({ key: 'upiProvider', kind: 'config', label: 'UPI ownership check is not the mock provider', status: s.upiVerifyProvider !== 'mock' ? 'ok' : 'missing', blocking: true, fix: { kind: 'setting', keys: ['upiVerifyProvider'] }, detail: `Current: ${s.upiVerifyProvider}.` }),
     row({ key: 'storage', kind: 'ops', label: 'File storage reachable (Replit Object Storage or S3)', status: facts.storageReachable ? 'ok' : 'missing', blocking: false, fix: { kind: 'info', text: 'Set STORAGE_ADAPTER=replit and create the Object Storage bucket; check /api/health.' } }),
     row({ key: 'cron', kind: 'ops', label: 'Scheduled jobs are running (heartbeat fresh)', status: facts.cronFresh ? 'ok' : 'missing', blocking: false, fix: { kind: 'info', text: 'Schedule POST /api/cron/run every 5 minutes with the cron secret.' } }),
+    paymentsRow(facts),
     row({ key: 'vapid', kind: 'ops', label: 'Web-push keys (VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)', status: has(env.VAPID_PUBLIC_KEY) && has(env.VAPID_PRIVATE_KEY) ? 'ok' : 'warn', blocking: false, fix: { kind: 'secret', names: ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY'] }, detail: 'Run npm run vapid:generate. Push is simply off without them.' }),
     row({ key: 'legalReviewed', kind: 'ops', label: 'Every legal document marked reviewed by counsel', status: facts.legalAllReviewed ? 'ok' : 'warn', blocking: false, fix: { kind: 'link', href: '/admin/legal', text: 'Open legal documents' } }),
   ];
+}
+
+/** The payments mode is an operational row: it explains what a payment would do right now, and never blocks an order by itself. */
+function paymentsRow(facts: Facts): GoLiveRow {
+  const mode = facts.paymentsMode ?? 'razorpay_live';
+  const mockMode = facts.mockMode ?? false;
+  const base = { key: 'paymentsMode', kind: 'ops' as const, label: 'Payments mode', blocking: false, fix: { kind: 'secret' as const, names: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'] } };
+  if (mode === 'mock') return { ...base, status: 'warn', detail: 'Mock: the fake checkout sheet is used. Add Razorpay keys (rzp_test_… or rzp_live_…) to take real payments.' };
+  if (mode === 'razorpay_test') return { ...base, status: 'warn', detail: `Test mode (${facts.keyPrefix ?? 'rzp_test_'}): real Razorpay Checkout, no real money is charged.` };
+  if (mode === 'invalid_key') return { ...base, status: 'missing', detail: `The Razorpay key prefix "${facts.keyPrefix ?? ''}" is not recognised. It must start with rzp_test_ or rzp_live_. Payments are refused until it is fixed.` };
+  return mockMode
+    ? { ...base, status: 'missing', detail: 'Live Razorpay keys need MOCK_MODE=false. Switch it once every configuration item above is done.' }
+    : { ...base, status: 'ok', detail: `Live mode (${facts.keyPrefix ?? 'rzp_live_'}): real money.` };
 }
 
 export function liveBlockers(rows: GoLiveRow[]): GoLiveRow[] {
@@ -70,6 +85,7 @@ export async function collectGoLive(settings?: PlatformSettings, env: Env = proc
   }
   const cron = await getCronStatus(new Date(), Number(s.cronStaleMinutes) * 60_000).catch(() => ({ stale: true }));
   const docs = await listLegalDocuments().catch(() => []);
-  const rows = buildGoLiveRows(s, env, { storageReachable, cronFresh: !cron.stale, legalCount: docs.length, legalAllReviewed: docs.length > 0 && docs.every((d) => d.reviewStatus === 'reviewed') });
+  const pm = paymentsModeInfo(env);
+  const rows = buildGoLiveRows(s, env, { paymentsMode: pm.mode ?? 'invalid_key', keyPrefix: pm.prefix, mockMode: isMockMode(), storageReachable, cronFresh: !cron.stale, legalCount: docs.length, legalAllReviewed: docs.length > 0 && docs.every((d) => d.reviewStatus === 'reviewed') });
   return { rows, blockers: liveBlockers(rows), mockMode: isMockMode() };
 }

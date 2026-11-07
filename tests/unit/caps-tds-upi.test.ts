@@ -13,7 +13,7 @@ let societyId: number;
 beforeAll(async () => {
   process.env.RAZORPAY_KEY_SECRET = 'rzp_test_secret_value';
   process.env.RAZORPAY_WEBHOOK_SECRET = 'whsec_test_secret_value';
-  process.env.MOCK_MODE = 'true';
+  process.env.MOCK_MODE = 'true'; process.env.PAYMENTS_ADAPTER = 'mock';
   db = await useTestDb();
   societyId = (await makeSociety(db)).id;
 });
@@ -193,7 +193,7 @@ describe('₹1 UPI ownership verification', () => {
 
   test('razorpay_checkout_vpa: ₹1 UPI order → captured → the payer VPA is read from the payment', async () => {
     vi.resetModules();
-    process.env.MOCK_MODE = 'false';
+    process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
     const { setPlatformSetting } = await import('@/lib/db/platform');
     await setPlatformSetting('upiVerifyProvider', 'razorpay_checkout_vpa');
@@ -224,7 +224,7 @@ describe('₹1 UPI ownership verification', () => {
     expect((await profile(other.id)).upiVerifyStatus).toBe('needs_manual_review');
     vi.doUnmock('@/lib/payments/razorpay');
     vi.resetModules();
-    process.env.MOCK_MODE = 'true';
+    process.env.MOCK_MODE = 'true'; process.env.PAYMENTS_ADAPTER = 'mock';
     await setPlatformSetting('upiVerifyProvider', 'razorpay_checkout_vpa');
   });
 

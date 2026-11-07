@@ -54,3 +54,20 @@ Open `/admin/go-live`: it lists every blocker and links each to the screen that 
 8. **Admins**: both `ADMIN_EMAILS` accounts log in, change the one-time password and enrol two-factor; keep the recovery codes.
 9. **Backups**: schedule `npm run db:backup` and test one restore.
 10. **GST by a CA** (see below) and a **breach drill** from `docs/BREACH_RUNBOOK.md`.
+
+## Payments: two paths with your existing Razorpay account
+
+**Trial with test keys** (no real money; can run while `MOCK_MODE=true`):
+1. Razorpay Dashboard → switch to **Test mode** → Settings → API keys → generate keys (`rzp_test_…`).
+2. Create a **test** webhook → `https://<domain>/api/webhooks/razorpay` with the events in the README; copy its secret.
+3. In Secrets set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`. Leave `MOCK_MODE=true`.
+4. Run `npm run razorpay:check`. Expect "Payments mode: razorpay_test" and an order id.
+5. Place an order, pay the fee with Razorpay's test UPI/cards; the amber banner "Test payments: no real money is charged." shows on checkout.
+
+**Live**:
+1. `/admin/go-live` configuration rows all green (FSSAI Central licence, GST position, legal entity, grievance officer, support contact, webhook secret, UPI provider).
+2. Razorpay Dashboard → **Live mode** → live keys (`rzp_live_…`) and a **live** webhook with the same events; add the website URL to the account details.
+3. Replace the three secrets with the live values, set `MOCK_MODE=false` and `EMAIL_ADAPTER=resend`, redeploy.
+4. `npm run razorpay:check` (live): expect "razorpay_live".
+5. Take a live ₹1 UPI check for a kitchen and a live platform fee on a real order between the two admins; refund it from `/admin/refunds` and confirm the refund webhook.
+6. Your other apps on the same account must ignore events whose order notes say `app: padosiplate`.

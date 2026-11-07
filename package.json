@@ -21,6 +21,7 @@
     "db:seed:demo": "tsx scripts/seed-demo.ts",
     "db:backup": "bash scripts/backup.sh",
     "vapid:generate": "tsx scripts/vapid-generate.ts",
+    "razorpay:check": "node scripts/razorpay-check.mjs",
     "uploads:migrate": "tsx scripts/migrate-uploads.ts",
     "cron": "tsx scripts/cron.ts"
   },

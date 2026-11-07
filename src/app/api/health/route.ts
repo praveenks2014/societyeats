@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db';
 import { getStorage } from '@/lib/storage';
 import { log } from '@/lib/log';
 import { isMockMode } from '@/lib/config';
+import { paymentsModeInfo } from '@/lib/payments/mode';
 import { getCronStatus } from '@/lib/cron-status';
 
 export const dynamic = 'force-dynamic';
@@ -41,5 +42,5 @@ export async function GET() {
     /* alerting never fails the probe */
   }
   const healthy = Object.values(checks).every((v) => v === 'ok');
-  return NextResponse.json({ status: healthy ? 'ok' : 'degraded', checks, cronAgeMinutes, mockMode: isMockMode(), time: new Date().toISOString() }, { status: healthy ? 200 : 503 });
+  return NextResponse.json({ status: healthy ? 'ok' : 'degraded', checks, cronAgeMinutes, mockMode: isMockMode(), paymentsMode: paymentsModeInfo().mode ?? 'invalid_key', time: new Date().toISOString() }, { status: healthy ? 200 : 503 });
 }

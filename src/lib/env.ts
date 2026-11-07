@@ -34,6 +34,7 @@ const envSchema = z
     ADMIN_EMAILS: z.string().optional(),
     STORAGE_ADAPTER: z.enum(['local', 'replit', 's3', 'memory']).optional(),
     EMAIL_ADAPTER: z.enum(['mock', 'resend']).optional(),
+    PAYMENTS_ADAPTER: z.enum(['mock', 'razorpay']).optional(),
     RAZORPAY_KEY_ID: z.string().optional(),
     RAZORPAY_KEY_SECRET: z.string().optional(),
     RAZORPAY_WEBHOOK_SECRET: z.string().optional(),

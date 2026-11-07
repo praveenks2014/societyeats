@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { getDb } from '@/lib/db';
 import { plusMemberships, kitchenSubscriptions, orders, payments, refunds, upiVerifications, webhookEvents } from '@/lib/db/schema';
-import { isMockMode } from '@/lib/config';
+import { paymentsMode } from '@/lib/payments/mode';
 import { log } from '@/lib/log';
 import { ensureCaptured } from '@/lib/payments/capture';
 import { markOrderPaid, verifyWebhookSignature } from '@/lib/payments';
@@ -14,10 +14,10 @@ import { parseValidation } from '@/lib/upi-verify/razorpayx';
 
 export const dynamic = 'force-dynamic';
 
-type Entity = { id?: string; order_id?: string; method?: string; amount?: number; payment_id?: string; status?: string };
+type Entity = { id?: string; order_id?: string; method?: string; amount?: number; payment_id?: string; status?: string; notes?: Record<string, unknown> | unknown[] };
 type Payload = {
   event?: string;
-  payload?: { payment?: { entity?: Entity }; refund?: { entity?: Entity }; fund_account_validation?: { entity?: Record<string, unknown> } };
+  payload?: { payment?: { entity?: Entity }; order?: { entity?: Entity }; refund?: { entity?: Entity }; fund_account_validation?: { entity?: Record<string, unknown> } };
 };
 
 /**
@@ -69,7 +69,10 @@ async function handle(event: string, payload: Payload): Promise<string> {
 
   if (event === 'payment.authorized' || event === 'payment.captured' || event === 'payment.failed') {
     const entity = payload.payload?.payment?.entity;
-    if (!entity?.order_id) return 'no_order';
+    if (!entity?.order_id) return 'ignored_foreign'; // a payment with no order cannot be ours: we always create an order first
+    // The Razorpay account may be shared: an order tagged for another app is none of our business.
+    const tag = (entity.notes && !Array.isArray(entity.notes) ? entity.notes.app : undefined) ?? (payload.payload?.order?.entity?.notes && !Array.isArray(payload.payload.order.entity.notes) ? payload.payload.order.entity.notes.app : undefined);
+    if (tag !== undefined && tag !== 'padosiplate') return 'ignored_foreign';
     const [pay] = await db.select().from(payments).where(eq(payments.razorpayOrderId, entity.order_id));
     const [sub] = pay ? [] : await db.select().from(kitchenSubscriptions).where(eq(kitchenSubscriptions.razorpayOrderId, entity.order_id));
     if (!pay && !sub) {
@@ -79,7 +82,7 @@ async function handle(event: string, payload: Payload): Promise<string> {
         if (event === 'payment.failed') return 'plus_failed_recorded';
         const want = plus.pricePaise + plus.gstPaise;
         if (entity.amount !== want || !entity.id) return 'amount_mismatch';
-        if (!isMockMode()) await ensureCaptured({ paymentId: entity.id, razorpayOrderId: entity.order_id, amountInPaise: want });
+        if (paymentsMode() !== 'mock') await ensureCaptured({ paymentId: entity.id, razorpayOrderId: entity.order_id, amountInPaise: want });
         const { activatePurchase } = await import('@/lib/plus');
         return (await activatePurchase(plus.id, entity.id)) ? 'plus_activated' : 'plus_already_active';
       }
@@ -87,12 +90,12 @@ async function handle(event: string, payload: Payload): Promise<string> {
       const [ver] = await db.select().from(upiVerifications).where(eq(upiVerifications.razorpayOrderId, entity.order_id));
       if (ver && event !== 'payment.failed') {
         if (entity.amount !== VERIFY_AMOUNT_PAISE || !entity.id) return 'amount_mismatch';
-        if (!isMockMode()) await ensureCaptured({ paymentId: entity.id, razorpayOrderId: entity.order_id, amountInPaise: VERIFY_AMOUNT_PAISE });
-        const full = isMockMode() ? null : await fetchRazorpayPayment(entity.id);
+        if (paymentsMode() !== 'mock') await ensureCaptured({ paymentId: entity.id, razorpayOrderId: entity.order_id, amountInPaise: VERIFY_AMOUNT_PAISE });
+        const full = paymentsMode() === 'mock' ? null : await fetchRazorpayPayment(entity.id);
         await finalizeVerification(ver.id, { verifiedVpa: full?.vpa ?? full?.upi?.vpa ?? null, paymentId: entity.id });
         return 'upi_verification_recorded';
       }
-      return ver ? 'upi_verification_failed' : 'unknown_order';
+      return ver ? 'upi_verification_failed' : 'ignored_foreign';
     }
 
     if (event === 'payment.failed') {
@@ -109,7 +112,7 @@ async function handle(event: string, payload: Payload): Promise<string> {
     if (!entity.id) return 'no_payment_id';
     // Live: never trust the payload's status — re-fetch, capture an `authorized` payment, and require `captured`.
     // A failure throws → 500 → Razorpay retries, and the order/subscription stays unpaid meanwhile.
-    if (!isMockMode()) await ensureCaptured({ paymentId: entity.id, razorpayOrderId: entity.order_id, amountInPaise: expected });
+    if (paymentsMode() !== 'mock') await ensureCaptured({ paymentId: entity.id, razorpayOrderId: entity.order_id, amountInPaise: expected });
     if (pay) {
       const r = await markOrderPaid(pay.orderId, { razorpayPaymentId: entity.id, method: entity.method ?? 'razorpay', webhookPayload: payload });
       return r.won ? 'order_paid' : 'order_already_paid';
@@ -130,7 +133,7 @@ async function handle(event: string, payload: Payload): Promise<string> {
     const entity = payload.payload?.refund?.entity;
     if (!entity?.id) return 'no_refund';
     const [row] = await db.select().from(refunds).where(eq(refunds.razorpayRefundId, entity.id));
-    if (!row) return 'unknown_refund';
+    if (!row) return 'ignored_foreign'; // a refund we did not issue (another app on the same account)
     if (event === 'refund.processed') {
       await db.update(refunds).set({ status: 'processed', processedAt: new Date() }).where(eq(refunds.id, row.id));
       return 'refund_processed';

@@ -6,6 +6,7 @@ import { getDb } from '@/lib/db';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { sellerProfiles } from '@/lib/db/schema';
 import { RoleNav } from '@/components/role-nav';
+import { PaymentsBanner } from '@/components/payments-banner';
 import { sellerUnreadCount } from '@/lib/messaging/admin-threads';
 import { sellerSubscriptions } from '@/lib/subscriptions/queries';
 import { overallStatus } from '@/lib/subscriptions/status';
@@ -65,7 +66,8 @@ export default async function SellerLayout({ children }: { children: React.React
           Your kitchen has been delisted by PadosiPlate. You can finish orders you already accepted. See your inbox for details.
         </Link>
       )}
-      <div className="pt-5">{children}</div>
+      <div className="pt-5"><PaymentsBanner />
+      {children}</div>
     </>
   );
 }

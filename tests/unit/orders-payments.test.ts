@@ -13,12 +13,12 @@ let societyId: number;
 beforeAll(async () => {
   process.env.RAZORPAY_KEY_SECRET = 'rzp_test_secret_value';
   process.env.RAZORPAY_WEBHOOK_SECRET = 'whsec_test_secret_value';
-  process.env.MOCK_MODE = 'true';
+  process.env.MOCK_MODE = 'true'; process.env.PAYMENTS_ADAPTER = 'mock';
   db = await useTestDb();
   societyId = (await makeSociety(db)).id;
 });
 beforeEach(() => {
-  process.env.MOCK_MODE = 'true';
+  process.env.MOCK_MODE = 'true'; process.env.PAYMENTS_ADAPTER = 'mock';
 });
 
 async function placeOrder(buyerId: number, sellerId: number, dishId: number, qty = 2, over: Record<string, unknown> = {}) {
@@ -207,7 +207,7 @@ describe('verify route: ownership, signature, amount', () => {
     const pay = (await db.select().from(s.payments).where(eq(s.payments.orderId, orderId)))[0];
     const razorpay = await import('@/lib/payments/razorpay');
     vi.mocked(razorpay.fetchRazorpayPayment).mockImplementation(async (id: string) => ({ id, order_id: pay.razorpayOrderId!, status: 'captured', amount: id === 'pay_short' ? 1 : 2000 }));
-    process.env.MOCK_MODE = 'false';
+    process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     await loginAs(buyer.id);
     const { verifyAndMarkPaid } = await import('@/lib/payments/verify');
     const base = { userId: buyer.id, orderId, razorpay_order_id: pay.razorpayOrderId!, razorpay_payment_id: 'pay_short', razorpay_signature: checkoutSignature(pay.razorpayOrderId!, 'pay_short') };

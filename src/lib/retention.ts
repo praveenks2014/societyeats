@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNotNull, lt, notInArray, or, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { getPlatformSettings } from '@/lib/db/platform';
-import { chatReads, grievances, loginCodes, orderMessages, orders, upiVerifications } from '@/lib/db/schema';
+import { chatReads, grievances, loginCodes, orderMessages, orders, upiVerifications, webhookEvents } from '@/lib/db/schema';
 import { TERMINAL_STATES } from '@/lib/orders/state';
 import { getStorage } from '@/lib/storage';
 import { DAY_MS } from '@/lib/time';
@@ -12,6 +12,7 @@ import { log } from '@/lib/log';
  *   - chats: removed `chatRetentionDays` after the order closed, unless a dispute/report is still open
  *   - verification screenshots: removed `verificationRetentionDays` after the decision
  *   - sign-in codes: removed `loginCodeRetentionHours` after creation
+ *   - payment webhook event ids: removed `webhookEventRetentionDays` (default 30) after receipt
  * The audit log is kept at least `accessLogMinRetentionDays` (never purged here).
  */
 export async function runRetention(now: Date = new Date()) {
@@ -55,8 +56,12 @@ export async function runRetention(now: Date = new Date()) {
   const codeCutoff = new Date(now.getTime() - settings.loginCodeRetentionHours * 3_600_000);
   const codes = await db.delete(loginCodes).where(lt(loginCodes.createdAt, codeCutoff)).returning({ id: loginCodes.id });
 
-  const result = { chatMessages, verificationScreenshots: evid.length, loginCodes: codes.length };
-  if (chatMessages || evid.length || codes.length) log.info('retention.run', result);
+  // --- payment webhook event ids (duplicate-delivery guard; includes foreign events on a shared Razorpay account) ---
+  const hookCutoff = new Date(now.getTime() - settings.webhookEventRetentionDays * DAY_MS);
+  const hooks = await db.delete(webhookEvents).where(lt(webhookEvents.receivedAt, hookCutoff)).returning({ id: webhookEvents.id });
+
+  const result = { chatMessages, verificationScreenshots: evid.length, loginCodes: codes.length, webhookEvents: hooks.length };
+  if (chatMessages || evid.length || codes.length || hooks.length) log.info('retention.run', result);
   return result;
 }
 

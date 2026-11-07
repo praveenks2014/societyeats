@@ -44,6 +44,7 @@ export default defineConfig({
       NODE_ENV: 'development',
       E2E: 'true',
       MOCK_MODE: 'true',
+      PAYMENTS_ADAPTER: 'mock', // e2e always uses the fake checkout, even if Razorpay keys are present in the shell
       JWT_SECRET: 'e2e-secret-e2e-secret-e2e-secret-0123',
       PGLITE_DIR: path.join(E2E_DIR, 'pglite'),
       LOCAL_UPLOAD_DIR: path.join(E2E_DIR, 'uploads'),

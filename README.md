@@ -58,7 +58,8 @@ Demo accounts (development only, password `demo1234`): buyer `9999999901`, selle
 | `CRON_SECRET` | yes | bearer token for `POST /api/cron/run`; schedule it every 5 minutes, see [Scheduled jobs on Autoscale](#scheduled-jobs-on-autoscale-required) |
 | `STORAGE_ADAPTER` + `REPLIT_OBJECT_STORAGE_BUCKET` | yes on Autoscale | alternatives: `s3` (+ `S3_*`), `local` (dev only) |
 | `EMAIL_ADAPTER=resend` + `RESEND_API_KEY` + `EMAIL_FROM` | for real e-mail (go-live) | `mock` writes to the outbox only. Verification and reset links need real e-mail in the pilot |
-| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | when `MOCK_MODE=false` | platform fees only |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | optional (needed once `MOCK_MODE=false`) | **The key prefix decides the payments mode** (see below). Platform fees only |
+| `PAYMENTS_ADAPTER=mock` | optional | forces the fake checkout even if Razorpay keys are present (e2e uses it) |
 | `ADMIN_EMAILS` | yes | `praveenece.mit@gmail.com,rsaralipriya@gmail.com`; admins enrol two-factor on first login. Only these addresses **with a verified e-mail** can become admin |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional | enables "Continue with Google" (never auto-links an existing email account) |
 | `RAZORPAYX_ACCOUNT_NUMBER` | optional | needed only for the `razorpayx_rpd` UPI verification provider |
@@ -91,11 +92,33 @@ Replit Autoscale has no built-in cron, so `POST /api/cron/run` never runs on its
 
 You can also run `npm run cron` once from the Replit shell to run the same jobs manually.
 
+### Payments modes (separate from `MOCK_MODE`)
+
+`MOCK_MODE` now only governs the non-payment adapters (geocoding, FSSAI lookup, delivery, SMS/WhatsApp). How payments behave is decided by the Razorpay keys:
+
+| Keys | Mode | What happens |
+| --- | --- | --- |
+| none, or `PAYMENTS_ADAPTER=mock` | `mock` | the fake checkout sheet; `/api/payments/mock-complete` exists |
+| `RAZORPAY_KEY_ID=rzp_test_…` | `razorpay_test` | real Razorpay Checkout and API in **test mode**: no real money. Works with `MOCK_MODE` true or false. The go-live guard does not apply. A banner says "Test payments: no real money is charged." |
+| `RAZORPAY_KEY_ID=rzp_live_…` | `razorpay_live` | **real money**. Before every money-taking action (order fee, kitchen plan, Plus, meal plan, bulk order, the ₹1 UPI check) the go-live configuration rows must be done, and `MOCK_MODE` must be `false` (otherwise every such action is refused with "Live Razorpay keys need MOCK_MODE=false") |
+| any other prefix | refused | payments return 503 until the key is fixed |
+
+The fake routes (`mock-complete` and the mock branches of Plus and the ₹1 check) answer **404 in `razorpay_test` and `razorpay_live`**, so a deployment with real keys can never mark anything paid for free. `/api/health` and `/admin/go-live` show the current mode (never a key).
+
+### Using an existing Razorpay account
+
+1. **Test and live are separate worlds**: separate keys and separate webhooks. Create the webhook in the same mode as the keys you are using (Razorpay Dashboard → toggle Test/Live → Settings → Webhooks).
+2. **Webhook** → `https://<your-domain>/api/webhooks/razorpay`, events: `payment.authorized`, `payment.captured`, `payment.failed`, `refund.processed`, `refund.failed`. Add `fund_account.validation.completed` and `fund_account.validation.failed` only if you use the `razorpayx_rpd` UPI provider. The secret you type when creating the webhook goes into `RAZORPAY_WEBHOOK_SECRET`.
+3. **The account is shared with your other apps.** Razorpay sends the events of *every* payment on the account to *every* webhook URL. PadosiPlate tags its orders (`notes.app='padosiplate'`, plus `env`, `kind`, `ref`; receipts start with `pp-`) and acknowledges anything that is not its own with HTTP 200 `ignored_foreign` (it never refunds or captures a foreign payment, and keeps only the event id for duplicate protection, purged after `webhookEventRetentionDays`, default 30). Your other apps must do the same for PadosiPlate's events: ignore any event whose order has `notes.app='padosiplate'`.
+4. Before taking **live** payments add the PadosiPlate website URL to the Razorpay account's website/app details.
+5. Fees settle to the account's bank account. The invoice legal entity in `/admin/settings` should match the Razorpay account holder.
+6. **Check the keys**: `npm run razorpay:check` creates a ₹1 order tagged for this app, reads it back and prints its id and status. It opens no checkout and captures nothing; it refuses to run in `mock` mode and prints "Razorpay rejected the keys…" on a 401.
+
 ### Going live with Razorpay (platform fees only)
 
-1. In the Razorpay dashboard create **live API keys** and put them in Secrets.
-2. Add a **webhook** → `https://<your-domain>/api/webhooks/razorpay`, secret = `RAZORPAY_WEBHOOK_SECRET`, events: `payment.authorized`, `payment.captured`, `payment.failed`, `refund.processed`, `refund.failed`. An order or subscription is marked paid only once Razorpay reports the payment as `captured`; an `authorized` payment is captured by the server first, and if that fails it stays unpaid (the webhook returns an error so Razorpay retries).
-3. Set `MOCK_MODE=false` and `EMAIL_ADAPTER=resend`, redeploy (the live guard first needs every configuration row on `/admin/go-live` green). Do one ₹1 plan purchase and one small order whose fee you pay and then refund (see the checklist).
+1. Put the **live** keys (`rzp_live_…`) and the live webhook secret in Secrets.
+2. Create the **live** webhook as above.
+3. Get every configuration row on `/admin/go-live` green, then set `MOCK_MODE=false` and `EMAIL_ADAPTER=resend`, redeploy. Run `npm run razorpay:check`, then do one ₹1 plan purchase and one small order whose fee you pay and then refund (see the checklist).
 
 Do **not** add Razorpay Route, Smart Collect or anything that receives food money without first getting proper licensing advice.
 
@@ -103,7 +126,7 @@ Do **not** add Razorpay Route, Smart Collect or anything that receives food mone
 
 | Adapter | Variable | Live value |
 | --- | --- | --- |
-| Payments | `MOCK_MODE` | `false` |
+| Payments | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` (prefix picks test or live) | `rzp_live_…` and `MOCK_MODE=false` |
 | Storage | `STORAGE_ADAPTER` | `replit` or `s3` |
 | E-mail | `EMAIL_ADAPTER` | `resend` |
 | Geocoding | `GEOCODE_API_KEY` | set it |

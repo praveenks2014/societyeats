@@ -7,7 +7,8 @@ import { subscriptionGstBps, subscriptionCharge } from '@/lib/money/fees';
 import { createRazorpayOrder } from '@/lib/payments/razorpay';
 import { emit } from '@/lib/notify';
 import { addMonthsIST, istParts } from '@/lib/time';
-import { isMockMode } from '@/lib/config';
+import { paymentsMode } from '@/lib/payments/mode';
+import { assertLiveModeReady } from '@/lib/live-guard';
 
 async function assertOn() {
   if (!(await getPlatformSettings()).plusEnabled) throw new ApiError(404, 'PadosiPlate Plus is not available');
@@ -25,10 +26,12 @@ export async function startPurchase(userId: number, explicitConsent: boolean) {
   if (!explicitConsent) throw new ApiError(400, 'Please confirm you want to buy Plus (it does not renew by itself)');
   const s = await getPlatformSettings();
   const charge = subscriptionCharge(s.plusPriceMonthlyPaise, subscriptionGstBps(s));
+  await assertLiveModeReady(); // real money: configuration must be complete (no-op in mock and test-key modes)
   const db = await getDb();
-  const rzp = charge.totalPaise > 0 ? await createRazorpayOrder({ amountInPaise: charge.totalPaise, receipt: `plus_${userId}_${Date.now().toString(36)}`, notes: { kind: 'plus', userId: String(userId) } }) : null;
-  const [row] = await db.insert(plusMemberships).values({ userId, pricePaise: charge.basePaise, gstPaise: charge.gstPaise, razorpayOrderId: rzp?.id ?? null }).returning();
-  return { membershipId: row.id, amountInPaise: charge.totalPaise, mode: isMockMode() || !rzp?.keyId ? ('mock' as const) : ('razorpay' as const), razorpayOrderId: rzp?.id ?? null, keyId: rzp?.keyId ?? null };
+  const [row] = await db.insert(plusMemberships).values({ userId, pricePaise: charge.basePaise, gstPaise: charge.gstPaise }).returning();
+  const rzp = charge.totalPaise > 0 ? await createRazorpayOrder({ amountInPaise: charge.totalPaise, receipt: `pp-plus-${row.id}`, kind: 'plus', ref: row.id, notes: { userId: String(userId) } }) : null;
+  if (rzp) await db.update(plusMemberships).set({ razorpayOrderId: rzp.id }).where(eq(plusMemberships.id, row.id));
+  return { membershipId: row.id, amountInPaise: charge.totalPaise, mode: paymentsMode() === 'mock' || !rzp?.keyId ? ('mock' as const) : ('razorpay' as const), razorpayOrderId: rzp?.id ?? null, keyId: rzp?.keyId ?? null };
 }
 
 /** Exactly-once pending → active. Buying early stacks: the new month starts when the current one ends. */

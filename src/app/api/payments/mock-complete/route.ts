@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { api, ApiError, ok, readJson } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
-import { isMockMode } from '@/lib/config';
+import { assertMockPaymentsOnly } from '@/lib/payments/mode';
 import { getDb } from '@/lib/db';
 import { kitchenSubscriptions, orders } from '@/lib/db/schema';
 import { markOrderPaid, markPaymentFailed } from '@/lib/payments';
@@ -9,9 +9,9 @@ import { markSubscriptionPaid } from '@/lib/subscriptions/service';
 
 export const dynamic = 'force-dynamic';
 
-/** MOCK_MODE only: the styled fake checkout sheet posts its outcome here (orders or subscriptions). */
+/** Mock payments mode only (no Razorpay keys, or PAYMENTS_ADAPTER=mock): the styled fake checkout sheet posts its outcome here (orders or subscriptions). */
 export const POST = api(async (req) => {
-  if (!isMockMode()) throw new ApiError(403, 'Mock payments are disabled in live mode');
+  assertMockPaymentsOnly(); // 404 in razorpay_test and razorpay_live, before anything else is looked at
   const session = await requireSession();
   const { orderId, subscriptionId, outcome } = await readJson<{ orderId?: number; subscriptionId?: number; outcome: 'success' | 'failure' }>(req);
   const db = await getDb();

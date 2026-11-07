@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Skeleton } from '@/components/ui';
 import { MockCheckoutSheet } from '@/components/mock-checkout';
-import '@/components/razorpay';
 import { useToast } from '@/components/providers';
+import { launchRazorpay } from '@/components/razorpay';
 
 type Details = { upiVpa: string | null; acceptsCash: boolean; verifyStatus: string; verifiedVpa: string | null; registeredName: string | null; complete: boolean };
 type Start =
@@ -70,32 +70,21 @@ export default function PaymentDetailsPage() {
   }
 
   function openRazorpay(s: Extract<Start, { mode: 'razorpay' }>) {
-    const launch = () => {
-      const rzp = new window.Razorpay!({
-        key: s.keyId,
-        amount: s.amountInPaise,
-        currency: 'INR',
-        name: 'PadosiPlate',
-        description: 'UPI ownership check (₹1, refunded)',
-        order_id: s.razorpayOrderId,
-        method: { upi: true, card: false, netbanking: false, wallet: false, emi: false, paylater: false },
-        handler: async (resp: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
-          const v = await fetch('/api/seller/upi-verify/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'razorpay', verificationId: s.verificationId, ...resp }) });
-          const out = await v.json().catch(() => ({}));
-          if (!v.ok) toast(out.error || 'Verification failed', 'err');
-          load();
-        },
-        theme: { color: '#1E4D2B' },
-      });
-      rzp.open();
-    };
-    if (window.Razorpay) launch();
-    else {
-      const sc = document.createElement('script');
-      sc.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      sc.onload = launch;
-      document.body.appendChild(sc);
-    }
+    launchRazorpay({
+      keyId: s.keyId,
+      razorpayOrderId: s.razorpayOrderId,
+      amountInPaise: s.amountInPaise,
+      description: 'UPI ownership check (₹1, refunded)',
+      method: { upi: true, card: false, netbanking: false, wallet: false, emi: false, paylater: false },
+      onSuccess: async (resp) => {
+        const v = await fetch('/api/seller/upi-verify/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'razorpay', verificationId: s.verificationId, ...resp }) });
+        const out = await v.json().catch(() => ({}));
+        if (!v.ok) toast(out.error || 'Verification failed', 'err');
+        load();
+      },
+      onDismiss: () => load(),
+      onLoadError: () => toast('Could not load the payment gateway', 'err'),
+    });
   }
 
   async function mockResult(outcome: 'success' | 'failure') {

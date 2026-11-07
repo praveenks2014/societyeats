@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button, Card, EmptyState, Field, Input, Select, Skeleton } from '@/components/ui';
 import { MockCheckoutSheet } from '@/components/mock-checkout';
-import '@/components/razorpay';
+import { launchRazorpay } from '@/components/razorpay';
 import { useCart, useLocation, useToast } from '@/components/providers';
 import { formatINR, quoteOrder, type FeeConfig } from '@/lib/money';
 import { formatDistance } from '@/lib/geo';
@@ -188,48 +188,31 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
     orderId: number,
     payment: { keyId: string; razorpayOrderId: string; amountInPaise: number },
   ) {
-    const launch = () => {
-      const rzp = new window.Razorpay!({
-        key: payment.keyId,
-        amount: payment.amountInPaise,
-        currency: 'INR',
-        name: 'PadosiPlate',
-        description: `Platform fee · order #${orderId}`,
-        order_id: payment.razorpayOrderId,
-        handler: async (resp: {
-          razorpay_order_id: string;
-          razorpay_payment_id: string;
-          razorpay_signature: string;
-        }) => {
-          const v = await fetch('/api/payments/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderId, ...resp }),
-          });
-          if (v.ok) {
-            clear();
-            router.push(`/orders/${orderId}`);
-          } else {
-            toast('Payment verification failed — contact support', 'err');
-            setPlacing(false);
-          }
-        },
-        modal: { ondismiss: () => setPlacing(false) },
-        theme: { color: '#1E4D2B' },
-      });
-      rzp.open();
-    };
-    if (window.Razorpay) launch();
-    else {
-      const s = document.createElement('script');
-      s.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      s.onload = launch;
-      s.onerror = () => {
+    launchRazorpay({
+      keyId: payment.keyId,
+      razorpayOrderId: payment.razorpayOrderId,
+      amountInPaise: payment.amountInPaise,
+      description: `Platform fee · order #${orderId}`,
+      onSuccess: async (resp) => {
+        const v = await fetch('/api/payments/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId, ...resp }),
+        });
+        if (v.ok) {
+          clear();
+          router.push(`/orders/${orderId}`);
+        } else {
+          toast('Payment verification failed — contact support', 'err');
+          setPlacing(false);
+        }
+      },
+      onDismiss: () => setPlacing(false),
+      onLoadError: () => {
         toast('Could not load the payment gateway', 'err');
         setPlacing(false);
-      };
-      document.body.appendChild(s);
-    }
+      },
+    });
   }
 
   async function onMockResult(outcome: 'success' | 'failure') {

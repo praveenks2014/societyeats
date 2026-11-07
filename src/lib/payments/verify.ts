@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { ApiError } from '@/lib/api';
-import { isMockMode } from '@/lib/config';
+import { paymentsMode } from '@/lib/payments/mode';
 import { getDb } from '@/lib/db';
 import { kitchenSubscriptions, orders, payments } from '@/lib/db/schema';
 import { markOrderPaid } from './index';
@@ -51,7 +51,7 @@ export async function verifyAndMarkPaid(v: VerifyInput): Promise<{ kind: 'order'
 
   if (!verifyCheckoutSignature(v.razorpay_order_id, v.razorpay_payment_id, v.razorpay_signature)) throw bad('Payment signature verification failed');
 
-  if (!isMockMode()) {
+  if (paymentsMode() !== 'mock') {
     await ensureCaptured({ paymentId: v.razorpay_payment_id, razorpayOrderId: v.razorpay_order_id, amountInPaise: expectedAmount });
   }
 

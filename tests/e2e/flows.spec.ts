@@ -22,7 +22,7 @@ const COOK = { phone: '9100000002', email: 'cook@e2e.example', name: 'Kamala Coo
  * The same journeys run on the desktop project and on mobile-390 (the money paths: 1, 2, 3, 5, 6, 9, 10, 13 and 23b). Each project gets its own people
  * (phone/e-mail offset) and its own kitchen numbers, because both run against one database, and every browser context it opens uses the phone viewport.
  */
-const MOBILE_SCENARIOS = new Set(['1', '2', '3', '5', '6', '9', '10', '13', '23b']);
+const MOBILE_SCENARIOS = new Set(['1', '2', '3', '5', '6', '9', '10', '13', '23b', '24']);
 const RESIDENT_BASE = { ...RESIDENT };
 const COOK_BASE = { ...COOK };
 let userOffset = 0;
@@ -1047,5 +1047,23 @@ test('23. flag-off features: 404 by default; switched on by an admin they work e
 test('23b. flag-off UIs: Sponsored feed card and meal plans (kitchen create/edit/pause, buyer book/skip/pause) when switched on', async ({ browser, request }) => {
   const b = await newBuyer(browser, 230);
   await flagUiJourney({ browser, request, buyer: b.page, kitchenNo: ++kitchenN });
+  await b.ctx.close();
+});
+
+test('24. CSP: the real Razorpay Checkout loads under the nonce policy (checkout.razorpay.com stubbed), prefilled with name and e-mail only', async ({ browser }) => {
+  const b = await newBuyer(browser, 240);
+  await b.page.route('https://checkout.razorpay.com/**', (route) =>
+    route.fulfill({ contentType: 'application/javascript', body: 'window.Razorpay = function (o) { window.__rzpOptions = o; this.open = function () { window.__rzpOpened = true; }; };' }),
+  );
+  await b.page.goto('/dev/razorpay-probe');
+  await b.page.getByTestId('probe-open').click();
+  await expect.poll(() => b.page.evaluate(() => (window as unknown as { __rzpOpened?: boolean }).__rzpOpened === true)).toBe(true);
+  const opts = await b.page.evaluate(() => (window as unknown as { __rzpOptions: Record<string, unknown> }).__rzpOptions);
+  expect(opts).toMatchObject({ key: 'rzp_test_probe', order_id: 'order_probe', currency: 'INR', theme: { color: '#1E4D2B' }, prefill: { name: b.name, email: b.email } });
+  expect(Object.keys(opts.prefill as object).sort()).toEqual(['email', 'name']); // nothing else is prefilled
+  // the script was added with the page's nonce, and the CSP header carries it
+  expect(await b.page.evaluate(() => document.querySelector<HTMLScriptElement>('script[src*="checkout.razorpay.com"]')?.nonce ?? '')).not.toBe('');
+  const csp = (await b.page.request.get('/dev/razorpay-probe')).headers()['content-security-policy'];
+  expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic' https:\/\/checkout\.razorpay\.com/);
   await b.ctx.close();
 });

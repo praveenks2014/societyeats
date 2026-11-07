@@ -1,5 +1,6 @@
 import { ApiError } from '@/lib/api';
 import { isMockMode } from '@/lib/config';
+import { paymentsMode } from '@/lib/payments/mode';
 import { getPlatformSettings } from '@/lib/db/platform';
 import type { PlatformSettings } from '@/lib/settings/defs';
 
@@ -19,12 +20,17 @@ export function liveModeMissing(s: Pick<PlatformSettings, 'platformFssaiCentralL
 }
 
 /**
- * Throws 503 for real-money operations while a configuration prerequisite is open. Uses the same list as /admin/go-live
- * (`configBlockers`), and does no I/O beyond the settings read: a late cron run or a storage blip is an alert, never a stopped order.
+ * Runs before EVERY action that takes money (order fee, kitchen plan, Plus, meal plan, bulk order, the ₹1 UPI check), whatever MOCK_MODE says:
+ *   mock / razorpay_test  → nothing to check (no real money)
+ *   razorpay_live         → MOCK_MODE must be false, and every configuration row of /admin/go-live must be done (`configBlockers`)
+ * It does no I/O beyond the settings read: a late cron run or a storage blip is an alert, never a stopped order.
  */
 export async function assertLiveModeReady(settings?: PlatformSettings): Promise<void> {
-  if (isMockMode()) return;
+  if (paymentsMode() !== 'razorpay_live') return;
+  if (isMockMode()) throw new ApiError(503, LIVE_KEYS_NEED_LIVE_MODE);
   const { configBlockers } = await import('@/lib/go-live');
   const blockers = configBlockers(settings ?? (await getPlatformSettings()));
   if (blockers.length) throw new ApiError(503, `Live orders are paused until these are done (Admin → Go-live): ${blockers.map((b) => b.label).join('; ')}.`);
 }
+
+export const LIVE_KEYS_NEED_LIVE_MODE = 'Live Razorpay keys need MOCK_MODE=false. Switch it once Admin → Go-live is green.';

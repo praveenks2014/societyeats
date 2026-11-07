@@ -1,6 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { ApiError } from '@/lib/api';
-import { isMockMode } from '@/lib/config';
+import { paymentsMode, assertMockPaymentsOnly } from '@/lib/payments/mode';
+import { assertLiveModeReady } from '@/lib/live-guard';
 import { getDb } from '@/lib/db';
 import { notify } from '@/lib/db/notify';
 import { getPlatformSettings } from '@/lib/db/platform';
@@ -34,7 +35,7 @@ export type StartResult =
   | { mode: 'intent'; verificationId: number; amountInPaise: number; intentUrl: string; qrSvg: string };
 
 export function activeProvider(configured: string): 'razorpayx_rpd' | 'razorpay_checkout_vpa' | 'mock' {
-  if (isMockMode()) return 'mock';
+  if (paymentsMode() === 'mock') return 'mock';
   return configured === 'razorpayx_rpd' || configured === 'mock' ? configured : 'razorpay_checkout_vpa';
 }
 
@@ -48,6 +49,7 @@ async function profileOf(sellerId: number) {
 }
 
 export async function startUpiVerification(sellerId: number): Promise<StartResult> {
+  await assertLiveModeReady(); // the ₹1 check takes real money in live mode
   const db = await getDb();
   const settings = await getPlatformSettings();
   const profile = await profileOf(sellerId);
@@ -67,7 +69,7 @@ export async function startUpiVerification(sellerId: number): Promise<StartResul
     return { mode: 'intent', verificationId: row.id, amountInPaise: VERIFY_AMOUNT_PAISE, intentUrl: v.upiIntentUrl, qrSvg: await upiQrSvg(v.upiIntentUrl) };
   }
 
-  const rz = await createRazorpayOrder({ amountInPaise: VERIFY_AMOUNT_PAISE, receipt: receiptFor('u', row.id), notes: { purpose: 'upi_verification', verificationId: String(row.id), sellerId: String(sellerId) } });
+  const rz = await createRazorpayOrder({ amountInPaise: VERIFY_AMOUNT_PAISE, receipt: receiptFor('u', row.id), kind: 'upi_check', ref: row.id, notes: { purpose: 'upi_verification', verificationId: String(row.id), sellerId: String(sellerId) } });
   await db.update(upiVerifications).set({ razorpayOrderId: rz.id }).where(eq(upiVerifications.id, row.id));
   if (!rz.keyId) return { mode: 'mock', verificationId: row.id, amountInPaise: VERIFY_AMOUNT_PAISE };
   return { mode: 'razorpay', verificationId: row.id, amountInPaise: VERIFY_AMOUNT_PAISE, keyId: rz.keyId, razorpayOrderId: rz.id };
@@ -164,7 +166,7 @@ export async function completeCheckoutVerification(input: { sellerId: number; ve
 
 /** MOCK_MODE: the fake ₹1 sheet. Success reports the claimed VPA as the payer. */
 export async function completeMockVerification(sellerId: number, verificationId: number, outcome: 'success' | 'failure' | 'other_vpa' | 'unreadable') {
-  if (!isMockMode()) throw new ApiError(403, 'Mock verification is disabled in live mode');
+  assertMockPaymentsOnly(); // 404 unless the fake checkout is the active payments mode
   const db = await getDb();
   const [row] = await db.select().from(upiVerifications).where(eq(upiVerifications.id, verificationId));
   if (!row || row.sellerId !== sellerId) throw new ApiError(404, 'Verification not found');

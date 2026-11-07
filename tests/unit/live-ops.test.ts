@@ -52,7 +52,6 @@ describe('F1: live mode — ordering only depends on configuration', () => {
   test.each([
     ['the platform FSSAI Central licence', { platformFssaiCentralLicenseNo: '' }, {}],
     ['the grievance officer', { grievanceOfficer: '' }, {}],
-    ['Razorpay keys', {}, { RAZORPAY_KEY_SECRET: '' }],
     ['the webhook secret', {}, { RAZORPAY_WEBHOOK_SECRET: '' }],
     ['the UPI provider', { upiVerifyProvider: 'mock' }, {}],
   ])('a missing configuration prerequisite (%s) refuses the order with 503', async (_label, sOver, eOver) => {

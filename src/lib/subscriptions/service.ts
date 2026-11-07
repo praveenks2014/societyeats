@@ -1,7 +1,8 @@
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { ApiError } from '@/lib/api';
 import { recordAudit } from '@/lib/audit';
-import { isMockMode } from '@/lib/config';
+import { paymentsMode } from '@/lib/payments/mode';
+import { assertLiveModeReady } from '@/lib/live-guard';
 import { getDb } from '@/lib/db';
 import { notify, notifyUser } from '@/lib/db/notify';
 import { emit } from '@/lib/notify';
@@ -25,6 +26,7 @@ export type SubscriptionCheckout =
 
 /** Creates (or reuses) a pending subscription for `planId` and its Razorpay order. */
 export async function startSubscriptionPayment(sellerId: number, planId: number): Promise<SubscriptionCheckout> {
+  await assertLiveModeReady(); // real money: configuration must be complete (no-op in mock and test-key modes)
   const db = await getDb();
   const [plan] = await db.select().from(subscriptionPlans).where(and(eq(subscriptionPlans.id, planId), eq(subscriptionPlans.active, true)));
   if (!plan) throw new ApiError(404, 'That plan is not available');
@@ -56,12 +58,12 @@ export async function startSubscriptionPayment(sellerId: number, planId: number)
         status: 'pending_payment',
       })
       .returning();
-    const rzp = await createRazorpayOrder({ amountInPaise: charge.totalPaise, receipt: receiptFor('s', sub.id), notes: { subscriptionId: String(sub.id), sellerId: String(sellerId) } });
+    const rzp = await createRazorpayOrder({ amountInPaise: charge.totalPaise, receipt: receiptFor('s', sub.id), kind: 'kitchen_plan', ref: sub.id, notes: { subscriptionId: String(sub.id), sellerId: String(sellerId) } });
     [sub] = await db.update(kitchenSubscriptions).set({ razorpayOrderId: rzp.id }).where(eq(kitchenSubscriptions.id, sub.id)).returning();
-    if (!isMockMode() && rzp.keyId) return { mode: 'razorpay', subscriptionId: sub.id, amountInPaise: charge.totalPaise, keyId: rzp.keyId, razorpayOrderId: rzp.id };
+    if (paymentsMode() !== 'mock' && rzp.keyId) return { mode: 'razorpay', subscriptionId: sub.id, amountInPaise: charge.totalPaise, keyId: rzp.keyId, razorpayOrderId: rzp.id };
     return { mode: 'mock', subscriptionId: sub.id, amountInPaise: charge.totalPaise };
   }
-  if (!isMockMode()) {
+  if (paymentsMode() !== 'mock') {
     const keyId = process.env.RAZORPAY_KEY_ID!;
     return { mode: 'razorpay', subscriptionId: sub.id, amountInPaise: charge.totalPaise, keyId, razorpayOrderId: sub.razorpayOrderId! };
   }

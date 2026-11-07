@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { api, ApiError, ok, readJson } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
-import { isMockMode } from '@/lib/config';
+import { assertMockPaymentsOnly } from '@/lib/payments/mode';
 import { getDb } from '@/lib/db';
 import { plusMemberships } from '@/lib/db/schema';
 import { activatePurchase } from '@/lib/plus';
@@ -21,7 +21,7 @@ export const POST = api(async (req) => {
   if (!m || m.userId !== session.uid) throw new ApiError(404, 'Purchase not found');
   let paymentId: string;
   if (parsed.data.mock) {
-    if (!isMockMode()) throw new ApiError(400, 'Mock payments are off');
+    assertMockPaymentsOnly(); // the fake sheet is a 404 unless payments are mocked
     paymentId = `pay_MOCKPLUS${m.id}`;
   } else {
     if (!m.razorpayOrderId || !parsed.data.razorpay_payment_id || !parsed.data.razorpay_signature || !verifyCheckoutSignature(m.razorpayOrderId, parsed.data.razorpay_payment_id, parsed.data.razorpay_signature)) throw new ApiError(400, 'Payment could not be verified');

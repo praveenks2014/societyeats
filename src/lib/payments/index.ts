@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { isMockMode } from '@/lib/config';
+import { paymentsMode } from '@/lib/payments/mode';
 import { getDb } from '@/lib/db';
 import { notify } from '@/lib/db/notify';
 import { emit } from '@/lib/notify';
@@ -8,7 +8,7 @@ import { getPlatformSettings } from '@/lib/db/platform';
 import { orderEvents, orders, payments, restaurantItems, restaurants, orderItems } from '@/lib/db/schema';
 import { log } from '@/lib/log';
 import { consumeReservedCredit } from '@/lib/referrals';
-import { createRazorpayOrder, receiptFor } from './razorpay';
+import { createRazorpayOrder, receiptFor, type PaymentKind } from './razorpay';
 
 export { verifyCheckoutSignature, verifyWebhookSignature } from './signature';
 
@@ -25,11 +25,11 @@ export type CheckoutPayload =
   | { mode: 'razorpay'; orderId: number; amountInPaise: number; keyId: string; razorpayOrderId: string };
 
 /** Creates the Razorpay order (or the mock sheet) for what the platform collects on this order. */
-export async function createOrderPayment(orderId: number, amountInPaise: number, kind: 'order_fee' | 'order_full' = 'order_fee'): Promise<CheckoutPayload> {
+export async function createOrderPayment(orderId: number, amountInPaise: number, kind: 'order_fee' | 'order_full' = 'order_fee', noteKind?: PaymentKind): Promise<CheckoutPayload> {
   const db = await getDb();
-  const rzp = await createRazorpayOrder({ amountInPaise, receipt: receiptFor('o', orderId), notes: { orderId: String(orderId), kind } });
+  const rzp = await createRazorpayOrder({ amountInPaise, receipt: receiptFor('o', orderId), kind: noteKind ?? kind, ref: orderId, notes: { orderId: String(orderId) } });
   await db.insert(payments).values({ orderId, razorpayOrderId: rzp.id, status: 'created', amountInPaise, kind });
-  if (isMockMode() || !rzp.keyId) return { mode: 'mock', orderId, amountInPaise };
+  if (paymentsMode() === 'mock' || !rzp.keyId) return { mode: 'mock', orderId, amountInPaise };
   return { mode: 'razorpay', orderId, amountInPaise, keyId: rzp.keyId, razorpayOrderId: rzp.id };
 }
 

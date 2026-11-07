@@ -7,6 +7,7 @@ import { adminUnreadCount } from '@/lib/messaging/admin-threads';
 import { getCronStatus } from '@/lib/cron-status';
 import { BRAND } from '@/config/brand';
 import { AdminReauth } from '@/components/admin-reauth';
+import { PaymentsBanner } from '@/components/payments-banner';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,7 +62,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
       )}
       <AdminReauth />
-      <div className="pt-5">{children}</div>
+      <div className="pt-5"><PaymentsBanner admin />
+      {children}</div>
     </>
   );
 }
