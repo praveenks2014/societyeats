@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getKitchenProfile } from '@/lib/browse';
 import { KitchenProfile } from './kitchen-client';
 import { Disclaimer } from '@/components/disclaimer';
+import { qualityScore } from '@/lib/quality';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,11 +29,13 @@ export default async function KitchenPage({ params }: { params: Promise<{ id: st
   if (!Number.isFinite(id)) notFound();
   const kitchen = await getKitchenProfile(id);
   if (!kitchen) notFound();
+  const topKitchen = (await qualityScore(id)).topKitchen;
 
   return (
     <>
     <KitchenProfile
       closedToday={kitchen.closedToday}
+      topKitchen={topKitchen}
       seller={{
         id: kitchen.seller.id,
         kitchenName: kitchen.profile.kitchenName,
@@ -68,6 +71,7 @@ export default async function KitchenPage({ params }: { params: Promise<{ id: st
         buyerName: r.buyer.name,
         createdAt: r.review.createdAt.toISOString(),
         sellerReplyText: r.review.sellerReplyText,
+        photos: r.review.photosJson ?? [],
       }))}
     />
     <div className="mt-4 space-y-2">

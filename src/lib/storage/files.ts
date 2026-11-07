@@ -16,7 +16,8 @@ export type UploadPurpose =
   | 'attachment'
   | 'fssai_content'
   | 'upi_evidence'
-  | 'chat_image';
+  | 'chat_image'
+  | 'review_photo';
 
 export type Detected = { mime: string; ext: string; kind: 'image' | 'video' | 'pdf' };
 

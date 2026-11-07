@@ -9,10 +9,12 @@ import type { CapUsage } from '@/lib/fssai/tier';
 const COUNTED: OrderStatus[] = [...ACTIVE_STATES, ...SOLD_STATES];
 
 /** Orders today (IST), food value today and food value in total for one kitchen — read inside the booking transaction under a row lock. */
-export async function sellerCapUsage(tx: DbLike, sellerId: number, now: Date = new Date()): Promise<CapUsage & { ordersTodayAll: number }> {
-  const todayStart = istStartOfDay(now);
+export async function sellerCapUsage(tx: DbLike, sellerId: number, now: Date = new Date(), forDay?: Date): Promise<CapUsage & { ordersTodayAll: number }> {
+  // `forDay`: the day being booked. A scheduled order counts against its DELIVERY day, not the day it was booked.
+  const todayStart = istStartOfDay(forDay ?? now);
+  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
   const rows = await tx
-    .select({ createdAt: orders.createdAt, food: orders.foodTotalInPaise })
+    .select({ createdAt: orders.createdAt, scheduledFor: orders.scheduledFor, food: orders.foodTotalInPaise })
     .from(orders)
     .where(and(eq(orders.sellerId, sellerId), eq(orders.type, 'home_delivery'), inArray(orders.status, COUNTED)));
   let ordersToday = 0;
@@ -20,7 +22,8 @@ export async function sellerCapUsage(tx: DbLike, sellerId: number, now: Date = n
   let foodTotal = 0;
   for (const r of rows) {
     foodTotal += r.food;
-    if (r.createdAt.getTime() >= todayStart.getTime()) {
+    const businessDay = (r.scheduledFor ?? r.createdAt).getTime();
+    if (businessDay >= todayStart.getTime() && businessDay < todayEnd.getTime()) {
       ordersToday++;
       foodToday += r.food;
     }

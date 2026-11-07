@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { FavouriteButton } from '@/components/favourite-button';
 import { Badge, Card, EmptyState, SectionTitle, Stars } from '@/components/ui';
 import { FoodImage } from '@/components/food-image';
 import { DishCard } from '@/components/dish-card';
@@ -45,10 +46,11 @@ type Props = {
     buyerName: string;
     createdAt: string;
     sellerReplyText: string | null;
+    photos?: string[];
   }[];
 };
 
-export function KitchenProfile({ seller, listings, reviews, closedToday = false }: Props & { closedToday?: boolean }) {
+export function KitchenProfile({ seller, listings, reviews, closedToday = false, topKitchen = false }: Props & { closedToday?: boolean; topKitchen?: boolean }) {
   return (
     <div className="mx-auto max-w-2xl pt-4">
       {seller.isFeatured && (
@@ -93,12 +95,14 @@ export function KitchenProfile({ seller, listings, reviews, closedToday = false 
           {seller.orderedByCount > 0 && (
             <Badge tone="neutral">Ordered by {seller.orderedByCount} neighbours</Badge>
           )}
+          {topKitchen && <span data-testid="top-kitchen"><Badge tone="green">🏆 Top Kitchen</Badge></span>}
           {seller.badgeTier && (
             <Badge tone="green">{BADGE_TIER_LABEL[seller.badgeTier] ?? `🏅 ${seller.badgeTier}+ orders`}</Badge>
           )}
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 space-y-3">
+          <FavouriteButton sellerId={seller.id} />
           <ShareButton
             text={`Check out ${seller.kitchenName} on PadosiPlate — home-cooked food from our society 🍲`}
           />
@@ -135,12 +139,19 @@ export function KitchenProfile({ seller, listings, reviews, closedToday = false 
             {reviews.map((r) => (
               <Card key={r.id} className="p-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold">{r.buyerName}</span>
+                  <span className="text-sm font-semibold">{r.buyerName} <span className="ml-1 text-[11px] font-semibold text-leaf" data-testid="verified-order">✔ Verified order</span></span>
                   <span className="rounded-md bg-leaf px-1.5 py-0.5 text-xs font-bold text-white">
                     ★ {r.rating}
                   </span>
                 </div>
                 {r.text && <p className="mt-1.5 text-sm text-ink-soft">{r.text}</p>}
+                {r.photos && r.photos.length > 0 && (
+                  <div className="mt-2 flex gap-2" data-testid="review-photos">
+                    {r.photos.map((k) => (
+                      <img key={k} src={`/api/files/${k}`} alt="Photo from the buyer" className="h-20 w-20 rounded-xl object-cover" />
+                    ))}
+                  </div>
+                )}
                 {r.sellerReplyText && (
                   <div className="mt-2 rounded-xl bg-rice-deep px-3 py-2 text-sm">
                     <span className="font-semibold">{seller.kitchenName} replied: </span>

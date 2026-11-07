@@ -32,6 +32,7 @@ export type DishCardData = {
   kitchenPhotosVerified?: boolean;
   /** DECISIONS.md #73+: distinct buyers with a completed order from this seller. */
   orderedByCount?: number;
+  topKitchen?: boolean;
 };
 
 export function DishCard({
@@ -106,7 +107,7 @@ export function DishCard({
           <VegDot isVeg={dish.isVeg} className="mt-0.5" />
           <h3 className="flex-1 font-display text-[15px] font-bold leading-snug">{dish.title}</h3>
         </div>
-        <div className="mt-1 text-xs text-ink-soft">{dish.kitchenName}</div>
+        <div className="mt-1 text-xs text-ink-soft">{dish.kitchenName}{dish.topKitchen && <span className="ml-1.5 font-semibold text-leaf" data-testid="top-kitchen-chip">🏆 Top Kitchen</span>}</div>
         {(dish.distanceKm != null || dish.societyName) && (
           <div className="eyebrow mt-1.5">
             {dish.distanceKm != null ? `${formatDistance(dish.distanceKm)} away` : ''}

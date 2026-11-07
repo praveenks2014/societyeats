@@ -36,6 +36,8 @@ export const SETTING_DEFS = {
   subscriptionReminderDays: { kind: 'text', def: '7,3,1', pattern: /^\d{1,2}(,\d{1,2}){0,4}$/, patternHint: 'comma-separated days like 7,1', group: 'Subscriptions', label: 'Renewal reminders (days before expiry)', hint: 'Comma-separated, e.g. 7,3,1.' },
   // ---- order timing ----
   unpaidOrderExpiryMinutes: { kind: 'int', unit: 'minutes', min: 1, max: 120, def: 15, group: 'Orders', label: 'Unpaid-fee order expiry (minutes)', hint: 'Orders whose platform fee is unpaid expire and release stock.' },
+  preOrderMaxDays: { kind: 'int', unit: 'days', min: 1, max: 30, def: 7, group: 'Orders', label: 'Pre-orders: how far ahead (days)', hint: 'Buyers can schedule an order up to this many days in advance (needs the Scheduled pre-orders flag).' },
+  preOrderAcceptLeadHours: { kind: 'int', unit: 'count', min: 1, max: 72, def: 4, group: 'Orders', label: 'Pre-orders: accept by this many hours before the slot', hint: 'A scheduled order auto-cancels (fee refunded) if the kitchen has not accepted this long before the slot. Never shorter than the normal acceptance window.' },
   sellerAcceptWindowMinutes: { kind: 'int', unit: 'minutes', min: 1, max: 120, def: 20, group: 'Orders', label: 'Kitchen acceptance window (minutes)', hint: 'Unaccepted orders auto-cancel and the platform fee is refunded. Default 20.' },
   kitchenPaymentConfirmMinutes: { kind: 'int', unit: 'minutes', min: 1, max: 240, def: 30, group: 'Orders', label: 'Kitchen UPI-confirmation reminder (minutes)', hint: 'After this long, both sides and admin are notified. Orders are never auto-cancelled for it.' },
   atDoorWaitMinutes: { kind: 'int', unit: 'minutes', min: 1, max: 120, def: 15, group: 'Orders', label: 'Wait at the door before a no-show (minutes)', hint: 'After this long at the door with an unreachable buyer the kitchen may record a no-show.' },
@@ -72,6 +74,12 @@ export const SETTING_DEFS = {
   chatBadWords: { kind: 'text', def: 'fuck,shit,bitch,asshole,bastard,madarchod,behenchod,chutiya,bhosdi,randi,harami,gaandu,kutta,saala', maxLen: 2000, group: 'Chat', label: 'Abusive words (comma-separated)', hint: 'A message containing one triggers a warning before sending. Reports and strikes handle repeat abuse.' },
   chatMaxLength: { kind: 'int', unit: 'count', min: 100, max: 4000, def: 1000, group: 'Chat', label: 'Max characters per message' },
   onboardingTargetHours: { kind: 'int', unit: 'count', min: 1, max: 336, def: 48, group: 'Moderation', label: 'Kitchen application review target (hours)', hint: 'Applications waiting longer than this are highlighted as overdue.' },
+  topKitchenMinOrders: { kind: 'int', unit: 'count', min: 1, max: 200, def: 10, group: 'Moderation', label: 'Top Kitchen: minimum orders in 30 days' },
+  topKitchenMinAcceptancePct: { kind: 'int', unit: 'count', min: 0, max: 100, def: 90, group: 'Moderation', label: 'Top Kitchen: minimum acceptance rate (%)' },
+  topKitchenMaxCancelPct: { kind: 'int', unit: 'count', min: 0, max: 100, def: 5, group: 'Moderation', label: 'Top Kitchen: maximum kitchen-caused cancellation rate (%)' },
+  topKitchenMinOnTimePct: { kind: 'int', unit: 'count', min: 0, max: 100, def: 80, group: 'Moderation', label: 'Top Kitchen: minimum on-time rate (%)' },
+  topKitchenOnTimeMinutes: { kind: 'int', unit: 'minutes', min: 10, max: 240, def: 75, group: 'Moderation', label: 'On time = at the door within this many minutes of accepting' },
+  topKitchenMinRating: { kind: 'number', min: 1, max: 5, def: 4.5, group: 'Moderation', label: 'Top Kitchen: minimum average rating' },
   // ---- notifications ----
   quietHoursStart: { kind: 'int', unit: 'count', min: 0, max: 23, def: 22, group: 'Notifications', label: 'Quiet hours start (hour, IST)', hint: 'Non-urgent push / WhatsApp / SMS wait out the night. In-app and email are unaffected.' },
   quietHoursEnd: { kind: 'int', unit: 'count', min: 0, max: 23, def: 7, group: 'Notifications', label: 'Quiet hours end (hour, IST)' },

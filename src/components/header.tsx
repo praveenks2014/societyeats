@@ -114,6 +114,11 @@ export function Header({ session }: { session: Session | null }) {
                         Browse food
                       </Link>
                     )}
+                    {session.role !== 'admin' && (
+                      <Link href="/favourites" onClick={() => setMenuOpen(false)} className="block px-4 py-2.5 text-sm hover:bg-rice">
+                        ♡ Favourite kitchens
+                      </Link>
+                    )}
                     <Link
                       href="/refer"
                       onClick={() => setMenuOpen(false)}

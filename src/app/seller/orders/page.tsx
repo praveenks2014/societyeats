@@ -25,6 +25,8 @@ type SellerOrder = {
   foodPaymentUtr: string | null;
   foodPaymentMethod: string | null;
   acceptBy: string | null;
+  scheduledFor?: string | null;
+  scheduledSlot?: string | null;
   atDoorAt: string | null;
   createdAt: string;
   buyerName: string;
@@ -169,6 +171,11 @@ function OrderCard({ order, onReload, toast, unread = 0 }: { order: SellerOrder;
         <span className="font-semibold">#{order.id} · {order.buyerName}</span>
         <StatusPill status={order.status} />
       </div>
+      {order.scheduledFor && (
+        <div className="mt-1.5 rounded-xl bg-turmeric-tint px-3 py-1.5 text-xs font-semibold text-turmeric-deep" data-testid="scheduled-badge">
+          🗓 Scheduled for {new Date(order.scheduledFor).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}{order.scheduledSlot ? ` (${order.scheduledSlot})` : ''}
+        </div>
+      )}
       <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-leaf">
         <span>{fMeta.emoji}</span>
         <span>{fMeta.label}</span>

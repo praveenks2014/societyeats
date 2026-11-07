@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Button, Card, EmptyState, Field, Input, Skeleton } from '@/components/ui';
+import { Button, Card, EmptyState, Field, Input, Select, Skeleton } from '@/components/ui';
 import { MockCheckoutSheet } from '@/components/mock-checkout';
 import '@/components/razorpay';
 import { useCart, useLocation, useToast } from '@/components/providers';
@@ -23,6 +23,7 @@ type QuoteResp = {
   sellerDeliveryFeeInPaise: number;
   sellerDeliveryRadiusKm: number;
   feeConfig: FeeConfig;
+  preOrders?: { enabled: boolean; maxDays: number };
   acceptsCash: boolean;
   minOrderPaise: number;
   gstMode: string;
@@ -32,6 +33,19 @@ type QuoteResp = {
   withinRange: boolean | null;
   sellerDeliveryAvailable: boolean | null;
 };
+
+const SLOT_HOUR = { breakfast: 9, lunch: 13, dinner: 20 } as const;
+/** The delivery time (as an ISO instant) for “N days from today, at this meal”, using IST wall-clock hours. */
+function scheduledIso(day: number, slot: keyof typeof SLOT_HOUR): string {
+  const now = new Date(Date.now() + 330 * 60_000); // IST wall clock, read through the UTC fields
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + day, SLOT_HOUR[slot], 0, 0));
+  return new Date(d.getTime() - 330 * 60_000).toISOString();
+}
+function dayLabel(day: number): string {
+  const now = new Date(Date.now() + 330 * 60_000);
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + day));
+  return `${day === 1 ? 'Tomorrow' : d.toLocaleDateString('en-IN', { weekday: 'long', timeZone: 'UTC' })} · ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' })}`;
+}
 
 export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
   const { vendor, items, subtotalPaise, clear } = useCart();
@@ -48,6 +62,7 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
   const [mockSheet, setMockSheet] = useState<{ orderId: number; amount: number } | null>(null);
   // Referral credit only ever reduces the platform fee. Default on.
   const [useCredit, setUseCredit] = useState(true);
+  const [schedule, setSchedule] = useState<{ on: boolean; day: number; slot: 'breakfast' | 'lunch' | 'dinner' }>({ on: false, day: 1, slot: 'lunch' });
 
   useEffect(() => {
     if (loc && !addressText) setAddressText(loc.label);
@@ -127,6 +142,7 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
                 fulfillmentType: fulfillment,
                 items: items.map((i) => ({ id: i.id, qty: i.qty })),
                 useCredit,
+                ...(schedule.on ? { scheduledFor: scheduledIso(schedule.day, schedule.slot) } : {}),
                 ...(needsAddress
                   ? {
                       address: {
@@ -307,6 +323,30 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
           This kitchen is {quote.distanceKm != null ? formatDistance(quote.distanceKm) : 'too far'} from your
           location for delivery. Change your location, pick self-pickup, or choose a closer kitchen.
         </div>
+      )}
+
+      {isDelivery && quote?.preOrders?.enabled && (
+        <Card className="mt-4 space-y-3 p-4" data-testid="schedule-card">
+          <label className="flex min-h-[44px] items-center gap-3 text-sm font-semibold">
+            <input type="checkbox" className="h-5 w-5 accent-leaf" checked={schedule.on} onChange={(e) => setSchedule((x) => ({ ...x, on: e.target.checked }))} data-testid="schedule-toggle" />
+            Order for later
+          </label>
+          {schedule.on && (
+            <div className="grid grid-cols-2 gap-3">
+              <Select value={String(schedule.day)} onChange={(e) => setSchedule((x) => ({ ...x, day: Number(e.target.value) }))} aria-label="Day" data-testid="schedule-day">
+                {Array.from({ length: quote.preOrders.maxDays }, (_, i) => i + 1).map((d) => (
+                  <option key={d} value={d}>{dayLabel(d)}</option>
+                ))}
+              </Select>
+              <Select value={schedule.slot} onChange={(e) => setSchedule((x) => ({ ...x, slot: e.target.value as typeof x.slot }))} aria-label="Meal" data-testid="schedule-slot">
+                <option value="breakfast">Breakfast (around 9)</option>
+                <option value="lunch">Lunch (around 1)</option>
+                <option value="dinner">Dinner (around 8)</option>
+              </Select>
+              <p className="col-span-2 text-xs text-ink-faint">You pay the platform fee now to book it. The kitchen confirms before the slot; if it cannot, your fee is refunded in full.</p>
+            </div>
+          )}
+        </Card>
       )}
 
       {isDelivery && quote && (

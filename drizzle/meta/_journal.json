@@ -183,6 +183,13 @@
       "when": 1793999867235,
       "tag": "0025_absurd_darwin",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794002554147,
+      "tag": "0026_stiff_trauma",
+      "breakpoints": true
     }
   ]
 }

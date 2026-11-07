@@ -30,6 +30,7 @@ const POLICIES: Record<UploadPurpose, Policy> = {
   fssai_content: { roles: ['admin'], visibility: 'public', allowed: ['image'] },
   upi_evidence: { roles: ['seller'], visibility: 'private', allowed: ['image'] },
   chat_image: { roles: ['buyer', 'seller'], visibility: 'private', allowed: ['image'], maxBytes: 2 * 1024 * 1024 },
+  review_photo: { roles: ['buyer', 'seller'], visibility: 'public', allowed: ['image'], maxBytes: 4 * 1024 * 1024 },
   attachment: { roles: ['seller', 'admin', 'buyer'], visibility: 'private', allowed: ['image', 'pdf'] },
 };
 

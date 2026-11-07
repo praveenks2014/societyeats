@@ -767,6 +767,8 @@ export const reviews = pgTable('reviews', {
   // own "already exists" marker elsewhere in this file.
   sellerReplyText: text('seller_reply_text'),
   sellerRepliedAt: timestamp('seller_replied_at'),
+  // Up to three photos of the food, uploaded by the buyer (public images, keys under /api/files).
+  photosJson: jsonb('photos_json').$type<string[]>(),
 });
 
 // ---------- complaints (Pilot Hardening v2 — Phase 5, DECISIONS.md #73+) ----------

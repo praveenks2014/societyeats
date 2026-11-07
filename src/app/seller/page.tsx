@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Badge, Button, Card, Skeleton } from '@/components/ui';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
+import { QualityCard } from '@/components/quality-card';
 
 type ChecklistItem = { key: string; label: string; done: boolean; href: string; hint?: string };
 type Summary = {
@@ -153,6 +154,8 @@ export default function SellerDashboard() {
           ↩️ You owe buyers {formatINR(data.refundsDue.totalPaise)} in food refunds ({data.refundsDue.count}) — mark them done once you’ve returned the money.
         </Link>
       )}
+
+      <QualityCard />
 
       {/* stats */}
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">

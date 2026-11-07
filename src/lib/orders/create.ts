@@ -16,6 +16,7 @@ import { fssaiApplications } from '@/lib/db/schema';
 import { desc } from 'drizzle-orm';
 import { sellerCapUsage, sellerFySalesPaise } from './caps';
 import { reserveStock } from './stock';
+import { assertSlotCapacity, checkPreOrderTime } from './preorder';
 
 export type HomeOrderInput = {
   buyerId: number;
@@ -55,7 +56,9 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
   if (blockedByKitchen) throw new ApiError(403, 'This kitchen is not taking orders from you');
   const gate = await kitchenGate(input.sellerId);
   const profile = gate.profile;
-  if (!profile || !gate.ok) throw new ApiError(400, 'This kitchen is not accepting orders right now');
+  // “Closed today” only closes today: a scheduled order for a later day is fine.
+  const closedOnlyToday = !!profile && gate.checks.openToday === false && Object.entries(gate.checks).every(([k, v]) => k === 'openToday' || v) && !!input.scheduledFor && !!profile.closedUntil && input.scheduledFor.getTime() >= profile.closedUntil.getTime();
+  if (!profile || (!gate.ok && !closedOnlyToday)) throw new ApiError(400, 'This kitchen is not accepting orders right now');
   if (!profile.upiVerifiedVpa || !profile.upiVerifiedName) throw new ApiError(400, 'This kitchen is not accepting orders right now');
   if (input.fulfillmentType === 'self_pickup' && !profile.offersSelfPickup) throw new ApiError(400, 'This kitchen does not offer self-pickup');
   if (input.fulfillmentType === 'seller_delivery' && !profile.offersSellerDelivery) throw new ApiError(400, 'This kitchen does not offer its own delivery');
@@ -89,11 +92,14 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
   for (const [id, qty] of merged) {
     const l = rows.find((r) => r.id === id);
     if (!l || !l.isActive || l.sellerId !== input.sellerId || l.moderationStatus !== 'approved') throw new ApiError(400, 'An item in your cart is no longer available');
-    if (l.availableQty < qty) throw new ApiError(409, `Only ${l.availableQty} of "${l.title}" left`);
+    if (!input.scheduledFor && l.availableQty < qty) throw new ApiError(409, `Only ${l.availableQty} of "${l.title}" left`);
     subtotal += qty * l.priceInPaise;
     lines.push({ listingId: l.id, qty, title: l.title, unit: l.priceInPaise });
   }
   if (profile.minOrderPaise > 0 && subtotal < profile.minOrderPaise) throw new ApiError(400, `This kitchen's minimum order is ₹${(profile.minOrderPaise / 100).toFixed(0)}`);
+
+  let pre: ReturnType<typeof checkPreOrderTime> | null = null;
+  if (input.scheduledFor) pre = checkPreOrderTime(input.scheduledFor, rows, settings);
 
   const slot = currentSlot();
   const cartSlots = rows.flatMap((l) => l.slotsJson?.slots ?? []);
@@ -114,8 +120,9 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
     // Row lock on the kitchen: bookings for the same kitchen are serialised, so cap checks cannot race.
     await tx.select({ id: sellerProfiles.userId }).from(sellerProfiles).where(eq(sellerProfiles.userId, input.sellerId)).for('update');
 
-    const usage = await sellerCapUsage(tx, input.sellerId, now);
-    if (usage.ordersToday + 1 > profile.maxOrdersPerDay) throw new ApiError(409, 'Fully booked today');
+    const usage = await sellerCapUsage(tx, input.sellerId, now, input.scheduledFor ?? undefined);
+    if (usage.ordersToday + 1 > profile.maxOrdersPerDay) throw new ApiError(409, input.scheduledFor ? 'Fully booked on that day' : 'Fully booked today');
+    if (input.scheduledFor && pre) await assertSlotCapacity(tx, input.sellerId, input.scheduledFor, pre.slot, lines, rows, profile.maxOrdersPerSlot);
     const foodForCaps = subtotal + deliveryFee;
     if (tierInfo.tier === 'provisional') {
       const caps = effectiveCaps(settings, profile.capOverrideJson, now);
@@ -170,13 +177,15 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
         deliveryAddressJson: addr,
         otpCode: otp4(),
         scheduledFor: input.scheduledFor ?? null,
+        scheduledSlot: pre?.slot ?? null,
         buyerNote: input.buyerNote?.slice(0, 300) ?? null,
         expiresAt: new Date(now.getTime() + settings.unpaidOrderExpiryMinutes * 60_000),
-        stockReserved: true,
+        stockReserved: !input.scheduledFor,
       })
       .returning();
 
-    await reserveStock(tx, lines);
+    // A scheduled order does not take today's portions; its slot capacity was checked above.
+    if (!input.scheduledFor) await reserveStock(tx, lines);
     if (quote.creditAppliedPaise > 0) {
       const got = await reserveCredit(tx, input.buyerId, order.id, quote.creditAppliedPaise);
       if (got !== quote.creditAppliedPaise) throw new ApiError(409, 'Your referral credit changed — please try again');

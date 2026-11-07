@@ -3,6 +3,7 @@ import { isMockMode } from '@/lib/config';
 import { getDb } from '@/lib/db';
 import { notify } from '@/lib/db/notify';
 import { emit } from '@/lib/notify';
+import { preOrderAcceptBy } from '@/lib/orders/preorder';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { orderEvents, orders, payments, restaurantItems, restaurants, orderItems } from '@/lib/db/schema';
 import { log } from '@/lib/log';
@@ -68,7 +69,7 @@ export async function markOrderPaid(
         feePaidAt: now,
         bookedAt: now,
         expiresAt: null,
-        acceptBy: home ? new Date(now.getTime() + settings.sellerAcceptWindowMinutes * 60_000) : null,
+        acceptBy: home ? (existing.scheduledFor ? preOrderAcceptBy(existing.scheduledFor, now, settings) : new Date(now.getTime() + settings.sellerAcceptWindowMinutes * 60_000)) : null,
         updatedAt: now,
       })
       .where(and(eq(orders.id, orderId), eq(orders.status, 'fee_pending')))
@@ -113,7 +114,10 @@ export async function markOrderPaid(
 
   const order = result.order!;
   if (order.sellerId) {
-    await emit('order_booked', order.sellerId, { orderId, items: 'A neighbour placed an order', acceptMinutes: (await getPlatformSettings()).sellerAcceptWindowMinutes });
+    const fmt = (d: Date) => d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    await emit('order_booked', order.sellerId, order.scheduledFor
+      ? { orderId, items: 'A neighbour pre-ordered', when: `${order.scheduledSlot ?? ''} on ${fmt(order.scheduledFor)}`.trim(), acceptBy: order.acceptBy ? fmt(order.acceptBy) : '' }
+      : { orderId, items: 'A neighbour placed an order', acceptMinutes: settings.sellerAcceptWindowMinutes });
   }
   if (order.restaurantId) {
     const [rest] = await db.select().from(restaurants).where(eq(restaurants.id, order.restaurantId));

@@ -6,6 +6,7 @@ import { Badge, Button, Card, Field, Input, Modal, Select, Skeleton, Textarea } 
 import { FoodImage } from '@/components/food-image';
 import { AtDoorPaymentCard, FeeRetryCard, OrderThread } from '@/components/order-extras';
 import { COMPLETED_STATUSES, FINISHED_STATUSES, OrderTimeline, STATUS_META, StatusPill } from '@/components/order-status';
+import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 import { COMPLAINT_CATEGORIES, COMPLAINT_OUTCOME_LABELS, type ComplaintCategory, type ComplaintOutcome } from '@/lib/complaints';
@@ -23,6 +24,7 @@ type Detail = {
     subtotalInPaise: number;
     deliveryFeeInPaise: number;
     foodTotalInPaise: number;
+    scheduledFor?: string | null;
     onlineChargeInPaise: number;
     platformFeeInPaise: number;
     platformFeeGstInPaise: number;
@@ -61,6 +63,7 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
   const [data, setData] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
+  const router = useRouter();
 
   const load = useCallback(async () => {
     try {
@@ -108,6 +111,18 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
 
   const { order, vendor } = data;
   const meta = STATUS_META[order.status];
+  async function orderAgain() {
+    const res = await fetch(`/api/orders/${order.id}/repeat`);
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) return toast(d.error || 'Could not repeat that order', 'err');
+    try {
+      localStorage.setItem('padosi_cart', JSON.stringify({ vendor: d.vendor, items: d.items }));
+    } catch {
+      /* storage unavailable */
+    }
+    if (d.skipped?.length) toast(`Skipped (not available today): ${d.skipped.join(', ')}`);
+    router.push('/cart');
+  }
 
   return (
     <div className="mx-auto max-w-lg pt-6">
@@ -128,6 +143,7 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
       <Card className="mt-4 p-5 text-center">
         <div className="text-4xl">{meta?.emoji}</div>
         <div className="mt-1 text-lg font-bold">{meta?.label}</div>
+        {order.scheduledFor && <p className="mt-1 text-sm font-semibold text-turmeric-deep" data-testid="scheduled-for">🗓 Scheduled for {new Date(order.scheduledFor).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</p>}
         {order.status === 'booked' && data.timers.acceptBy && <Countdown to={data.timers.acceptBy} label="The kitchen has until" />}
         {data.fssai?.tier === 'provisional' && <p className="mt-2 text-xs text-turmeric-deep">FSSAI applied: provisional</p>}
         {data.fssai?.tier === 'verified' && data.fssai.number && <p className="mt-2 text-xs text-leaf">FSSAI registered · {data.fssai.number}</p>}
@@ -276,6 +292,10 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
         <ReviewBlock orderId={order.id} review={data.review} onDone={load} />
       )}
 
+      {data.viewerIsBuyer && order.type === 'home_delivery' && COMPLETED_STATUSES.includes(order.status) && (
+        <Button className="mt-4 w-full" size="lg" variant="secondary" onClick={orderAgain} data-testid="order-again">🔁 Order this again</Button>
+      )}
+
       {/* complaint (DECISIONS.md #73+) */}
       {data.viewerIsBuyer && COMPLETED_STATUSES.includes(order.status) && (
         <div id="complaint-block">
@@ -352,7 +372,22 @@ function ReviewBlock({
   const [rating, setRating] = useState(0);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
   const toast = useToast();
+
+  async function addPhoto(file: File) {
+    if (photos.length >= 3) return toast('You can add up to 3 photos', 'err');
+    setUploading(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('purpose', 'review_photo');
+    const res = await fetch('/api/uploads', { method: 'POST', body: fd });
+    const d = await res.json().catch(() => ({}));
+    setUploading(false);
+    if (!res.ok) return toast(d.error || 'Upload failed', 'err');
+    setPhotos((p) => [...p, d.key]);
+  }
 
   if (review) {
     return (
@@ -375,7 +410,7 @@ function ReviewBlock({
     const res = await fetch(`/api/orders/${orderId}/review`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rating, text }),
+      body: JSON.stringify({ rating, text, photos }),
     });
     const d = await res.json();
     setBusy(false);
@@ -409,6 +444,17 @@ function ReviewBlock({
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {photos.map((k) => (
+          <img key={k} src={`/api/files/${k}`} alt="Your photo" className="h-14 w-14 rounded-xl object-cover" />
+        ))}
+        {photos.length < 3 && (
+          <label className="flex min-h-[44px] cursor-pointer items-center rounded-xl border border-dashed border-rice-line px-3 text-xs font-semibold text-ink-soft">
+            {uploading ? 'Uploading…' : '📷 Add a photo'}
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => e.target.files?.[0] && addPhoto(e.target.files[0])} data-testid="review-photo-input" />
+          </label>
+        )}
+      </div>
       <Button className="mt-3" onClick={submit} loading={busy} disabled={rating === 0}>
         Submit rating
       </Button>

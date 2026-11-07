@@ -58,6 +58,7 @@ export const GET = api(async (req) => {
     // The bill is two parts: food (paid to the kitchen) + platform fee (Razorpay).
     // The fee maths lives in src/lib/money/fees.ts and is shared with the server.
     feeConfig: feeConfigFromSettings(settings),
+    preOrders: { enabled: settings.preOrdersEnabled, maxDays: settings.preOrderMaxDays },
     acceptsCash: profile.acceptsCash,
     minOrderPaise: profile.minOrderPaise,
     gstMode: settings.gstMode,

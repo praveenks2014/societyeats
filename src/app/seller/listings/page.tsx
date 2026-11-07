@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, Select, Skeleton, Textarea, VegDot } from '@/components/ui';
 import { FoodImage } from '@/components/food-image';
 import { useToast } from '@/components/providers';
+import { MenuPublisher } from '@/components/menu-publisher';
 import { formatINR } from '@/lib/money';
 
 type Listing = {
@@ -72,6 +73,8 @@ export default function SellerListings() {
         <h1 className="text-2xl font-bold">My dishes</h1>
         <Button onClick={() => setEditing('new')}>+ New dish</Button>
       </div>
+
+      <MenuPublisher dishes={rows} />
 
       {rows.length === 0 ? (
         <EmptyState

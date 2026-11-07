@@ -85,6 +85,7 @@ export default async function DishPage({ params }: { params: Promise<{ id: strin
         buyerName: r.buyer.name,
         createdAt: r.review.createdAt.toISOString(),
         sellerReplyText: r.review.sellerReplyText,
+        photos: r.review.photosJson ?? [],
       }))}
       otherDishes={detail.otherDishes.map((d) => ({
         id: d.id,

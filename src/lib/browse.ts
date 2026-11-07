@@ -16,6 +16,7 @@ import { fssaiFiledEligible, isFssaiEligibleToPublish } from '@/lib/fssai/gate';
 import { fssaiTier, type FssaiTier } from '@/lib/fssai/tier';
 import { neighbourOrderCount, sellerBadgeTier, sellerCompletedOrderCount } from '@/lib/reputation';
 import { isClosedToday, kitchenGate } from '@/lib/kitchen/gate';
+import { topKitchenSet } from '@/lib/quality';
 import { buyerHandle } from '@/lib/handles';
 import { currentSlot, isSlotSoldOut, slotOrderCount } from '@/lib/slots';
 
@@ -93,6 +94,7 @@ export type ListingCard = {
   foodMark: 'veg' | 'egg' | 'non_veg';
   /** `verified` shows "FSSAI registered"; `provisional` shows "FSSAI applied: provisional". */
   fssaiTier: FssaiTier;
+  topKitchen: boolean;
   sellerSocietyId: number | null;
   createdAt: number;
 };
@@ -255,6 +257,7 @@ export async function browseListings(opts: {
       orderedByCount: await sellerNeighbourCount(listing.sellerId),
       foodMark: listing.foodMark as 'veg' | 'egg' | 'non_veg',
       fssaiTier: fssaiTier(profile, latestApplication, { deemedDays: settings.fssaiDeemedGrantDaysRegistration, provisionalMaxDays: settings.provisionalMaxDays }),
+      topKitchen: false,
       sellerSocietyId: society?.id ?? null,
       createdAt: listing.createdAt.getTime(),
     });
@@ -270,6 +273,10 @@ export async function browseListings(opts: {
     if (b.rating !== a.rating) return b.rating - a.rating;
     return b.createdAt - a.createdAt;
   });
+
+  // The public Top Kitchen badge (numbers stay private to the kitchen).
+  const tops = await topKitchenSet(cards.map((c) => c.sellerId));
+  for (const c of cards) c.topKitchen = tops.has(c.sellerId);
 
   return { listings: cards, cuisines: [...cuisines].sort(), radiusKm: settings.radiusKm };
 }
