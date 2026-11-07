@@ -918,7 +918,7 @@ test('21. favourites and today’s menu: follow a kitchen, the kitchen publishes
 
   const { ctx, page: seller } = await newUserContext(browser);
   await login(seller.request, k.email);
-  await seller.goto('/seller');
+  await seller.goto('/seller/listings');
   const pub = seller.getByTestId('menu-publisher');
   await expect(pub).toBeVisible();
   await seller.getByTestId(`menu-dish-${k.dishId}`).click();
