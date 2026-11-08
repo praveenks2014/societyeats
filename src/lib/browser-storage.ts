@@ -2,7 +2,7 @@ import { BRAND } from '@/config/brand';
 
 /**
  * Browser-storage keys are `<slug>_<name>` (e.g. `kootu_cart`). The first time the app loads after a rename, keys written under an earlier
- * prefix (`padosi_cart`, `padosi_loc`, …) are copied to the new name once and the old keys are deleted, so nobody loses their cart or location.
+ * prefix (see `legacyStoragePrefixes` in brand.ts) are copied to the new name once and the old keys are deleted, so nobody loses their cart or location.
  * Safe to call on every page load: after the first run it only reads one flag.
  */
 export function migrateLegacyStorage(): void {
