@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { usePolledResource } from '@/lib/use-polled-resource';
 import { Badge, Button, Card, Field, Input, Modal, Select, Skeleton, Textarea } from '@/components/ui';
 import { FoodImage } from '@/components/food-image';
 import { AtDoorPaymentCard, FeeRetryCard, OrderThread } from '@/components/order-extras';
@@ -60,35 +61,24 @@ type Detail = {
 
 
 export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: boolean }) {
-  const [data, setData] = useState<Detail | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const toast = useToast();
   const router = useRouter();
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/orders/${orderId}`);
-      const d = await res.json();
-      if (!res.ok) {
-        setError(d.error || 'Could not load order');
-        return;
+  // Only the most recently started request may set the data (a slow poll can never overwrite what an action's own reload fetched).
+  const { data: res, reload: load, abortInFlight } = usePolledResource<{ data: Detail } | { error: string }>(
+    async (signal) => {
+      try {
+        const r = await fetch(`/api/orders/${orderId}`, { signal });
+        const d = await r.json();
+        return r.ok ? { data: d as Detail } : { error: d.error || 'Could not load order' };
+      } catch {
+        return null; // keep last data on transient network errors
       }
-      setData(d);
-    } catch {
-      /* keep last data on transient network errors */
-    }
-  }, [orderId]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // poll while the order is active
-  useEffect(() => {
-    if (!data || FINISHED_STATUSES.includes(data.order.status)) return;
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
-  }, [data, load]);
+    },
+    { intervalMs: 5000, resetKey: orderId, pollWhile: (r) => !!r && 'data' in r && !FINISHED_STATUSES.includes(r.data.order.status) },
+  );
+  const data = res && 'data' in res ? res.data : null;
+  const error = res && 'error' in res ? res.error : null;
 
   if (error) {
     return (
@@ -125,7 +115,8 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
   }
 
   return (
-    <div className="mx-auto max-w-lg pt-6">
+    // a click anywhere in the order (rate, cancel, claim paid, confirm…) drops any poll still in flight; each action reloads when it finishes
+    <div className="mx-auto max-w-lg pt-6" onClickCapture={abortInFlight}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="eyebrow">ORDER #{order.id}</div>

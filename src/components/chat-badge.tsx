@@ -1,26 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { usePolledResource } from '@/lib/use-polled-resource';
 
 /** Header chat icon with the total of unread chat messages. Hidden for admins (they have no chats of their own). */
 export function ChatBadge({ role }: { role: string }) {
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    if (role === 'admin') return;
-    let live = true;
-    const tick = () =>
-      fetch('/api/chat/unread')
-        .then((r) => (r.ok ? r.json() : { total: 0 }))
-        .then((d) => live && setN(d.total ?? 0))
-        .catch(() => {});
-    tick();
-    const i = setInterval(tick, 15_000);
-    return () => {
-      live = false;
-      clearInterval(i);
-    };
-  }, [role]);
+  const { data } = usePolledResource<{ total: number }>(
+    async (signal) => {
+      if (role === 'admin') return null;
+      try {
+        const r = await fetch('/api/chat/unread', { signal });
+        return r.ok ? { total: ((await r.json()).total as number) ?? 0 } : { total: 0 };
+      } catch {
+        return null;
+      }
+    },
+    { intervalMs: 15_000, enabled: role !== 'admin', resetKey: role },
+  );
+  const n = data?.total ?? 0;
   if (role === 'admin') return null;
   return (
     <Link href={role === 'seller' ? '/seller/orders' : '/orders'} className="relative rounded-xl p-2 text-xl transition-colors hover:bg-rice-deep" aria-label={`Messages, ${n} unread`} data-testid="chat-badge">

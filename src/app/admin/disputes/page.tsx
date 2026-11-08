@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { usePolledResource } from '@/lib/use-polled-resource';
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Skeleton, Textarea } from '@/components/ui';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
@@ -18,19 +19,22 @@ type Detail = {
 const ago = (m: number) => (m < 90 ? `${m} min` : m < 2880 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`);
 
 export default function DisputesBoard() {
-  const [board, setBoard] = useState<Board | null>(null);
   const [open, setOpen] = useState<number | null>(null);
-  const load = useCallback(() => {
-    fetch('/api/admin/disputes').then((r) => r.json()).then(setBoard);
-  }, []);
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 15_000);
-    return () => clearInterval(t);
-  }, [load]);
+  // Only the most recently started request may set the board (see usePolledResource).
+  const { data: board, reload: load, abortInFlight } = usePolledResource<Board>(
+    async (signal) => {
+      try {
+        const r = await fetch('/api/admin/disputes', { signal });
+        return r.ok ? ((await r.json()) as Board) : null;
+      } catch {
+        return null;
+      }
+    },
+    { intervalMs: 15_000 },
+  );
   if (!board) return <Skeleton className="h-64 w-full" />;
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6" onClickCapture={abortInFlight}>
       <div>
         <h1 className="text-2xl font-bold">Disputes and live orders</h1>
         <p className="mt-1 text-sm text-ink-soft">Tickets must be acknowledged within {board.targets.ackHours} hours and resolved within {board.targets.resolveDays} days.</p>

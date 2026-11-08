@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
+import { usePolledResource } from '@/lib/use-polled-resource';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, Skeleton, Textarea } from '@/components/ui';
 import { FINISHED_STATUSES, StatusPill } from '@/components/order-status';
 import { OrderThread } from '@/components/order-extras';
@@ -55,26 +56,25 @@ const NEEDS_REASON = ['seller_cancel', 'not_received', 'raise_dispute', 'no_show
 const NEEDS_ACTION = ['booked', 'paid', 'payment_claimed', 'at_door', 'collected', 'payment_disputed'];
 
 export default function SellerOrders() {
-  const [orders, setOrders] = useState<SellerOrder[] | null>(null);
-  const [unread, setUnread] = useState<Record<number, number>>({});
   const toast = useToast();
 
-  const load = useCallback(() => {
-    fetch('/api/seller/orders')
-      .then((r) => r.json())
-      .then((d) => setOrders(d.orders))
-      .catch(() => {});
-    fetch('/api/chat/unread')
-      .then((r) => (r.ok ? r.json() : { byOrder: {} }))
-      .then((d) => setUnread(d.byOrder ?? {}))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 6000);
-    return () => clearInterval(t);
-  }, [load]);
+  // Only the most recently started request may set the data; a click drops polls still in flight (see usePolledResource).
+  const { data, reload: load, abortInFlight } = usePolledResource<{ orders: SellerOrder[]; unread: Record<number, number> }>(
+    async (signal) => {
+      try {
+        const [o, u] = await Promise.all([
+          fetch('/api/seller/orders', { signal }).then((r) => r.json()),
+          fetch('/api/chat/unread', { signal }).then((r) => (r.ok ? r.json() : { byOrder: {} })).catch(() => ({ byOrder: {} })),
+        ]);
+        return o.orders ? { orders: o.orders as SellerOrder[], unread: (u.byOrder ?? {}) as Record<number, number> } : null;
+      } catch {
+        return null;
+      }
+    },
+    { intervalMs: 6000 },
+  );
+  const orders = data?.orders ?? null;
+  const unread = data?.unread ?? {};
 
   if (!orders) {
     return (
@@ -90,7 +90,7 @@ export default function SellerOrders() {
   const past = orders.filter((o) => FINISHED_STATUSES.includes(o.status));
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
+    <div className="mx-auto max-w-2xl space-y-8" onClickCapture={abortInFlight}>
       <section>
         <h2 className="mb-3 text-lg font-bold">
           Needs action {needsAction.length > 0 && <Badge tone="red">{needsAction.length}</Badge>}
