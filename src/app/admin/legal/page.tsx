@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Skeleton, Textarea } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { diffStats, lineDiff, type DiffLine } from '@/lib/diff';
 
 type Doc = { slug: string; title: string; version: number; reviewStatus: string; effectiveDate: string | null; changeSummary: string | null; reconsentRequired: boolean };
 type Disc = { id: string; version: number; text: string };
@@ -62,6 +63,9 @@ function DocEditor({ slug, onDone, toast }: { slug: string; onDone: () => void; 
   const [material, setMaterial] = useState(false);
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [cmp, setCmp] = useState<{ diff: DiffLine[]; identical: boolean; adminEdited: boolean; version: number } | null>(null);
+  const [confirmLoad, setConfirmLoad] = useState(false);
+  const [fromSeed, setFromSeed] = useState(false);
   useEffect(() => {
     fetch(`/api/admin/legal/${slug}`).then((r) => r.json()).then((d) => { setDoc(d.document); setTitle(d.document.title); setBody(d.document.body); });
   }, [slug]);
@@ -74,10 +78,57 @@ function DocEditor({ slug, onDone, toast }: { slug: string; onDone: () => void; 
     toast(okMsg);
     onDone();
   }
+  async function compare() {
+    const res = await fetch(`/api/admin/legal/${slug}?compare=seed`);
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) return toast(d.error || 'Could not compare', 'err');
+    setCmp({ diff: lineDiff(d.current.body, d.seed.body), identical: d.identical, adminEdited: d.adminEdited, version: d.current.version });
+    setConfirmLoad(false);
+  }
+  async function loadSeed() {
+    setBusy(true);
+    const res = await fetch(`/api/admin/legal/${slug}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'load_seed_draft' }) });
+    const d = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) return toast(d.error || 'Could not load the seed draft', 'err');
+    setTitle(d.title);
+    setBody(d.body);
+    setFromSeed(true);
+    setPreview(false);
+    toast('Loaded into the editor as an unsaved draft. Nothing is published yet.');
+  }
   if (!doc) return <Skeleton className="mt-3 h-40 w-full" />;
   return (
     <div className="mt-4 space-y-3 border-t border-rice-line pt-4">
       <Field label="Title"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+      <div className="rounded-xl bg-rice-deep p-3 text-xs" data-testid="seed-compare">
+        <Button size="sm" variant="secondary" onClick={compare} data-testid="seed-compare-btn">Compare with latest seed draft</Button>
+        {cmp && (
+          <div className="mt-3 space-y-2">
+            {cmp.identical ? (
+              <p data-testid="seed-identical">The live text (version {cmp.version}) is the same as the seed draft.</p>
+            ) : (
+              <>
+                <p data-testid="seed-diff-stats">Live version {cmp.version} against the seed draft: <span className="font-semibold text-leaf">{diffStats(cmp.diff).added} lines in the seed only</span>, <span className="font-semibold text-chili">{diffStats(cmp.diff).removed} lines in the live text only</span>.</p>
+                <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-white p-2" data-testid="seed-diff">
+                  {cmp.diff.filter((l) => l.type !== 'same').map((l, i) => (
+                    <span key={i} className={`block ${l.type === 'add' ? 'bg-leaf-tint text-leaf' : 'bg-chili-tint text-chili-dark'}`} data-diff={l.type}>{l.type === 'add' ? '+ ' : '− '}{l.text || ' '}</span>
+                  ))}
+                </pre>
+                {cmp.adminEdited && (
+                  <label className="flex min-h-[44px] items-center gap-2" data-testid="seed-edited-warning">
+                    <input type="checkbox" className="h-5 w-5 accent-leaf" checked={confirmLoad} onChange={(e) => setConfirmLoad(e.target.checked)} data-testid="seed-confirm" />
+                    An admin has already published edits to this document. Loading the seed only replaces the text in this editor; published versions stay in the history.
+                  </label>
+                )}
+                <Button size="sm" loading={busy} disabled={cmp.adminEdited && !confirmLoad} onClick={loadSeed} data-testid="seed-load">Load into a new draft version</Button>
+                <p className="text-ink-faint">Asks for a fresh 2FA code. It never publishes and never overwrites a published version.</p>
+              </>
+            )}
+          </div>
+        )}
+        {fromSeed && <p className="mt-2 font-semibold text-turmeric-deep" data-testid="seed-draft-banner">Unsaved draft from the seed. Nothing is published until you press “Publish new version”.</p>}
+      </div>
       <div className="flex gap-2 text-xs font-semibold">
         <button className={!preview ? 'underline' : ''} onClick={() => setPreview(false)}>Markdown</button>
         <button className={preview ? 'underline' : ''} onClick={() => setPreview(true)}>Preview</button>

@@ -2,13 +2,15 @@ import { z } from 'zod';
 import { api, ApiError, ok, readJson } from '@/lib/api';
 import { recordAudit } from '@/lib/audit';
 import { requireRecentMfa, requireSession } from '@/lib/auth';
-import { getLegalDocument, isLegalSlug, legalVersions, markLegalReviewed, publishLegalDocument, seedLegalDocuments } from '@/lib/legal/docs';
+import { compareWithSeed, getLegalDocument, isLegalSlug, legalVersions, markLegalReviewed, publishLegalDocument, seedLegalDocuments } from '@/lib/legal/docs';
 
 export const dynamic = 'force-dynamic';
 
-export const GET = api<{ params: { slug: string } }>(async (_req, { params }) => {
+export const GET = api<{ params: { slug: string } }>(async (req, { params }) => {
   await requireSession(['admin']);
   if (!isLegalSlug(params.slug)) throw new ApiError(404, 'Unknown document');
+  // ?compare=seed: the live text next to the built-in draft (read-only)
+  if (req.nextUrl.searchParams.get('compare') === 'seed') return ok(await compareWithSeed(params.slug));
   await seedLegalDocuments();
   return ok({ document: await getLegalDocument(params.slug), versions: await legalVersions(params.slug) });
 });
@@ -32,6 +34,13 @@ export const POST = api<{ params: { slug: string } }>(async (req, { params }) =>
     await markLegalReviewed(params.slug, admin.uid);
     await recordAudit({ actorId: admin.uid, action: 'legal.review', targetType: 'legal_document', targetId: params.slug });
     return ok({ document: await getLegalDocument(params.slug) });
+  }
+  if (body.action === 'load_seed_draft') {
+    // Hands the built-in draft text to the editor as an UNSAVED draft. It writes nothing: no version is created, none is overwritten,
+    // nothing is published. Publishing stays the separate, audited "Publish new version" step.
+    const c = await compareWithSeed(params.slug);
+    await recordAudit({ actorId: admin.uid, action: 'legal.seed_draft_loaded', targetType: 'legal_document', targetId: params.slug, meta: { liveVersion: c.current.version, adminEdited: c.adminEdited } });
+    return ok({ title: c.seed.title, body: c.seed.body, adminEdited: c.adminEdited, liveVersion: c.current.version });
   }
   const parsed = publishSchema.safeParse(body);
   if (!parsed.success) throw new ApiError(400, parsed.error.issues[0].message);

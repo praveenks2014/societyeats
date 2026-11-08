@@ -129,3 +129,66 @@ describe('T2: backups in the admin console', () => {
     expect(await count('ops_recovered')).toBe(1);
   });
 });
+
+describe('T4: compare the legal text with the latest seed draft', () => {
+  test('lineDiff: identical, added, removed and changed lines', async () => {
+    const { lineDiff, diffStats } = await import('@/lib/diff');
+    expect(diffStats(lineDiff('a\nb', 'a\nb'))).toEqual({ added: 0, removed: 0, same: 2 });
+    expect(lineDiff('a\nb', 'a\nc\nb')).toEqual([{ type: 'same', text: 'a' }, { type: 'add', text: 'c' }, { type: 'same', text: 'b' }]);
+    expect(lineDiff('a\nb\nc', 'a\nc')).toEqual([{ type: 'same', text: 'a' }, { type: 'del', text: 'b' }, { type: 'same', text: 'c' }]);
+    expect(diffStats(lineDiff('one\ntwo', 'one\nTWO'))).toEqual({ added: 1, removed: 1, same: 1 });
+    expect(diffStats(lineDiff('', 'x'))).toEqual({ added: 1, removed: 1, same: 0 }); // '' is one empty line
+  });
+
+  test('compare is read-only; loading the seed needs 2FA, writes nothing and never publishes; an admin-edited document is flagged', async () => {
+    const admin = await makeUser(db, 'admin', { societyId });
+    process.env.ADMIN_EMAILS = admin.email!;
+    const { GET, POST } = await import('@/app/api/admin/legal/[slug]/route');
+    const p = { slug: 'terms' };
+    await loginAs(admin.id, { mfa: true });
+    const first = await call(GET as never, jsonReq('/x?compare=seed', undefined, { method: 'GET' }), p);
+    expect(first.status).toBe(200);
+    expect(first.json).toMatchObject({ identical: true, adminEdited: false });
+
+    // an admin publishes their own edit
+    const live = (await call(GET as never, jsonReq('/x', undefined, { method: 'GET' }), p)).json.document as { body: string; version: number };
+    const edited = `${live.body}\n\nAn edit made by an admin, counsel-approved wording.`;
+    const pub = await call(POST as never, jsonReq('/x', { action: 'publish', title: 'Terms of use', body: edited, material: false, changeSummary: 'Edited by the admin' }), p);
+    expect(pub.status, JSON.stringify(pub.json)).toBe(200);
+
+    const cmp = await call(GET as never, jsonReq('/x?compare=seed', undefined, { method: 'GET' }), p);
+    expect(cmp.json).toMatchObject({ identical: false, adminEdited: true, current: { version: live.version + 1 } });
+    expect((cmp.json.seed as { body: string }).body).toBe(live.body);
+
+    const snapshot = async () => ({ doc: (await db.select().from(s.legalDocuments).where(eq(s.legalDocuments.slug, 'terms')))[0], versions: await db.select().from(s.legalDocumentVersions).where(eq(s.legalDocumentVersions.slug, 'terms')) });
+    const before = await snapshot();
+
+    // a stale 2FA check is refused; a fresh one hands over the seed text only
+    await loginAs(admin.id, { mfa: false });
+    expect((await call(POST as never, jsonReq('/x', { action: 'load_seed_draft' }), p)).status).toBe(403);
+    await loginAs(admin.id, { mfa: true });
+    const load = await call(POST as never, jsonReq('/x', { action: 'load_seed_draft' }), p);
+    expect(load.status, JSON.stringify(load.json)).toBe(200);
+    expect(load.json).toMatchObject({ body: live.body, adminEdited: true, liveVersion: live.version + 1 });
+
+    // nothing was written: the live document and every stored version are exactly as they were
+    expect(await snapshot()).toEqual(before);
+    expect(before.doc.body).toBe(edited);
+    expect((await db.select().from(s.auditLog).where(eq(s.auditLog.action, 'legal.seed_draft_loaded'))).length).toBeGreaterThanOrEqual(1);
+
+    // publishing the loaded draft is the normal separate step: it adds a version and leaves the admin's earlier version intact
+    const again = await call(POST as never, jsonReq('/x', { action: 'publish', title: 'Terms of use', body: load.json.body, material: false, changeSummary: 'Back to the seed text' }), p);
+    expect(again.status).toBe(200);
+    const after = await snapshot();
+    expect(after.versions.length).toBe(before.versions.length + 1);
+    expect(after.versions.find((v) => v.version === live.version + 1)!.body).toBe(edited);
+  });
+
+  test('only admins can compare or load', async () => {
+    const buyer = await makeUser(db, 'buyer', { societyId });
+    const { GET, POST } = await import('@/app/api/admin/legal/[slug]/route');
+    await loginAs(buyer.id);
+    expect((await call(GET as never, jsonReq('/x?compare=seed', undefined, { method: 'GET' }), { slug: 'terms' })).status).toBe(403);
+    expect((await call(POST as never, jsonReq('/x', { action: 'load_seed_draft' }), { slug: 'terms' })).status).toBe(403);
+  });
+});

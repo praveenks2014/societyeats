@@ -124,3 +124,21 @@ export async function currentConsentLabel(slug: ConsentDocSlug): Promise<string>
   const doc = await getLegalDocument(slug);
   return versionLabel(slug, doc?.version ?? 1);
 }
+
+/**
+ * The built-in draft text for a slug next to what is live now, for the admin "Compare with latest seed draft" view. Read-only: it never
+ * writes. `adminEdited` is true once an admin has published a version (so the live text is not the untouched seed any more).
+ */
+export async function compareWithSeed(slug: LegalDocSlug) {
+  await seedLegalDocuments();
+  const seed = SEED_DOCS.find((d) => d.slug === slug)!;
+  const db = await getDb();
+  const [cur] = await db.select().from(legalDocuments).where(eq(legalDocuments.slug, slug));
+  const versions = await db.select({ publishedBy: legalDocumentVersions.publishedBy }).from(legalDocumentVersions).where(eq(legalDocumentVersions.slug, slug));
+  return {
+    current: { title: cur.title, body: cur.body, version: cur.version },
+    seed: { title: seed.title, body: seed.body },
+    identical: cur.title === seed.title && cur.body === seed.body,
+    adminEdited: versions.some((v) => v.publishedBy != null),
+  };
+}
