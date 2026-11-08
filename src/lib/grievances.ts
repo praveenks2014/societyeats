@@ -47,7 +47,7 @@ export async function createGrievance(input: {
   return row;
 }
 
-/** A person at PadosiPlate picks the ticket up (and, optionally, takes ownership). */
+/** A person at Kootu picks the ticket up (and, optionally, takes ownership). */
 export async function acknowledgeGrievance(id: number, adminId: number, now: Date = new Date()) {
   const db = await getDb();
   const [row] = await db.update(grievances).set({ status: 'acknowledged', ackAt: now, handledBy: adminId }).where(and(eq(grievances.id, id), eq(grievances.status, 'open'))).returning();

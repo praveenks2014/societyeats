@@ -1,6 +1,6 @@
 # Dark patterns self-audit (CCPA Guidelines 2023, Annexure 1)
 
-For each of the 13 specified patterns: where it could appear, and how PadosiPlate avoids it. Re-run this list before every launch.
+For each of the 13 specified patterns: where it could appear, and how Kootu avoids it. Re-run this list before every launch.
 
 | # | Pattern | Screens checked | How it is avoided |
 |---|---|---|---|

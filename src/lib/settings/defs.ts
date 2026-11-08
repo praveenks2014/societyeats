@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DEFAULTS } from '@/lib/config';
+import { BRAND } from '@/config/brand';
 
 /**
  * Every admin-tunable platform setting, in one table: type, bounds, default,
@@ -109,7 +110,7 @@ export const SETTING_DEFS = {
   // ---- revenue features (built, off for the pilot unless noted) ----
   mealPlansEnabled: { kind: 'bool', def: false, group: 'Feature flags', label: 'Meal plans (tiffin subscriptions)' },
   featuredEnabled: { kind: 'bool', def: false, group: 'Feature flags', label: 'Featured placement (always labelled Sponsored)' },
-  plusEnabled: { kind: 'bool', def: false, group: 'Feature flags', label: 'PadosiPlate Plus (buyer membership)' },
+  plusEnabled: { kind: 'bool', def: false, group: 'Feature flags', label: `${BRAND.name} Plus (buyer membership)` },
   plusPriceMonthlyPaise: { kind: 'int', unit: 'paise', min: 0, max: 100_000, def: 9900, group: 'Feature flags', label: 'Plus: monthly price (₹)' },
   plusFeeDiscountBps: { kind: 'int', unit: 'bps', min: 0, max: 10_000, def: 5000, group: 'Feature flags', label: 'Plus: platform-fee discount (%)' },
   plusMonthlyDiscountCapPaise: { kind: 'int', unit: 'paise', min: 0, max: 100_000, def: 20_000, group: 'Feature flags', label: 'Plus: monthly discount cap (₹)' },

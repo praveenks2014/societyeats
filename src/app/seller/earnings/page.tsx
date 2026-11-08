@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Badge, Card, Select, Skeleton } from '@/components/ui';
 import { DisclaimerClient } from '@/components/disclaimer-client';
 import { formatINR } from '@/lib/money';
+import { BRAND } from '@/config/brand';
 
 type Data = {
   fy: { label: string; startYear: number };
@@ -20,7 +21,7 @@ type Plan = { status: string; daysLeft: number | null; endsAt: string | null };
 const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const monthLabel = (k: string) => `${MONTH[Number(k.slice(5)) - 1]} ${k.slice(0, 4)}`;
 
-/** The kitchen's own sales record. Buyers pay the kitchen directly, so this is for your books, not money held by PadosiPlate. */
+/** The kitchen's own sales record. Buyers pay the kitchen directly, so this is for your books, not money held by Kootu. */
 export default function SalesPage() {
   const [fy, setFy] = useState<number | null>(null);
   const [data, setData] = useState<Data | null>(null);
@@ -39,7 +40,7 @@ export default function SalesPage() {
     <div className="mx-auto max-w-2xl space-y-5">
       <div>
         <h1 className="text-2xl font-bold">Sales</h1>
-        <p className="mt-1 text-sm text-ink-soft">Buyers pay you directly at their door, so this is a record for <em>your</em> books. PadosiPlate holds none of your food money and takes no cut of it. Your costs are the subscription and the platform fee buyers pay on top.</p>
+        <p className="mt-1 text-sm text-ink-soft">Buyers pay you directly at their door, so this is a record for <em>your</em> books. {BRAND.name} holds none of your food money and takes no cut of it. Your costs are the subscription and the platform fee buyers pay on top.</p>
       </div>
 
       <div className="flex items-center justify-between gap-3">
@@ -65,7 +66,7 @@ export default function SalesPage() {
           <div className="mt-2 h-2 overflow-hidden rounded-pill bg-rice-deep" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
             <div className={`h-full ${tds.level === 'ok' ? 'bg-leaf' : tds.level === 'warn' ? 'bg-turmeric' : 'bg-chili'}`} style={{ width: `${pct}%` }} />
           </div>
-          <p className="mt-2 text-xs text-ink-soft">{formatINR(tds.fySalesPaise)} sold. You will be warned at {formatINR(tds.warnPaise)} and new orders pause at {formatINR(tds.pausePaise)} until PadosiPlate has spoken to you about tax.</p>
+          <p className="mt-2 text-xs text-ink-soft">{formatINR(tds.fySalesPaise)} sold. You will be warned at {formatINR(tds.warnPaise)} and new orders pause at {formatINR(tds.pausePaise)} until {BRAND.name} has spoken to you about tax.</p>
         </Card>
       )}
 

@@ -6,6 +6,7 @@ import { DEFAULTS } from '@/lib/config';
 import { DishDetail } from './dish-detail';
 import { DishFacts } from '@/components/dish-facts';
 import { Disclaimer } from '@/components/disclaimer';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const title = `${detail.listing.title} — ${detail.profile.kitchenName}`;
   const description =
     detail.listing.description ||
-    `${detail.listing.cuisine} from ${detail.profile.kitchenName}${detail.society ? `, ${detail.society.name}` : ''} — order on PadosiPlate.`;
+    `${detail.listing.cuisine} from ${detail.profile.kitchenName}${detail.society ? `, ${detail.society.name}` : ''} — order on ${BRAND.name}.`;
   return {
     title,
     description,

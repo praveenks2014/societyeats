@@ -10,6 +10,6 @@ export async function useTestDb(): Promise<Db> {
   const client = new PGlite();
   const db = drizzle(client, { schema });
   await migrate(db, { migrationsFolder: path.join(process.cwd(), 'drizzle') });
-  (globalThis as { __padosiDb?: unknown }).__padosiDb = Promise.resolve(db);
+  (globalThis as { __appDb?: unknown }).__appDb = Promise.resolve(db);
   return db as unknown as Db;
 }

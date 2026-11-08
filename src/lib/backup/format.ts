@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { sql } from 'drizzle-orm';
 import { rowsOf, type Db } from '@/lib/db';
+import { BRAND } from '@/config/brand';
 
 /**
  * Logical backup format (used when pg_dump is not available): ONE gzipped file of JSON lines.
@@ -82,7 +83,7 @@ export async function exportLogical(db: Db, now: Date = new Date()): Promise<{ g
 export function parseLogical(gz: Buffer): { manifest: Manifest; rowsByTable: Map<string, unknown[]> } {
   const lines = zlib.gunzipSync(gz).toString('utf8').split('\n').filter(Boolean);
   const first = JSON.parse(lines[0] ?? '{}') as { manifest?: Manifest };
-  if (!first.manifest || first.manifest.format !== 1) throw new Error('This is not a PadosiPlate logical backup (format 1).');
+  if (!first.manifest || first.manifest.format !== 1) throw new Error(`This is not a ${BRAND.name} logical backup (format 1).`);
   const rowsByTable = new Map<string, unknown[]>(first.manifest.tables.map((t) => [t.name, []]));
   for (const line of lines.slice(1)) {
     const { t, r } = JSON.parse(line) as { t: string; r: unknown };

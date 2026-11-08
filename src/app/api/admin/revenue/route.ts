@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { api, ok } from '@/lib/api';
 import { requireSession } from '@/lib/auth';
 import { revenueCsv, revenueReport, type RevenueRange } from '@/lib/revenue';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,7 @@ export const GET = api(async (req) => {
   const report = await revenueReport(range);
   if (sp.get('format') === 'csv') {
     return new NextResponse(revenueCsv(report), {
-      headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="padosiplate-revenue-${range}.csv"` },
+      headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${BRAND.slug}-revenue-${range}.csv"` },
     });
   }
   return ok(report);

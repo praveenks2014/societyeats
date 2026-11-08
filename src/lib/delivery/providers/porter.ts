@@ -2,6 +2,7 @@ import { isMockMode } from '@/lib/config';
 import type { GeoPoint } from '@/lib/geo';
 import { mockCreateDelivery, mockQuote, mockTrack, simulateLatency } from '../mock-core';
 import type { DeliveryProvider, OrderInfo, ProviderOrder, Quote, TrackingState } from '../types';
+import { BRAND } from '@/config/brand';
 
 /**
  * Porter "Porter for Enterprise" API adapter.
@@ -37,7 +38,7 @@ export const PorterAdapter: DeliveryProvider = {
     if (!shouldUseLive()) return mockQuote('porter', pickup, drop);
     // VERIFY against partner docs when keys arrive
     const data = await porterFetch(
-      `/v1/get_quote?pickup_details[lat]=${pickup.lat}&pickup_details[lng]=${pickup.lng}&drop_details[lat]=${drop.lat}&drop_details[lng]=${drop.lng}&customer[name]=PadosiPlate&customer[mobile][number]=9999999999&customer[mobile][country_code]=+91`,
+      `/v1/get_quote?pickup_details[lat]=${pickup.lat}&pickup_details[lng]=${pickup.lng}&drop_details[lat]=${drop.lat}&drop_details[lng]=${drop.lng}&customer[name]=${BRAND.name}&customer[mobile][number]=9999999999&customer[mobile][country_code]=+91`,
     );
     const twoWheeler = data.vehicles?.find((v: { type: string }) => v.type === '2 Wheeler');
     return {

@@ -4,6 +4,7 @@ import type { Db } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { hashPassword } from './passwords';
 import { referralCodeFor } from '@/lib/referrals';
+import { BRAND } from '@/config/brand';
 
 /**
  * Admin access is ENV-DRIVEN: a user is an admin if and only if their
@@ -23,7 +24,7 @@ export function adminEmails(): string[] {
   return list;
 }
 
-export const DEMO_ADMIN_EMAIL = 'admin@demo.padosiplate.example';
+export const DEMO_ADMIN_EMAIL = `admin@demo.${BRAND.slug}.example`;
 
 export function isAdminEmail(email: string | null | undefined): boolean {
   if (!email) return false;

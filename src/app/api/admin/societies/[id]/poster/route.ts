@@ -43,6 +43,6 @@ export const GET = api<{ params: { id: string } }>(async (_req, { params }) => {
   center(`${BRAND.appName} · ${BRAND.supportEmail}`, 70, 10);
   const bytes = await pdf.save();
   return new NextResponse(new Uint8Array(bytes), {
-    headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="padosiplate-poster-${s.inviteCode}.pdf"`, 'Cache-Control': 'private, no-store' },
+    headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${BRAND.slug}-poster-${s.inviteCode}.pdf"`, 'Cache-Control': 'private, no-store' },
   });
 });

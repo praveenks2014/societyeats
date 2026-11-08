@@ -1,3 +1,4 @@
+import brand from './src/config/brand.json';
 import { defineConfig } from 'drizzle-kit';
 
 export default defineConfig({
@@ -5,6 +6,6 @@ export default defineConfig({
   schema: './src/lib/db/schema.ts',
   out: './drizzle',
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? 'postgres://localhost:5432/padosiplate',
+    url: process.env.DATABASE_URL ?? `postgres://localhost:5432/${brand.slug}`,
   },
 });

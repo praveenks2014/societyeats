@@ -1,4 +1,4 @@
-# PadosiPlate – pilot launch checklist
+# Kootu – pilot launch checklist
 
 Work top to bottom. Everything up to step 6 can be done with `MOCK_MODE=true`; step 9 is the only live-money step.
 
@@ -11,7 +11,7 @@ Work top to bottom. Everything up to step 6 can be done with `MOCK_MODE=true`; s
 - [ ] **7. Share the join links** in the two societies' WhatsApp groups. Watch `/admin` (requests, users, complaints) daily.
 - [ ] **8. Schedule the cron job (required on Autoscale).** Autoscale has no built-in cron, so `/api/cron/run` never runs on its own. Set `CRON_SECRET` in Secrets, then schedule it every 5 minutes with cron-job.org:
    1. Sign up at [cron-job.org](https://cron-job.org) and click **Create cronjob**.
-   2. **Title:** `PadosiPlate scheduled jobs`. **URL:** `https://<SITE_URL>/api/cron/run` (your deployed domain, e.g. `https://padosiplate.replit.app/api/cron/run`).
+   2. **Title:** `Kootu scheduled jobs`. **URL:** `https://<SITE_URL>/api/cron/run` (your deployed domain, e.g. `https://kootu.replit.app/api/cron/run`).
    3. **Execution schedule:** **Every 5 minutes** (cron-job.org: "Every 5 minutes"). The jobs also run the order timers (accept deadlines, unpaid-order expiry, reminders), so a long gap delays those.
    4. Open the **Advanced** tab:
       - **Request method:** `POST`
@@ -37,7 +37,7 @@ Work top to bottom. Everything up to step 6 can be done with `MOCK_MODE=true`; s
 - **Lawyer-reviewed terms**, kitchen terms, privacy policy and refund policy (all marked drafts).
 - **Phone OTP** login/verification (today: e-mail verification and password login).
 - **WhatsApp Business relay** for order notifications (today: in-app and e-mail).
-- **Trademark search** for "PadosiPlate" before spending on branding.
+- **Trademark search** for "Kootu" before spending on branding.
 - Bank account / PAN collection, kitchen payouts and platform delivery are intentionally **not** part of this phase.
 
 ## Before go-live (Pilot v2): founder's tasks
@@ -70,8 +70,17 @@ Open `/admin/go-live`: it lists every blocker and links each to the screen that 
 3. Replace the three secrets with the live values, set `MOCK_MODE=false` and `EMAIL_ADAPTER=resend`, redeploy.
 4. `npm run razorpay:check` (live): expect "razorpay_live".
 5. Take a live ₹1 UPI check for a kitchen and a live platform fee on a real order between the two admins; refund it from `/admin/refunds` and confirm the refund webhook.
-6. Your other apps on the same account must ignore events whose order notes say `app: padosiplate`.
+6. Your other apps on the same account must ignore events whose order notes say `app: kootu`.
 
 ## Email must really send before residents sign up
 
 With `MOCK_MODE=true` mails land in `/admin/outbox` and are **not delivered** unless `EMAIL_ADAPTER=resend` is set. For a family trial with real residents: set `EMAIL_ADAPTER=resend`, `RESEND_API_KEY` and `EMAIL_FROM` (an address on a **domain verified in Resend**; `onboarding@resend.dev` only delivers to your own address). `/admin/go-live` → "Email delivery" must be green (red = outbox only, amber = last send failed or a test domain).
+
+## Before the first residents see the Kootu name
+
+1. **Domain**: register the domain, point it at the Replit deployment, set `SITE_URL` to it (https).
+2. **E-mail**: verify the domain in Resend (add the DNS records), then set `EMAIL_FROM="Kootu <no-reply@mail.<your-domain>>"`. Until the domain is verified Resend only delivers to your own address.
+3. **Trademark search** for "Kootu" before spending on branding: IP India (public search), classes **35** (marketplace services), **39** (delivery / transport of food), **43** (food and drink services) and **9** (software / apps). Also check the domain, app-store names and social handles.
+4. **Razorpay**: add the new website URL (and the app name) to the Razorpay account's business details before taking live payments. Test orders already created on the shared account under the earlier name still reconcile (the webhook accepts both `notes.app` values).
+5. **Existing database**: `npm run db:bootstrap` rewrites the earlier name in text that was seeded (version-1 disclaimers and the FSSAI walkthrough) and leaves anything an admin edited. Legal documents are edited in `/admin/legal`: use "Compare with latest seed draft" to bring a document in line.
+6. **Browsers**: nothing to do. Saved carts and locations move to the new storage keys on the first visit, and the old service-worker caches are deleted on activation.

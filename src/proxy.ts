@@ -1,5 +1,6 @@
 import { jwtVerify, SignJWT } from 'jose';
 import { NextRequest, NextResponse } from 'next/server';
+import { BRAND } from '@/config/brand';
 
 /**
  * Two jobs, both cheap and DB-free (edge runtime):
@@ -12,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
  *     source of truth and is checked in getSession(); this only keeps the
  *     cookie alive.)
  */
-const COOKIE = 'padosi_session';
+const COOKIE = BRAND.cookieName;
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const CSRF_EXEMPT = [/^\/api\/webhooks\//, /^\/api\/cron\//];
 

@@ -10,6 +10,7 @@ import { refundOrderPayment } from '@/lib/payments/refunds';
 import { emit } from '@/lib/notify';
 import { adminMayRead } from '@/lib/messaging/order-thread';
 import { DAY_MS } from '@/lib/time';
+import { BRAND } from '@/config/brand';
 
 export const DISPUTE_KINDS = ['dispute_payment', 'dispute_food', 'dispute_quality', 'chat_report'] as const;
 
@@ -146,7 +147,7 @@ export async function applyOutcome(grievanceId: number, outcome: Outcome, note: 
       const userId = outcome.target === 'buyer' ? order?.buyerId : order?.sellerId;
       if (!userId) throw new ApiError(400, 'That person is not on this order');
       const { notify } = await import('@/lib/db/notify');
-      await notify(userId, 'A warning from PadosiPlate', outcome.message.trim().slice(0, 400) || why, outcome.target === 'seller' ? '/seller' : '/orders');
+      await notify(userId, `A warning from ${BRAND.name}`, outcome.message.trim().slice(0, 400) || why, outcome.target === 'seller' ? '/seller' : '/orders');
       closes = false;
       resolution = `warn_${outcome.target}`;
       break;
@@ -160,7 +161,7 @@ export async function applyOutcome(grievanceId: number, outcome: Outcome, note: 
         await emit('strike_issued', userId, { role: 'buyer', reason: `Ordering paused until ${until.toDateString()} after ticket #${grievanceId}`, count: 1, limit: 1 });
       } else {
         await db.update(sellerProfiles).set({ listingsPausedReason: 'dispute', listingsPausedAt: new Date() }).where(eq(sellerProfiles.userId, userId));
-        await emit('listing_paused', userId, { reason: `PadosiPlate paused your kitchen after ticket #${grievanceId}: ${why}` });
+        await emit('listing_paused', userId, { reason: `${BRAND.name} paused your kitchen after ticket #${grievanceId}: ${why}` });
       }
       resolution = `suspend_${outcome.target}`;
       break;

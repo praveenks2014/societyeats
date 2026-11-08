@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect } from 'react';
+import { BRAND } from '@/config/brand';
 
 /** One anonymous count per browser session (sessionStorage guard); an invite page passes its code so the visit counts for that society. */
 export function VisitPing({ code }: { code?: string }) {
   useEffect(() => {
     try {
-      const key = `padosi_visit_${code ?? 'site'}`;
+      const key = BRAND.storageKey(`visit_${code ?? 'site'}`);
       if (sessionStorage.getItem(key)) return;
       sessionStorage.setItem(key, '1');
     } catch {

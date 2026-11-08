@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Modal, Button, Badge } from '@/components/ui';
 import { formatINR } from '@/lib/money';
+import { BRAND } from '@/config/brand';
 
 /**
  * MOCK_MODE stand-in for Razorpay Checkout: a styled payment sheet with a
@@ -33,7 +34,7 @@ export function MockCheckoutSheet({
     <Modal open={open} onClose={() => !busy && onClose()} sheet>
       <div className="flex items-center justify-between">
         <div>
-          <div className="font-display text-lg font-bold">PadosiPlate Pay</div>
+          <div className="font-display text-lg font-bold">{BRAND.name} Pay</div>
           <div className="text-xs text-ink-faint">Order #{orderId} · UPI / Cards / Netbanking</div>
         </div>
         <Badge tone="amber">MOCK MODE</Badge>

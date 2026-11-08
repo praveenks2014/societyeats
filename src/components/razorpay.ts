@@ -1,4 +1,6 @@
 'use client';
+import { BRAND } from '@/config/brand';
+
 
 declare global {
   interface Window {
@@ -38,7 +40,7 @@ export function launchRazorpay(o: {
       key: o.keyId,
       amount: o.amountInPaise,
       currency: 'INR',
-      name: 'PadosiPlate',
+      name: BRAND.name,
       description: o.description,
       order_id: o.razorpayOrderId,
       ...(o.method ? { method: o.method } : {}),

@@ -1,8 +1,9 @@
 import crypto from 'node:crypto';
 import { z } from 'zod';
+import { BRAND } from '@/config/brand';
 
 export function newInviteCode(name: string): string {
-  const base = name.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8) || 'PADOSI';
+  const base = name.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8) || BRAND.name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
   return `${base}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
 }
 

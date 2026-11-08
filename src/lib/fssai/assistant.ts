@@ -1,7 +1,9 @@
+import { BRAND } from '@/config/brand';
+
 /**
  * FSSAI Basic Registration assistant (Form A). Pure helpers — no DB, no
  * network — so the rules are unit-tested and shared by the wizard, the API
- * and the filing pack. PadosiPlate helps sellers PREPARE; they submit the
+ * and the filing pack. Kootu helps sellers PREPARE; they submit the
  * application themselves on foscos.fssai.gov.in and pay government fees
  * directly to FSSAI. We never ask for or store FoSCoS passwords/OTPs.
  */
@@ -26,7 +28,7 @@ export const SALES_LABELS: Record<SalesBand, string> = {
 export const RULES_VERIFIED_NOTE = 'Rules verified Nov 2026; check FoSCoS for changes.';
 /** Shown at every step of the assistant and on the compliance page. */
 export const ANTI_SCAM_NOTICE =
-  'PadosiPlate never charges for FSSAI and never files for you. Never pay agents claiming to “fast-track” your registration — the only fee is the government fee, paid on the official FoSCoS portal.';
+  `${BRAND.name} never charges for FSSAI and never files for you. Never pay agents claiming to “fast-track” your registration — the only fee is the government fee, paid on the official FoSCoS portal.`;
 
 /** Up to ₹1.5 crore + a home kitchen selling only within Telangana → Basic Registration (Form A); everything else needs a licence. */
 export function checkEligibility(e: Eligibility): EligibilityResult {
@@ -72,20 +74,20 @@ export type IdType = (typeof ID_TYPES)[number]['value'];
 export const DECLARATIONS = [
   'I declare that the information I provide is true and correct to the best of my knowledge.',
   'I will comply with the Food Safety and Standards Act, 2006 and the rules and regulations made under it.',
-  'I understand that PadosiPlate only helps me prepare — I will submit the application myself on the official FSSAI portal and pay government fees directly to FSSAI.',
+  `I understand that ${BRAND.name} only helps me prepare — I will submit the application myself on the official FSSAI portal and pay government fees directly to FSSAI.`,
 ] as const;
 
 export const MIN_YEARS = 1;
 export const MAX_YEARS = 5;
 
-/** Government fee for Basic Registration: ₹/year × years (₹100/year), in paise. Paid ONLY on the FoSCoS portal — never to PadosiPlate. */
+/** Government fee for Basic Registration: ₹/year × years (₹100/year), in paise. Paid ONLY on the FoSCoS portal — never to Kootu. */
 export function basicRegistrationFeePaise(years: number, perYearRupees: number): number {
   if (!Number.isInteger(years) || years < MIN_YEARS || years > MAX_YEARS) throw new RangeError(`years must be ${MIN_YEARS}–${MAX_YEARS}`);
   return perYearRupees * 100 * years;
 }
 
 export const PERSISTENT_NOTICE =
-  'PadosiPlate helps you prepare. You submit the application yourself on the official FSSAI portal (foscos.fssai.gov.in). Government fees are paid directly to FSSAI.';
+  `${BRAND.name} helps you prepare. You submit the application yourself on the official FSSAI portal (foscos.fssai.gov.in). Government fees are paid directly to FSSAI.`;
 
 export type FormAAnswers = {
   eligibility: Eligibility;

@@ -8,13 +8,14 @@ import { getDb } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { clientIp } from '@/lib/rate-limit';
 import { siteOrigin } from '@/lib/site-url';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const fail = (code: string) => NextResponse.redirect(new URL(`/login?error=${code}`, req.url));
   if (!googleEnabled()) return fail('google_off');
-  const raw = req.cookies.get('pp_google')?.value;
+  const raw = req.cookies.get(`${BRAND.cookiePrefix}_google`)?.value;
   const code = req.nextUrl.searchParams.get('code');
   const state = req.nextUrl.searchParams.get('state');
   let saved: { state: string; nonce: string; link: number | null };
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
   if (!g.emailVerified) return fail('google_unverified');
   const db = await getDb();
   const clear = (res: NextResponse) => {
-    res.cookies.delete('pp_google');
+    res.cookies.delete(`${BRAND.cookiePrefix}_google`);
     return res;
   };
 

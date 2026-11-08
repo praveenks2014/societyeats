@@ -1,7 +1,11 @@
 #!/usr/bin/env node
-// Checks the Razorpay keys in the current environment (Replit Secrets): creates a ₹1 order tagged for this app, reads it back, prints id and status.
+// Checks the Razorpay keys in the current environment (Replit Secrets): creates a ₹1 order tagged for this app (notes.app = the brand slug, receipt kt-smoke-…), reads it back, prints id and status.
 // It never opens a checkout and never captures anything. Run: npm run razorpay:check
+import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
+
+const brand = JSON.parse(fs.readFileSync(new URL('../src/config/brand.json', import.meta.url), 'utf8'));
+const RECEIPT_PREFIX = `${brand.shortCode.toLowerCase()}-`;
 
 /**
  * Same rules as src/lib/payments/mode.ts (kept in sync by tests/unit/payments-mode.test.ts).
@@ -35,8 +39,8 @@ export async function run({ env = process.env, createClient } = {}) {
   }
   const client = createClient ? createClient(env.RAZORPAY_KEY_ID, env.RAZORPAY_KEY_SECRET) : new (await import('razorpay')).default({ key_id: env.RAZORPAY_KEY_ID, key_secret: env.RAZORPAY_KEY_SECRET });
   try {
-    const receipt = `pp-smoke-${Date.now()}`;
-    const created = await client.orders.create({ amount: 100, currency: 'INR', receipt, notes: { app: 'padosiplate', kind: 'smoke', ref: receipt } });
+    const receipt = `${RECEIPT_PREFIX}smoke-${Date.now()}`;
+    const created = await client.orders.create({ amount: 100, currency: 'INR', receipt, notes: { app: brand.slug, kind: 'smoke', ref: receipt } });
     const fetched = await client.orders.fetch(created.id);
     say(`Order ${fetched.id}: status ${fetched.status}, ${fetched.amount} paise, receipt ${fetched.receipt}`);
     say('The keys work. Nothing was captured (a ₹1 order stays unpaid).');

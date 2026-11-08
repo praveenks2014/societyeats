@@ -6,6 +6,7 @@ import { notify } from '@/lib/db/notify';
 import { emit } from '@/lib/notify';
 import { fssaiApplications, sellerProfiles } from '@/lib/db/schema';
 import { istDateString } from '@/lib/time';
+import { BRAND } from '@/config/brand';
 
 const ymd = (d: Date) => istDateString(d); // dates are IST calendar days
 
@@ -31,7 +32,7 @@ export async function blockFssai(input: { sellerId: number; reason: string; admi
   const [p] = await db.update(sellerProfiles).set({ fssaiBlockedReason: reason.slice(0, 200), fssaiBlockedAt: new Date() }).where(eq(sellerProfiles.userId, input.sellerId)).returning({ id: sellerProfiles.userId });
   if (!p) throw new ApiError(404, 'Kitchen not found');
   await recordAudit({ actorId: input.adminId, action: 'fssai.block', targetType: 'kitchen', targetId: input.sellerId, meta: { reason } });
-  await emit('fssai_tier_change', input.sellerId, { tier: 'blocked', label: 'your kitchen is hidden', body: `PadosiPlate blocked your FSSAI status: ${reason}. Fix it and we will review again.` });
+  await emit('fssai_tier_change', input.sellerId, { tier: 'blocked', label: 'your kitchen is hidden', body: `${BRAND.name} blocked your FSSAI status: ${reason}. Fix it and we will review again.` });
   await emit('listing_paused', input.sellerId, { reason: `FSSAI blocked: ${reason}` });
 }
 

@@ -41,6 +41,9 @@ export async function runBootstrap(db: Db): Promise<BootstrapReport> {
   await seedLegalDocuments(db);
   const { seedDisclaimers } = await import('@/lib/disclaimers');
   await seedDisclaimers(db);
+  // a database seeded under an earlier product name gets its seeded (never admin-edited) text updated
+  const { renameSeededBrandText } = await import('@/lib/brand-migrate');
+  await renameSeededBrandText(db);
   log.info('bootstrap.done', { adminsCreated: report.adminsCreated.length });
   return report;
 }

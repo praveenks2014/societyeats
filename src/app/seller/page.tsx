@@ -6,6 +6,7 @@ import { Badge, Button, Card, Skeleton } from '@/components/ui';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 import { QualityCard } from '@/components/quality-card';
+import { BRAND } from '@/config/brand';
 
 type ChecklistItem = { key: string; label: string; done: boolean; href: string; hint?: string };
 type Summary = {
@@ -126,7 +127,7 @@ export default function SellerDashboard() {
               {req.state === 'changes_requested' ? 'Resubmit for review' : 'Submit listing request'}
             </Button>
           )}
-          {req.state === 'submitted' && <p className="mt-3 text-sm text-ink-soft" role="status">✅ Submitted — the PadosiPlate team is reviewing your kitchen.</p>}
+          {req.state === 'submitted' && <p className="mt-3 text-sm text-ink-soft" role="status">✅ Submitted — the {BRAND.name} team is reviewing your kitchen.</p>}
           {req.state === 'approved' && req.gateReasons.length > 0 && (
             <p className="mt-3 text-sm text-ink-soft">Approved! Still needed to go live: {req.gateReasons.join('; ')}.</p>
           )}
@@ -146,7 +147,7 @@ export default function SellerDashboard() {
 
       {data.inboxUnread > 0 && (
         <Link href="/seller/inbox" className="mt-4 block rounded-2xl bg-leaf-tint px-4 py-3 text-sm font-medium text-leaf">
-          ✉️ You have {data.inboxUnread} unread message{data.inboxUnread === 1 ? '' : 's'} from PadosiPlate
+          ✉️ You have {data.inboxUnread} unread message{data.inboxUnread === 1 ? '' : 's'} from {BRAND.name}
         </Link>
       )}
       {data.refundsDue.count > 0 && (

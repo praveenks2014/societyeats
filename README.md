@@ -1,4 +1,4 @@
-# PadosiPlate 🍛
+# Kootu 🍛
 
 **Home food from your neighbours.** Residents of a gated society register, kitchens list dishes after an admin review, and neighbours order for self-pickup or kitchen delivery.
 
@@ -23,7 +23,7 @@ npm run dev              # http://localhost:3000
 
 With `DATABASE_URL` empty the app uses an embedded PGlite database in `.data/` (migrated and seeded with demo data in development). `MOCK_MODE=true` (the default) replaces Razorpay, geocoding and FSSAI lookups with realistic in-app simulations, and e-mails go to a dev outbox (`/admin/outbox`, or `GET /api/dev/outbox?to=…` outside production) **unless `EMAIL_ADAPTER=resend` is set**: that overrides `MOCK_MODE`, so a trial with real residents can run with `MOCK_MODE=true` and real e-mail.
 
-Demo accounts (development only, password `demo1234`): buyer `9999999901`, seller `9999999902`, admin `admin@demo.padosiplate.example`.
+Demo accounts (development only, password `demo1234`): buyer `9999999901`, seller `9999999902`, admin `admin@demo.kootu.example`.
 
 ### Scripts
 
@@ -36,7 +36,7 @@ Demo accounts (development only, password `demo1234`): buyer `9999999901`, selle
 | `npm run db:bootstrap` | apply migrations + idempotent production bootstrap (default plans, settings, templates). Never seeds demo data |
 | `npm run uploads:migrate` | move legacy `public/uploads` files into the StorageAdapter |
 | `npm run cron` | run the scheduled jobs once (expiry sweeps, reminders, retention purge) |
-| `npm run icons` | regenerate PNG/SVG icons from the brand mark |
+| `npm run icons:generate` | rebuild the brand images (icons, maskable icon, wordmark, PNG sizes) from `src/config/brand.json` |
 
 ## Deploy on Replit (Autoscale)
 
@@ -57,7 +57,7 @@ Demo accounts (development only, password `demo1234`): buyer `9999999901`, selle
 | `MOCK_MODE` | yes | `true` until go-live, then `false` |
 | `CRON_SECRET` | yes | bearer token for `POST /api/cron/run`; schedule it every 5 minutes, see [Scheduled jobs on Autoscale](#scheduled-jobs-on-autoscale-required) |
 | `STORAGE_ADAPTER` + `REPLIT_OBJECT_STORAGE_BUCKET` | yes on Autoscale | alternatives: `s3` (+ `S3_*`), `local` (dev only) |
-| `EMAIL_ADAPTER=resend` + `RESEND_API_KEY` + `EMAIL_FROM` | for real e-mail (go-live) | Without `EMAIL_ADAPTER=resend`, mails go to `/admin/outbox` only (that is the default only while `MOCK_MODE=true`; `MOCK_MODE=false` implies Resend). Resend delivers to arbitrary addresses only from a verified domain (not `resend.dev`) |
+| `EMAIL_ADAPTER=resend` + `RESEND_API_KEY` + `EMAIL_FROM` (e.g. `Kootu <no-reply@mail.<your-domain>>`) | for real e-mail (go-live) | Without `EMAIL_ADAPTER=resend`, mails go to `/admin/outbox` only (that is the default only while `MOCK_MODE=true`; `MOCK_MODE=false` implies Resend). Resend delivers to arbitrary addresses only from a verified domain (not `resend.dev`) |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | optional (needed once `MOCK_MODE=false`) | **The key prefix decides the payments mode** (see below). Platform fees only |
 | `PAYMENTS_ADAPTER=mock` | optional | forces the fake checkout even if Razorpay keys are present (e2e uses it) |
 | `ADMIN_EMAILS` | yes | `praveenece.mit@gmail.com,rsaralipriya@gmail.com`; admins enrol two-factor on first login. Only these addresses **with a verified e-mail** can become admin |
@@ -79,7 +79,7 @@ The 5-minute cron job also takes **one database backup a day, after 03:00 IST**,
 Replit Autoscale has no built-in cron, so `POST /api/cron/run` never runs on its own. Schedule it **every 5 minutes** with an external scheduler. These steps use cron-job.org (free):
 
 1. Sign up at [cron-job.org](https://cron-job.org) and click **Create cronjob**.
-2. **Title:** `PadosiPlate scheduled jobs`. **URL:** `https://<SITE_URL>/api/cron/run` (your deployed domain, e.g. `https://padosiplate.replit.app/api/cron/run`).
+2. **Title:** `Kootu scheduled jobs`. **URL:** `https://<SITE_URL>/api/cron/run` (your deployed domain, e.g. `https://kootu.replit.app/api/cron/run`).
 3. **Execution schedule:** **Every 5 minutes** (cron-job.org: "Every 5 minutes"). The jobs also run the order timers (accept deadlines, unpaid-order expiry, reminders), so a long gap delays those.
 4. Open the **Advanced** tab:
    - **Request method:** `POST`
@@ -113,8 +113,8 @@ The fake routes (`mock-complete` and the mock branches of Plus and the ₹1 chec
 
 1. **Test and live are separate worlds**: separate keys and separate webhooks. Create the webhook in the same mode as the keys you are using (Razorpay Dashboard → toggle Test/Live → Settings → Webhooks).
 2. **Webhook** → `https://<your-domain>/api/webhooks/razorpay`, events: `payment.authorized`, `payment.captured`, `payment.failed`, `refund.processed`, `refund.failed`. Add `fund_account.validation.completed` and `fund_account.validation.failed` only if you use the `razorpayx_rpd` UPI provider. The secret you type when creating the webhook goes into `RAZORPAY_WEBHOOK_SECRET`.
-3. **The account is shared with your other apps.** Razorpay sends the events of *every* payment on the account to *every* webhook URL. PadosiPlate tags its orders (`notes.app='padosiplate'`, plus `env`, `kind`, `ref`; receipts start with `pp-`) and acknowledges anything that is not its own with HTTP 200 `ignored_foreign` (it never refunds or captures a foreign payment, and keeps only the event id for duplicate protection, purged after `webhookEventRetentionDays`, default 30). Your other apps must do the same for PadosiPlate's events: ignore any event whose order has `notes.app='padosiplate'`.
-4. Before taking **live** payments add the PadosiPlate website URL to the Razorpay account's website/app details.
+3. **The account is shared with your other apps.** Razorpay sends the events of *every* payment on the account to *every* webhook URL. Kootu tags its orders (`notes.app='kootu'`, plus `env`, `kind`, `ref`; receipts start with `pp-`) and acknowledges anything that is not its own with HTTP 200 `ignored_foreign` (it never refunds or captures a foreign payment, and keeps only the event id for duplicate protection, purged after `webhookEventRetentionDays`, default 30). Your other apps must do the same for Kootu's events: ignore any event whose order has `notes.app='kootu'`.
+4. Before taking **live** payments add the Kootu website URL to the Razorpay account's website/app details.
 5. Fees settle to the account's bank account. The invoice legal entity in `/admin/settings` should match the Razorpay account holder.
 6. **Check the keys**: `npm run razorpay:check` creates a ₹1 order tagged for this app, reads it back and prints its id and status. It opens no checkout and captures nothing; it refuses to run in `mock` mode and prints "Razorpay rejected the keys…" on a 401.
 
@@ -153,6 +153,10 @@ Do **not** add Razorpay Route, Smart Collect or anything that receives food mone
 - Postgres fixed-window rate limiter shared by all instances; times are stored UTC and shown in IST.
 - Decisions and assumptions: [DECISIONS.md](DECISIONS.md) ("Phase 1 Pilot" section). Audit: [docs/AUDIT.md](docs/AUDIT.md). Security notes: [SECURITY.md](SECURITY.md).
 
+## Brand and renaming
+
+The product's name, slug, short code and tagline live in **`src/config/brand.json`** (`name`, `slug`, `shortCode`, `tagline`); `src/config/brand.ts` derives everything else from them: receipt prefix (`kt-`), invoice prefix (`KT/<FY>/<serial>`), cookie and browser-storage prefix (`kootu_…`), the Razorpay `notes.app` tag, the manifest and the service-worker cache name. To rename: edit those four values, run `npm run icons:generate`, and nothing else in the code needs to change (seeded legal text and disclaimers are written with `{{brand}}`). Earlier names stay listed in `brand.ts` (`legacy*`) so test orders already on a shared Razorpay account, `pp-` receipts and old browser-storage keys keep working. Existing invoices are never renumbered. A repo scan (`tests/unit/no-legacy-brand.test.ts`) fails if an earlier name reappears outside `brand.ts`, `DECISIONS.md` and the migrations.
+
 ## Legal
 
 The legal pages under `/legal/*` are **drafts, to be reviewed by a lawyer**. `BRAND.gstin`, the registered address and the grievance officer are placeholders until you fill them in `/admin/settings`.
@@ -163,6 +167,6 @@ The legal pages under `/legal/*` are **drafts, to be reviewed by a lawyer**. `BR
 - `npm run db:bootstrap` — production-safe setup. `npm run db:seed:demo` — demo data, refuses in production. `npm run db:backup` — manual `pg_dump` into `./backups` (the automatic backups below do not need it).
 - Webhook events handled at `/api/webhooks/razorpay`: payments, refunds, `fund_account.validation.*` and the ₹1 UPI check orders.
 - Go-live: `/admin/go-live` lists the configuration prerequisites (these, and only these, make the live guard refuse new orders when `MOCK_MODE=false`) and the operational checks (storage, cron heartbeat, push keys, legal review), which alert the admins but never stop an order. UPI provider at launch is `razorpay_checkout_vpa`; `mock` is refused when `MOCK_MODE=false`.
-- End-to-end tests (`npm run e2e`) run `next dev` on port 3100 against a throw-away PGlite database in `os.tmpdir()/padosiplate-e2e`; a fixture fails any test with a CSP violation or console error. Pass `--trace off` for speed.
+- End-to-end tests (`npm run e2e`) run `next dev` on port 3100 against a throw-away PGlite database in `os.tmpdir()/kootu-e2e`; a fixture fails any test with a CSP violation or console error. Pass `--trace off` for speed.
 - Optional features (meal plans, featured placement, Plus, bulk orders, campaigns) are admin flags and default off.
 - Docs: [ADMIN_RUNBOOK](docs/ADMIN_RUNBOOK.md), [SELLER_GUIDE](docs/SELLER_GUIDE.md), [BUYER_FAQ](docs/BUYER_FAQ.md), [DECISIONS](DECISIONS.md#pilot-v2).

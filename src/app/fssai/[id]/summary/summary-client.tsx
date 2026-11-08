@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, Input, Skeleton } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { BRAND } from '@/config/brand';
 
 type Step = { id: number; title: string; body: string; tip: string | null; screenshotUrl: string | null };
 type Summary = {
@@ -184,10 +185,10 @@ export function FssaiSummaryView({ applicationId }: { applicationId: number }) {
             <>
               <div className="flex items-center gap-2">
                 <Badge tone="amber">Filed for you</Badge>
-                <span className="text-sm font-semibold">PadosiPlate's back office files this on FoSCoS</span>
+                <span className="text-sm font-semibold">{BRAND.name}'s back office files this on FoSCoS</span>
               </div>
               <p className="mt-2 text-sm text-ink-soft">
-                PadosiPlate's back office uses this exact summary and document bundle to file your
+                {BRAND.name}'s back office uses this exact summary and document bundle to file your
                 application on FoSCoS by hand within 48 hours, then tracks it through to grant on your{' '}
                 <Link href="/seller/compliance" className="text-leaf underline">
                   compliance page
@@ -196,7 +197,7 @@ export function FssaiSummaryView({ applicationId }: { applicationId: number }) {
               </p>
               <p className="mt-2 text-xs text-ink-faint">
                 {data.sponsoredByPlatform
-                  ? `Facilitation is sponsored by PadosiPlate for this pilot cohort — ₹${(data.facilitationCostInPaise / 100).toLocaleString('en-IN')} recorded as our own acquisition cost, never billed to you.`
+                  ? `Facilitation is sponsored by ${BRAND.name} for this pilot cohort — ₹${(data.facilitationCostInPaise / 100).toLocaleString('en-IN')} recorded as our own acquisition cost, never billed to you.`
                   : 'This application is outside the current sponsorship cap — contact support about facilitation costs.'}
               </p>
             </>
@@ -248,7 +249,7 @@ export function FssaiSummaryView({ applicationId }: { applicationId: number }) {
           This is a prefilled summary to speed up filing — {data.platform.name} does not submit
           applications to any government system on your behalf through an API; FoSCoS has no public
           submission API for third parties. File this by hand yourself, or — for a small number of
-          legacy pilot applications — PadosiPlate&apos;s back office does so manually on your behalf.
+          legacy pilot applications — {BRAND.name}&apos;s back office does so manually on your behalf.
           Confirm license category, required documents and fees on FoSCoS or with your CA before
           relying on this document.
         </p>

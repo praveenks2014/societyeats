@@ -28,6 +28,7 @@ import {
   subscriptions,
   users,
 } from './schema';
+import { BRAND } from '@/config/brand';
 
 // Mirrors src/lib/referrals.ts's referralCodeFor() exactly — duplicated as a
 // trivial pure one-liner rather than imported, so this seed module (which
@@ -57,7 +58,7 @@ export async function runSeed(db: Db): Promise<void> {
   if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEMO_SEED !== 'true') {
     throw new Error('Refusing to seed demo data when NODE_ENV=production (set ALLOW_DEMO_SEED=true to override).');
   }
-  console.log('Seeding PadosiPlate demo data (Hyderabad)…');
+  console.log(`Seeding ${BRAND.name} demo data (Hyderabad)…`);
   const hash = bcrypt.hashSync('demo1234', 10);
 
   // ---- societies (~8.9 km apart) ----
@@ -119,7 +120,7 @@ export async function runSeed(db: Db): Promise<void> {
     lat,
     lng,
     // Demo accounts get verified demo emails; the demo admin's is allowlisted in non-production only.
-    email: phone === '9999999904' ? DEMO_ADMIN_EMAIL : `u${phone}@demo.padosiplate.example`,
+    email: phone === '9999999904' ? DEMO_ADMIN_EMAIL : `u${phone}@demo.${BRAND.slug}.example`,
     emailVerifiedAt: new Date(),
   });
 
@@ -326,7 +327,7 @@ export async function runSeed(db: Db): Promise<void> {
       facilitationCostInPaise: 200000,
       sponsoredByPlatform: true,
       timelineJson: [
-        { at: daysAgo(65).toISOString(), event: "Application submitted to PadosiPlate's back office" },
+        { at: daysAgo(65).toISOString(), event: `Application submitted to ${BRAND.name}'s back office` },
         { at: daysAgo(63).toISOString(), event: 'Documents verified by back-office' },
         { at: daysAgo(65).toISOString(), event: 'Filed on FoSCoS — ref FOSCOS-TS-2026-118842' },
       ],
@@ -349,7 +350,7 @@ export async function runSeed(db: Db): Promise<void> {
       facilitationCostInPaise: 200000,
       sponsoredByPlatform: true,
       timelineJson: [
-        { at: daysAgo(2).toISOString(), event: "Application submitted to PadosiPlate's back office" },
+        { at: daysAgo(2).toISOString(), event: `Application submitted to ${BRAND.name}'s back office` },
       ],
       createdAt: daysAgo(2),
       updatedAt: daysAgo(2),
@@ -856,7 +857,7 @@ export async function runSeed(db: Db): Promise<void> {
   // welcome notification for the demo buyer
   await db.insert(notifications).values({
     userId: buyer.id,
-    title: 'Welcome to PadosiPlate 🎉',
+    title: `Welcome to ${BRAND.name} 🎉`,
     body: 'Home kitchens within 10 km of you are cooking today. Your order from Jain Rasoi is on the way!',
     href: '/orders',
   });

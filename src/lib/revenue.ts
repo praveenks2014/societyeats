@@ -4,6 +4,7 @@ import { getPlatformSettings } from '@/lib/db/platform';
 import { kitchenRefundsDue, kitchenSubscriptions, orders, refunds, sellerProfiles } from '@/lib/db/schema';
 import { overallStatus } from '@/lib/subscriptions/status';
 import { DAY_MS, istStartOfDay } from '@/lib/time';
+import { BRAND } from '@/config/brand';
 
 export type RevenueRange = 'today' | '7d' | '30d';
 
@@ -88,7 +89,7 @@ export async function revenueReport(range: RevenueRange, now: Date = new Date())
 export function revenueCsv(r: Awaited<ReturnType<typeof revenueReport>>): string {
   const rupees = (p: number) => (p / 100).toFixed(2);
   const rows: (string | number)[][] = [
-    ['PadosiPlate revenue report', r.range, `since ${r.since.toISOString()}`],
+    [`${BRAND.name} revenue report`, r.range, `since ${r.since.toISOString()}`],
     [],
     ['Line', 'Count', 'Gross (INR)', 'GST (INR)', 'Net (INR)'],
     ['Buyer platform fee', r.fee.orders, rupees(r.fee.grossPaise), rupees(r.fee.gstPaise + r.fee.ecoGstPaise), rupees(r.fee.netPaise)],

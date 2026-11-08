@@ -16,11 +16,11 @@ import * as schema from './schema';
 
 export type Db = ReturnType<typeof drizzlePostgres<typeof schema>>;
 
-const g = globalThis as unknown as { __padosiDb?: Promise<Db> };
+const g = globalThis as unknown as { __appDb?: Promise<Db> };
 
 export function getDb(): Promise<Db> {
-  if (!g.__padosiDb) g.__padosiDb = initDb();
-  return g.__padosiDb;
+  if (!g.__appDb) g.__appDb = initDb();
+  return g.__appDb;
 }
 
 /** `db.execute()` returns an array on postgres-js and `{ rows }` on PGlite. */

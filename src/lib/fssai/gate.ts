@@ -12,7 +12,7 @@ import { fssaiTier, isBuyerVisibleTier } from '@/lib/fssai/tier';
  * granted and start operating — UNLESS the department responded within
  * that window (a rejection, an inspection order, or, for State License, an
  * inadequacy notice). FoSCoS has no status API to detect any of that
- * automatically (see DECISIONS.md), so PadosiPlate tracks it by reference number
+ * automatically (see DECISIONS.md), so Kootu tracks it by reference number
  * + elapsed time, with an admin able to record an interrupting response by
  * hand (see fssaiAppStatusEnum's 'inspection_ordered'/'inadequacy_notice').
  */

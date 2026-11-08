@@ -11,6 +11,7 @@ import { formatINR, quoteOrder, type FeeConfig } from '@/lib/money';
 import { formatDistance } from '@/lib/geo';
 import { FssaiLabel } from '@/components/fssai-label';
 import { DisclaimerClient } from '@/components/disclaimer-client';
+import { BRAND } from '@/config/brand';
 
 type FulfillmentType = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
 
@@ -355,7 +356,7 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
           <Card className="p-4">
             <div className="flex items-baseline justify-between">
               <div className="eyebrow">FOOD · PAID TO {(vendor?.name ?? 'KITCHEN').toUpperCase()}</div>
-              <span className="text-[11px] text-ink-faint">not collected by PadosiPlate</span>
+              <span className="text-[11px] text-ink-faint">not collected by {BRAND.name}</span>
             </div>
             <div className="mt-3 space-y-2 text-sm">
               {items.map((i) => (
@@ -419,7 +420,7 @@ export function CheckoutClient({ mockMode }: { mockMode: boolean }) {
             )}
           </Card>
           <p className="px-1 text-[11px] leading-relaxed text-ink-faint">
-            You pay <strong>{vendor?.name}</strong> directly for the food, at your door, after it arrives. PadosiPlate never holds your food money; the platform fee is its only charge. Free cancellation until the kitchen accepts. If the kitchen cancels, you get the full platform fee back plus the same amount as PadosiPlate credit.
+            You pay <strong>{vendor?.name}</strong> directly for the food, at your door, after it arrives. {BRAND.name} never holds your food money; the platform fee is its only charge. Free cancellation until the kitchen accepts. If the kitchen cancels, you get the full platform fee back plus the same amount as {BRAND.name} credit.
           </p>
         </div>
       ) : (

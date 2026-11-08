@@ -154,7 +154,7 @@ export type CancelKind = 'buyer_before_accept' | 'buyer_after_accept' | 'seller_
 export type CancelPolicy = {
   /** The platform fee is refunded to the buyer. */
   refundFee: boolean;
-  /** An equal-value PadosiPlate credit is also issued (platform-funded). */
+  /** An equal-value Kootu credit is also issued (platform-funded). */
   credit: boolean;
   /** A strike against the buyer or the kitchen. */
   strike: { role: 'buyer' | 'seller'; kind: 'seller_cancel' | 'seller_missed' | 'buyer_late_cancel' | 'buyer_unpaid' | 'buyer_no_show' } | null;

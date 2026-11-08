@@ -7,6 +7,7 @@ import { getPlatformSettings } from '@/lib/db/platform';
 import { getSession } from '@/lib/auth';
 import { isPilotMember } from '@/lib/access';
 import { InviteOnly } from '@/components/invite-only';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,7 +50,7 @@ export default async function HomePage() {
           <Link href="/register?as=seller" className="inline-flex min-h-[44px] items-center hover:text-ink">Become a home-chef</Link>
         </div>
         <p className="mt-4">
-          Platform FSSAI license: applied for. Every kitchen on PadosiPlate shows its FSSAI number or a
+          Platform FSSAI license: applied for. Every kitchen on {BRAND.name} shows its FSSAI number or a
           pending-application badge.
         </p>
       </footer>

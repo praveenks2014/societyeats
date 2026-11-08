@@ -7,6 +7,7 @@ import { platformConfig } from '@/lib/db/schema';
 import { formatINR } from '@/lib/money';
 import { fyLabel, sellerFySalesPaise } from './caps';
 import { notifyAdmins } from './strikes';
+import { BRAND } from '@/config/brand';
 
 /**
  * Income-tax Act 2025 Sec 393(1) Sl. 8(v) (formerly 194-O): the platform must deduct 0.1% TDS on a seller's
@@ -28,7 +29,7 @@ export async function checkTdsThresholds(sellerId: number, now: Date = new Date(
   };
   if (settings.tdsPausePaise > 0 && total >= settings.tdsPausePaise) {
     if (await once('pause')) {
-      await emit('listing_paused', sellerId, { reason: `Your sales this financial year reached ${formatINR(total)}. PadosiPlate will contact you about tax (TDS) before orders resume.` });
+      await emit('listing_paused', sellerId, { reason: `Your sales this financial year reached ${formatINR(total)}. ${BRAND.name} will contact you about tax (TDS) before orders resume.` });
       await notifyAdmins('Kitchen reached the TDS threshold', `Kitchen #${sellerId}: FY ${fy} gross sales ${formatINR(total)}. New orders are paused pending your decision.`, `/admin/kitchens/${sellerId}`);
       return 'paused';
     }

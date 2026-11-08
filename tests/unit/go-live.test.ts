@@ -2,6 +2,7 @@ import { beforeAll, afterEach, describe, expect, test, vi } from 'vitest';
 import { buildGoLiveRows, liveBlockers } from '@/lib/go-live';
 import { SETTING_DEFS } from '@/lib/settings/defs';
 import { useTestDb } from '../helpers/db';
+import { BRAND } from '@/config/brand';
 
 vi.mock('next/headers', () => import('../helpers/next-headers'));
 
@@ -9,7 +10,7 @@ const settings = (over: Record<string, unknown> = {}) =>
   ({ ...(Object.fromEntries(Object.entries(SETTING_DEFS).map(([k, d]) => [k, (d as { def: unknown }).def])) as Record<string, unknown>), ...over }) as never;
 const facts = { storageReachable: true, cronFresh: true, legalAllReviewed: true, legalCount: 10 };
 const fullEnv = { RAZORPAY_KEY_ID: 'k', RAZORPAY_KEY_SECRET: 's', RAZORPAY_WEBHOOK_SECRET: 'w', VAPID_PUBLIC_KEY: 'a', VAPID_PRIVATE_KEY: 'b' };
-const fullSettings = { platformFssaiCentralLicenseNo: '12345678901234', gstPositionConfirmedAt: '2026-11-10', grievanceOfficer: 'A, Officer', legalEntityName: 'PadosiPlate Pvt Ltd', registeredAddress: 'Hyderabad', supportEmail: 'help@x.in', supportPhone: '9999999999', upiVerifyProvider: 'razorpay_checkout_vpa' };
+const fullSettings = { platformFssaiCentralLicenseNo: '12345678901234', gstPositionConfirmedAt: '2026-11-10', grievanceOfficer: 'A, Officer', legalEntityName: `${BRAND.name} Pvt Ltd`, registeredAddress: 'Hyderabad', supportEmail: 'help@x.in', supportPhone: '9999999999', upiVerifyProvider: 'razorpay_checkout_vpa' };
 
 describe('go-live checklist', () => {
   test('everything missing: all blocking rows are red; vapid and legal review only warn', () => {

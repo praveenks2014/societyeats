@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Card } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { BRAND } from '@/config/brand';
 
 function urlBase64ToUint8Array(b64: string): Uint8Array<ArrayBuffer> {
   const padding = '='.repeat((4 - (b64.length % 4)) % 4);
@@ -26,7 +27,7 @@ export function PushOptIn() {
     (async () => {
       try {
         if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
-        if (Notification.permission !== 'default' || localStorage.getItem('padosi_push_dismissed') === '1') return;
+        if (Notification.permission !== 'default' || localStorage.getItem(BRAND.storageKey('push_dismissed')) === '1') return;
         const cfg = await fetch('/api/push/config').then((r) => r.json());
         if (live && cfg.enabled && cfg.publicKey) {
           setKey(cfg.publicKey);
@@ -48,7 +49,7 @@ export function PushOptIn() {
     try {
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') {
-        localStorage.setItem('padosi_push_dismissed', '1');
+        localStorage.setItem(BRAND.storageKey('push_dismissed'), '1');
         return setState('hidden');
       }
       const reg = await navigator.serviceWorker.register('/sw.js').then(() => navigator.serviceWorker.ready);
@@ -71,7 +72,7 @@ export function PushOptIn() {
       </div>
       <div className="flex shrink-0 flex-col gap-1">
         <Button size="sm" loading={state === 'busy'} onClick={enable} data-testid="push-enable">Turn on</Button>
-        <button className="min-h-[44px] text-xs text-ink-faint underline" onClick={() => { localStorage.setItem('padosi_push_dismissed', '1'); setState('hidden'); }}>Not now</button>
+        <button className="min-h-[44px] text-xs text-ink-faint underline" onClick={() => { localStorage.setItem(BRAND.storageKey('push_dismissed'), '1'); setState('hidden'); }}>Not now</button>
       </div>
     </Card>
   );

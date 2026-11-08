@@ -9,6 +9,7 @@ import { complaints, kitchenRefundsDue, orders, payments, sellerProfiles } from 
 import { transitionKitchen } from '@/lib/kitchen/state';
 import { formatINR } from '@/lib/money';
 import { refundOrderPayment } from '@/lib/payments/refunds';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,7 +86,7 @@ export const PATCH = api<{ params: { id: string } }>(async (req, { params }) => 
   if (foodDue > 0 && order.sellerId) {
     await db.insert(kitchenRefundsDue).values({ orderId: order.id, sellerId: order.sellerId, amountInPaise: foodDue, reason: 'complaint' });
     await notify(order.sellerId, `Please refund ${formatINR(foodDue)} to the buyer`, `A complaint on order #${order.id} was upheld. Return the food amount by UPI and record the reference.`, '/seller/refunds-due');
-    await notify(order.buyerId, `Complaint upheld — ${formatINR(foodDue)} due from the kitchen`, 'The kitchen has been asked to return the food amount you paid them. PadosiPlate will follow up.', `/orders/${order.id}`);
+    await notify(order.buyerId, `Complaint upheld — ${formatINR(foodDue)} due from the kitchen`, `The kitchen has been asked to return the food amount you paid them. ${BRAND.name} will follow up.`, `/orders/${order.id}`);
   }
 
   if (body.outcome === 'seller_paused' && order.sellerId) {

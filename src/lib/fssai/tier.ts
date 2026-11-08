@@ -1,5 +1,6 @@
 import type { fssaiApplications, sellerProfiles } from '@/lib/db/schema';
 import { istDateString } from '@/lib/time';
+import { BRAND } from '@/config/brand';
 
 /**
  * Seller FSSAI tier — DERIVED from dates and statuses on every read, never
@@ -44,7 +45,7 @@ export function fssaiTierInfo(profile: Profile, app: Application, opts: TierOpti
   const none = (tier: FssaiTier, reason: string): TierInfo => ({ tier, provisionalSince: null, provisionalEndsAt: null, reason });
 
   // An admin block overrides everything else (e.g. a certificate found to be forged).
-  if (profile.fssaiBlockedReason) return none('blocked', `FSSAI blocked by PadosiPlate: ${profile.fssaiBlockedReason}`);
+  if (profile.fssaiBlockedReason) return none('blocked', `FSSAI blocked by ${BRAND.name}: ${profile.fssaiBlockedReason}`);
   if (profile.fssaiStatus === 'verified') {
     // Registrations are perpetual; only a certificate that shows an explicit expiry date can lapse.
     if (profile.fssaiExpiry && profile.fssaiExpiry < istDateString(now)) return none('blocked', 'FSSAI certificate expired');

@@ -1,7 +1,7 @@
 import type { Config } from 'tailwindcss';
 
 /**
- * PadosiPlate design tokens — "ghar ki rasoi, neighbourhood pride".
+ * Kootu design tokens — "ghar ki rasoi, neighbourhood pride".
  * All colors derive from the five brand tokens; change them here to re-skin.
  */
 const config: Config = {

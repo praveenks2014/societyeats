@@ -6,6 +6,7 @@ import { MockCheckoutSheet } from '@/components/mock-checkout';
 import { useToast } from '@/components/providers';
 import { launchRazorpay } from '@/components/razorpay';
 import { formatINR } from '@/lib/money';
+import { BRAND } from '@/config/brand';
 
 type Plan = { id: number; name: string; durationMonths: number; pricePaise: number; charge: { basePaise: number; gstPaise: number; totalPaise: number } };
 type Sub = {
@@ -91,7 +92,7 @@ export default function SubscriptionPage() {
       <div>
         <h1 className="text-2xl font-bold">Subscription</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          A subscription keeps your kitchen listed to neighbours. Buyers pay <strong>you</strong> directly for food — PadosiPlate never takes a cut of it.
+          A subscription keeps your kitchen listed to neighbours. Buyers pay <strong>you</strong> directly for food — {BRAND.name} never takes a cut of it.
         </p>
       </div>
 
@@ -110,7 +111,7 @@ export default function SubscriptionPage() {
       <section>
         <h2 className="mb-3 text-lg font-bold">{renewing ? 'Renew' : 'Choose a plan'}</h2>
         {data.plans.length === 0 ? (
-          <EmptyState emoji="🧾" title="No plans available yet" body="PadosiPlate will publish plans shortly." />
+          <EmptyState emoji="🧾" title="No plans available yet" body={`${BRAND.name} will publish plans shortly.`} />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {data.plans.map((p) => (
@@ -126,7 +127,7 @@ export default function SubscriptionPage() {
             ))}
           </div>
         )}
-        <p className="mt-2 text-xs text-ink-faint">Subscriptions are non-refundable except at PadosiPlate’s discretion (see kitchen terms).</p>
+        <p className="mt-2 text-xs text-ink-faint">Subscriptions are non-refundable except at {BRAND.name}’s discretion (see kitchen terms).</p>
       </section>
 
       <section>

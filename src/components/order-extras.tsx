@@ -6,6 +6,7 @@ import { MockCheckoutSheet } from '@/components/mock-checkout';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 import { DisclaimerClient } from '@/components/disclaimer-client';
+import { BRAND } from '@/config/brand';
 
 type Upi = { vpa: string; registeredName: string; payeeName: string; uri: string; qrSvg: string; amountInPaise: number };
 
@@ -135,7 +136,7 @@ export function AtDoorPaymentCard({
       )}
       {status === 'payment_disputed' && (
         <p className="mt-3 text-sm text-chili-dark" role="alert">
-          The kitchen couldn’t find your payment. PadosiPlate is looking into it — keep your UPI receipt handy.
+          The kitchen couldn’t find your payment. {BRAND.name} is looking into it — keep your UPI receipt handy.
         </p>
       )}
       {done && <p className="mt-3 text-sm font-semibold text-leaf">✅ {kitchenName} confirmed your payment.</p>}
@@ -355,7 +356,7 @@ export function OrderThread({ orderId, onRefund }: { orderId: number; onRefund?:
         <div className="eyebrow">MESSAGES · {t.otherLabel}</div>
         {t.viewer !== 'admin' && (
           <div className="flex items-center gap-2 text-[11px] text-ink-faint">
-            <button className="min-h-[44px] px-1 underline" onClick={() => confirm('Report this person to PadosiPlate?') && simple({ action: 'report_user', reason: 'Reported from chat' }, 'Reported. We will look into it.')} data-testid="chat-report-user">Report</button>
+            <button className="min-h-[44px] px-1 underline" onClick={() => confirm(`Report this person to ${BRAND.name}?`) && simple({ action: 'report_user', reason: 'Reported from chat' }, 'Reported. We will look into it.')} data-testid="chat-report-user">Report</button>
             <button className="min-h-[44px] px-1 underline" onClick={() => confirm('Block this person from messaging you and from ordering with you?') && simple({ action: 'block' }, 'Blocked')} data-testid="chat-block">Block</button>
           </div>
         )}

@@ -1,3 +1,5 @@
+import { BRAND } from '@/config/brand';
+
 /**
  * RazorpayX reverse penny drop (live mode only; needs a RazorpayX account and RAZORPAYX_ACCOUNT_NUMBER).
  * The seller pays ₹1 from THEIR UPI app via an intent link; Razorpay reports the VPA that actually paid and
@@ -46,7 +48,7 @@ export async function createUpiIntentValidation(ref: string, fetcher: Fetcher = 
   const res = await fetcher('https://api.razorpay.com/v1/fund_accounts/validations', {
     method: 'POST',
     headers: { Authorization: authHeader(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ source_account_number: source, validation_type: 'upi_intent', reference_id: ref, notes: { purpose: 'padosiplate_upi_ownership' } }),
+    body: JSON.stringify({ source_account_number: source, validation_type: 'upi_intent', reference_id: ref, notes: { purpose: `${BRAND.slug}_upi_ownership` } }),
   });
   if (!res.ok) throw new Error(`RazorpayX validation failed (${res.status})`);
   return parseValidation(await res.json());
