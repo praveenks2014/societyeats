@@ -3,6 +3,7 @@
 import { ChatBadge } from '@/components/chat-badge';
 import { BRAND } from '@/config/brand';
 import Link from 'next/link';
+import { usePolledResource } from '@/lib/use-polled-resource';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@/lib/auth';
@@ -164,43 +165,42 @@ export function Header({ session }: { session: Session | null }) {
   );
 }
 
+type Note = { id: number; title: string; body: string | null; href: string | null; readAt: string | null };
+
 function Bell() {
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<
-    { id: number; title: string; body: string | null; href: string | null; readAt: string | null }[]
-  >([]);
-  const [unread, setUnread] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
-
-  async function load() {
-    try {
-      const res = await fetch('/api/notifications');
-      if (!res.ok) return;
-      const data = await res.json();
-      setItems(data.notifications);
-      setUnread(data.unread);
-    } catch {}
-  }
+  // Only the most recently started request may set the list (a poll that started before "mark read" cannot bring the dot back).
+  const { data, setData, reload, abortInFlight } = usePolledResource<{ notifications: Note[]; unread: number }>(
+    async (signal) => {
+      try {
+        const res = await fetch('/api/notifications', { signal });
+        return res.ok ? ((await res.json()) as { notifications: Note[]; unread: number }) : null;
+      } catch {
+        return null;
+      }
+    },
+    { intervalMs: 25000 },
+  );
+  const items = data?.notifications ?? [];
+  const unread = data?.unread ?? 0;
 
   useEffect(() => {
-    load();
-    const t = setInterval(load, 25000);
     const close = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('click', close);
-    return () => {
-      clearInterval(t);
-      document.removeEventListener('click', close);
-    };
+    return () => document.removeEventListener('click', close);
   }, []);
 
   async function openBell(e: React.MouseEvent) {
     e.stopPropagation();
     setOpen((o) => !o);
     if (!open && unread > 0) {
+      abortInFlight();
       await fetch('/api/notifications', { method: 'PATCH' });
-      setUnread(0);
+      setData((d) => (d ? { ...d, unread: 0 } : d));
+      void reload();
     }
   }
 

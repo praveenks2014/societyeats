@@ -21,7 +21,7 @@ npm ci            # Node >= 22.12
 npm run dev              # http://localhost:3000
 ```
 
-With `DATABASE_URL` empty the app uses an embedded PGlite database in `.data/` (migrated and seeded with demo data in development). `MOCK_MODE=true` (the default) replaces Razorpay, geocoding and FSSAI lookups with realistic in-app simulations, and e-mails go to a dev outbox (`/admin/outbox`, or `GET /api/dev/outbox?to=…` outside production).
+With `DATABASE_URL` empty the app uses an embedded PGlite database in `.data/` (migrated and seeded with demo data in development). `MOCK_MODE=true` (the default) replaces Razorpay, geocoding and FSSAI lookups with realistic in-app simulations, and e-mails go to a dev outbox (`/admin/outbox`, or `GET /api/dev/outbox?to=…` outside production) **unless `EMAIL_ADAPTER=resend` is set**: that overrides `MOCK_MODE`, so a trial with real residents can run with `MOCK_MODE=true` and real e-mail.
 
 Demo accounts (development only, password `demo1234`): buyer `9999999901`, seller `9999999902`, admin `admin@demo.padosiplate.example`.
 
@@ -43,7 +43,7 @@ Demo accounts (development only, password `demo1234`): buyer `9999999901`, selle
 1. **Import** the GitHub repo into Replit. The `.replit` file already installs Node 22 + PostgreSQL 16 and sets the Autoscale build (`npm ci && npm run db:bootstrap && npm run build`) and run (`npm run start`, bound to `0.0.0.0`).
 2. Open the **PostgreSQL** tool and create a database → `DATABASE_URL` is added to Secrets automatically. In production the app **refuses to start without it** (no silent demo database).
 3. Open the **Object Storage** tool, create a bucket, and set `STORAGE_ADAPTER=replit` and `REPLIT_OBJECT_STORAGE_BUCKET`. (Autoscale instances have no persistent disk.)
-4. Add the **Secrets** below. Keep `MOCK_MODE=true` until you are ready for real payments. At go-live also set `EMAIL_ADAPTER=resend` (with `RESEND_API_KEY` and `EMAIL_FROM`): verification and reset links need real e-mail.
+4. Add the **Secrets** below. Keep `MOCK_MODE=true` until you are ready for real payments. Set `EMAIL_ADAPTER=resend` (with `RESEND_API_KEY` and `EMAIL_FROM` on a **verified Resend domain**) as soon as real people sign up, even while `MOCK_MODE=true`: verification and reset links need real e-mail. `/admin/go-live` has an "Email delivery" row that is red while mails only go to the outbox.
 5. **Deploy → Autoscale.** The health check is `GET /api/health`.
 6. Log in with an e-mail listed in `ADMIN_EMAILS` — see [docs/PILOT_LAUNCH_CHECKLIST.md](docs/PILOT_LAUNCH_CHECKLIST.md).
 
@@ -57,7 +57,7 @@ Demo accounts (development only, password `demo1234`): buyer `9999999901`, selle
 | `MOCK_MODE` | yes | `true` until go-live, then `false` |
 | `CRON_SECRET` | yes | bearer token for `POST /api/cron/run`; schedule it every 5 minutes, see [Scheduled jobs on Autoscale](#scheduled-jobs-on-autoscale-required) |
 | `STORAGE_ADAPTER` + `REPLIT_OBJECT_STORAGE_BUCKET` | yes on Autoscale | alternatives: `s3` (+ `S3_*`), `local` (dev only) |
-| `EMAIL_ADAPTER=resend` + `RESEND_API_KEY` + `EMAIL_FROM` | for real e-mail (go-live) | `mock` writes to the outbox only. Verification and reset links need real e-mail in the pilot |
+| `EMAIL_ADAPTER=resend` + `RESEND_API_KEY` + `EMAIL_FROM` | for real e-mail (go-live) | Without `EMAIL_ADAPTER=resend`, mails go to `/admin/outbox` only (that is the default only while `MOCK_MODE=true`; `MOCK_MODE=false` implies Resend). Resend delivers to arbitrary addresses only from a verified domain (not `resend.dev`) |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | optional (needed once `MOCK_MODE=false`) | **The key prefix decides the payments mode** (see below). Platform fees only |
 | `PAYMENTS_ADAPTER=mock` | optional | forces the fake checkout even if Razorpay keys are present (e2e uses it) |
 | `ADMIN_EMAILS` | yes | `praveenece.mit@gmail.com,rsaralipriya@gmail.com`; admins enrol two-factor on first login. Only these addresses **with a verified e-mail** can become admin |
@@ -69,6 +69,10 @@ Demo accounts (development only, password `demo1234`): buyer `9999999901`, selle
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | optional | browser push; generate with `npm run vapid:generate`. Push is off without them |
 
 The platform's own FSSAI central licence number is entered in `/admin/settings` (`platformFssaiCentralLicenseNo`).
+
+### Backups (automatic, to Object Storage)
+
+The 5-minute cron job also takes **one database backup a day, after 03:00 IST**, and writes it to Object Storage under `backups/` (so it survives Autoscale's temporary disks). It uses `pg_dump` when the binary exists, and otherwise an in-process export (gzipped JSON lines of every table in dependency order, with the schema version and migration hash in a manifest; encrypted columns stay as the stored ciphertext; uploaded files are not part of it). It keeps the newest `backupKeepDaily` (14) backups plus `backupKeepWeekly` (8) weekly ones. `/admin/go-live` shows "Database backups" (amber if none, failed, or older than 26 hours) with a **Run backup now** button (needs a fresh 2FA check and is audited), and a backup failure alerts both admins once per incident. **Restore** into a new, empty database with `npm run db:restore -- <backup-key>` (see the "Restore drill" in `docs/ADMIN_RUNBOOK.md`).
 
 ### Scheduled jobs on Autoscale (required)
 
@@ -156,7 +160,7 @@ The legal pages under `/legal/*` are **drafts, to be reviewed by a lawyer**. `BR
 ## Pilot v2 operations
 
 - Cron: call `POST /api/cron/run` every 5 minutes (the admin banner appears after 15 minutes of silence; `/api/health` shows `cronAgeMinutes` and `mockMode`).
-- `npm run db:bootstrap` — production-safe setup. `npm run db:seed:demo` — demo data, refuses in production. `npm run db:backup` — gzip `pg_dump` into `./backups`.
+- `npm run db:bootstrap` — production-safe setup. `npm run db:seed:demo` — demo data, refuses in production. `npm run db:backup` — manual `pg_dump` into `./backups` (the automatic backups below do not need it).
 - Webhook events handled at `/api/webhooks/razorpay`: payments, refunds, `fund_account.validation.*` and the ₹1 UPI check orders.
 - Go-live: `/admin/go-live` lists the configuration prerequisites (these, and only these, make the live guard refuse new orders when `MOCK_MODE=false`) and the operational checks (storage, cron heartbeat, push keys, legal review), which alert the admins but never stop an order. UPI provider at launch is `razorpay_checkout_vpa`; `mock` is refused when `MOCK_MODE=false`.
 - End-to-end tests (`npm run e2e`) run `next dev` on port 3100 against a throw-away PGlite database in `os.tmpdir()/padosiplate-e2e`; a fixture fails any test with a CSP violation or console error. Pass `--trace off` for speed.

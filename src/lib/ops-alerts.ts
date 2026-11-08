@@ -28,7 +28,7 @@ async function readState(): Promise<State> {
   }
 }
 
-export type OpsFacts = { storageOk: boolean; cronStale: boolean; cronAgeMinutes?: number | null };
+export type OpsFacts = { storageOk: boolean; cronStale: boolean; cronAgeMinutes?: number | null; /** the last database backup failed, or the last good one is over 26 hours old */ backupBad?: boolean };
 
 /** Pure transition: what to send for one check given its previous state. */
 export function opsTransition(prev: CheckState, bad: boolean, now: Date): { next: CheckState; send: 'alert' | 'recovered' | null } {
@@ -42,8 +42,9 @@ export function opsTransition(prev: CheckState, bad: boolean, now: Date): { next
   return { next: { open: false, alerted: false, alertedAt: prev.alertedAt }, send: prev.alerted ? 'recovered' : null };
 }
 
-const TEXT: Record<'storage' | 'cron', { what: string; bad: (f: OpsFacts, staleMin: number) => string; good: string }> = {
+const TEXT: Record<'storage' | 'cron' | 'backup', { what: string; bad: (f: OpsFacts, staleMin: number) => string; good: string }> = {
   storage: { what: 'file storage', bad: () => 'Object Storage did not answer. Orders keep working; photo and document uploads may fail until it is back.', good: 'File storage answers again.' },
+  backup: { what: 'database backups', bad: () => 'The daily database backup failed or is overdue. Open Admin → Go-live → Backups for the error, then press “Run backup now”. Orders keep working, but there is no fresh copy of the data until a backup succeeds.', good: 'A database backup completed.' },
   cron: {
     what: 'scheduled jobs',
     bad: (f, m) => `The scheduled-jobs endpoint has not run for ${f.cronAgeMinutes == null ? 'a long time' : `${f.cronAgeMinutes} minutes`} (alert after ${m}). Orders keep working; timers (accept deadlines, refunds on expiry, reminders) are late until it runs. Check the cron-job.org schedule (every 5 minutes).`,
@@ -61,9 +62,10 @@ export async function checkOpsHealth(now: Date = new Date(), facts: OpsFacts): P
   try {
     const settings = await getPlatformSettings();
     const state = await readState();
-    const bad: Record<'storage' | 'cron', boolean> = { storage: !facts.storageOk, cron: facts.cronStale };
+    const bad: Record<'storage' | 'cron' | 'backup', boolean> = { storage: !facts.storageOk, cron: facts.cronStale, backup: !!facts.backupBad };
     let changed = false;
-    for (const k of ['storage', 'cron'] as const) {
+    for (const k of ['storage', 'cron', 'backup'] as const) {
+      if (k === 'backup' && facts.backupBad === undefined) continue; // the health probe does not know about backups: leave that incident alone
       const { next, send } = opsTransition(state[k] ?? EMPTY, bad[k], now);
       if (JSON.stringify(next) !== JSON.stringify(state[k] ?? EMPTY)) {
         state[k] = next;

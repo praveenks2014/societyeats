@@ -7,13 +7,16 @@ export class LocalStorage implements StorageAdapter {
   readonly name = 'local';
   private dir = process.env.LOCAL_UPLOAD_DIR || path.join(process.cwd(), '.data', 'uploads');
 
+  /** A key is one or more `/`-separated names (uploads are flat; backups live under `backups/`). No `.`/`..` segments, no escaping the folder. */
   private file(key: string) {
-    if (!/^[A-Za-z0-9._-]+$/.test(key)) throw new Error('bad storage key');
-    return path.join(this.dir, key);
+    const parts = key.split('/');
+    if (!parts.every((p) => /^[A-Za-z0-9._-]+$/.test(p) && p !== '.' && p !== '..')) throw new Error('bad storage key');
+    return path.join(this.dir, ...parts);
   }
   async put(key: string, body: Buffer) {
-    await fs.mkdir(this.dir, { recursive: true });
-    await fs.writeFile(this.file(key), body);
+    const file = this.file(key);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, body);
   }
   async get(key: string) {
     try {

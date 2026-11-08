@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
+import { usePolledResource } from '@/lib/use-polled-resource';
 import { Badge, Button, Card, EmptyState, Input, Skeleton } from '@/components/ui';
 import { StatusPill } from '@/components/order-status';
 import { useToast } from '@/components/providers';
@@ -16,25 +17,25 @@ type RestOrder = {
 };
 
 export default function RestaurantQueue() {
-  const [data, setData] = useState<{ restaurant: { name: string; counterNumber: string }; orders: RestOrder[] } | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [otps, setOtps] = useState<Record<number, string>>({});
   const toast = useToast();
 
-  const load = useCallback(() => {
-    fetch('/api/restaurant/orders')
-      .then((r) => r.json())
-      .then((d) => !d.error && setData(d))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 6000);
-    return () => clearInterval(t);
-  }, [load]);
+  // Only the most recently started request may set the data (see usePolledResource).
+  const { data, reload: load, abortInFlight } = usePolledResource<{ restaurant: { name: string; counterNumber: string }; orders: RestOrder[] }>(
+    async (signal) => {
+      try {
+        const d = await fetch('/api/restaurant/orders', { signal }).then((r) => r.json());
+        return d.error ? null : d;
+      } catch {
+        return null;
+      }
+    },
+    { intervalMs: 6000 },
+  );
 
   async function act(id: number, action: string) {
+    abortInFlight();
     setBusyId(id);
     const res = await fetch(`/api/orders/${id}/status`, {
       method: 'POST',

@@ -24,7 +24,10 @@ export async function runScheduledJobs(now: Date = new Date()) {
   } catch {
     storageOk = false;
   }
+  // Daily database backup to Object Storage (once a day after 03:00 IST; a no-op on every other run).
+  const { runBackupIfDue, readBackupState, backupProblem } = await import('@/lib/backup/run');
+  const backup = await runBackupIfDue(now).catch(() => 'failed' as const);
   const { checkOpsHealth } = await import('@/lib/ops-alerts');
-  const ops = await checkOpsHealth(now, { storageOk, cronStale: false, cronAgeMinutes: 0 });
-  return { orderTimers, subscriptions: subs, fssai, retention, grievanceAlerts, plusExpiring, ops };
+  const ops = await checkOpsHealth(now, { storageOk, cronStale: false, cronAgeMinutes: 0, backupBad: backupProblem(await readBackupState(), now) });
+  return { orderTimers, subscriptions: subs, fssai, retention, grievanceAlerts, plusExpiring, ops, backup };
 }

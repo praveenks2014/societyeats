@@ -29,11 +29,14 @@ let userOffset = 0;
 test.beforeEach(({ browserName }, info) => {
   void browserName; // Playwright needs a destructured first argument
   const mobile = info.project.name === 'mobile-390';
+  // --repeat-each=N repeats the whole serial journey: every repetition gets its own people and kitchens (they share one database)
+  const rep = info.repeatEachIndex;
   mobileEnv.mobile = mobile;
-  userOffset = mobile ? 500 : 0;
-  Object.assign(RESIDENT, mobile ? { phone: '9100000501', email: 'm-resident@e2e.example' } : RESIDENT_BASE);
-  Object.assign(COOK, mobile ? { phone: '9100000502', email: 'm-cook@e2e.example' } : COOK_BASE);
-  if (mobile && kitchenN < 600) kitchenN = 600;
+  userOffset = (mobile ? 500 : 0) + rep * 1000;
+  Object.assign(RESIDENT, mobile ? { phone: '9100000501', email: 'm-resident@e2e.example' } : rep ? { phone: `97${rep}0000001`, email: `resident-r${rep}@e2e.example` } : RESIDENT_BASE);
+  Object.assign(COOK, mobile ? { phone: '9100000502', email: 'm-cook@e2e.example' } : rep ? { phone: `97${rep}0000002`, email: `cook-r${rep}@e2e.example` } : COOK_BASE);
+  const base = (mobile ? 600 : 100) + rep * 1000;
+  if (kitchenN < base) kitchenN = base;
   const id = info.title.split('. ')[0].trim();
   test.skip(mobile && !MOBILE_SCENARIOS.has(id), 'desktop-only scenario');
 });
@@ -1066,4 +1069,29 @@ test('24. CSP: the real Razorpay Checkout loads under the nonce policy (checkout
   const csp = (await b.page.request.get('/dev/razorpay-probe')).headers()['content-security-policy'];
   expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic' https:\/\/checkout\.razorpay\.com/);
   await b.ctx.close();
+});
+
+test('25. legal editor: compare with the latest seed draft, then load it into the editor as an unsaved draft (nothing published)', async ({ browser }) => {
+  const { ctx, page: admin } = await loginAdmin(browser);
+  const cur = (await api(admin.request, 'get', '/api/admin/legal/food-safety')).json.document as { body: string; version: number };
+  const pub = await api(admin.request, 'post', '/api/admin/legal/food-safety', { action: 'publish', title: 'Food safety', body: `${cur.body}\n\nE2E: a line the admin added.`, material: false, changeSummary: 'e2e edit' });
+  expect(pub.status, JSON.stringify(pub.json)).toBe(200);
+  const live = (await api(admin.request, 'get', '/api/admin/legal/food-safety')).json.document as { version: number };
+
+  await admin.goto('/admin/legal');
+  await admin.getByTestId('legal-food-safety').getByRole('button', { name: 'Edit' }).click();
+  await admin.getByTestId('seed-compare-btn').click();
+  await expect(admin.getByTestId('seed-diff-stats')).toBeVisible();
+  await expect(admin.getByTestId('seed-diff').locator('[data-diff="del"]', { hasText: 'a line the admin added' })).toBeVisible();
+  await expect(admin.getByTestId('seed-edited-warning')).toBeVisible();
+  await expect(admin.getByTestId('seed-load')).toBeDisabled(); // an admin-edited document asks for a confirmation first
+  await admin.getByTestId('seed-confirm').check();
+  await admin.getByTestId('seed-load').click();
+  await expect(admin.getByTestId('seed-draft-banner')).toBeVisible();
+  await expect(admin.getByTestId('legal-body-input')).not.toHaveValue(/a line the admin added/);
+  // nothing was published: the live version is the one the admin made
+  const after = (await api(admin.request, 'get', '/api/admin/legal/food-safety')).json.document as { version: number; body: string };
+  expect(after.version).toBe(live.version);
+  expect(after.body).toContain('a line the admin added');
+  await ctx.close();
 });

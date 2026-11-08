@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { usePolledResource } from '@/lib/use-polled-resource';
 import { Badge, Button, Skeleton } from '@/components/ui';
 import { StatusPill } from '@/components/order-status';
 import { useToast } from '@/components/providers';
@@ -23,23 +24,25 @@ type Row = {
 };
 
 export default function AdminOrders() {
-  const [rows, setRows] = useState<Row[] | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const toast = useToast();
 
-  function load() {
-    fetch('/api/admin/orders')
-      .then((r) => r.json())
-      .then((d) => setRows(d.orders))
-      .catch(() => {});
-  }
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 10000);
-    return () => clearInterval(t);
-  }, []);
+  // Only the most recently started request may set the data (see usePolledResource).
+  const { data, reload: load, abortInFlight } = usePolledResource<{ orders: Row[] }>(
+    async (signal) => {
+      try {
+        const d = await fetch('/api/admin/orders', { signal }).then((r) => r.json());
+        return d.orders ? { orders: d.orders as Row[] } : null;
+      } catch {
+        return null;
+      }
+    },
+    { intervalMs: 10000 },
+  );
+  const rows = data?.orders ?? null;
 
   async function retry(id: number) {
+    abortInFlight();
     setBusyId(id);
     const res = await fetch(`/api/admin/orders/${id}/retry`, { method: 'POST' });
     const d = await res.json();
