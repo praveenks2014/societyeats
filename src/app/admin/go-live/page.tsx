@@ -23,6 +23,16 @@ export default function GoLivePage() {
   useEffect(() => {
     load();
   }, [load]);
+  const [backingUp, setBackingUp] = useState(false);
+  async function backupNow() {
+    setBackingUp(true);
+    const res = await fetch('/api/admin/backup', { method: 'POST' });
+    const d = await res.json().catch(() => ({}));
+    setBackingUp(false);
+    if (!res.ok) return toast(d.error || 'The backup failed', 'err');
+    toast(`Backup written (${Math.max(1, Math.round(d.backup.bytes / 1024))} KB, ${d.backup.method})`);
+    load();
+  }
   async function save(keys: string[]) {
     const patch = { ...Object.fromEntries(keys.map((k) => [k, values[k]])), reason: 'Go-live checklist' };
     const res = await fetch('/api/admin/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
@@ -72,6 +82,7 @@ export default function GoLivePage() {
               <Button size="sm" onClick={() => save((r.fix as { keys: string[] }).keys)} data-testid={`golive-save-${r.key}`}>Save</Button>
             </div>
           )}
+          {r.key === 'backups' && <Button size="sm" className="mt-3" loading={backingUp} onClick={backupNow} data-testid="backup-now">Run backup now</Button>}
           {r.status !== 'ok' && r.fix.kind === 'secret' && <p className="mt-3 rounded-xl bg-rice-deep px-3 py-2 text-xs">Add in Replit Secrets: <code>{r.fix.names.join(', ')}</code>, then redeploy.</p>}
           {r.status !== 'ok' && r.fix.kind === 'link' && <Link href={r.fix.href} className="mt-3 inline-flex min-h-[44px] items-center text-sm font-semibold text-leaf underline">{r.fix.text}</Link>}
           {r.status !== 'ok' && r.fix.kind === 'info' && <p className="mt-3 rounded-xl bg-rice-deep px-3 py-2 text-xs">{r.fix.text}</p>}

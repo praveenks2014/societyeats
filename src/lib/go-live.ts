@@ -1,5 +1,7 @@
 import { isMockMode } from '@/lib/config';
 import { paymentsModeInfo } from '@/lib/payments/mode';
+import { emailDeliveryFacts, type EmailFacts } from '@/lib/email/status';
+import { BACKUP_STALE_HOURS, readBackupState } from '@/lib/backup/run';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { getCronStatus } from '@/lib/cron-status';
 import { listLegalDocuments } from '@/lib/legal/docs';
@@ -23,7 +25,9 @@ export type GoLiveRow = {
 };
 
 type Env = Record<string, string | undefined>;
-type Facts = { storageReachable: boolean; cronFresh: boolean; legalAllReviewed: boolean; legalCount: number; /** how payments are taken (see payments/mode.ts) */ paymentsMode?: 'mock' | 'razorpay_test' | 'razorpay_live' | 'invalid_key'; mockMode?: boolean; keyPrefix?: string | null };
+type Facts = { storageReachable: boolean; cronFresh: boolean; legalAllReviewed: boolean; legalCount: number; /** how payments are taken (see payments/mode.ts) */ paymentsMode?: 'mock' | 'razorpay_test' | 'razorpay_live' | 'invalid_key'; mockMode?: boolean; keyPrefix?: string | null; email?: EmailFacts; backup?: BackupFacts; now?: Date };
+
+export type BackupFacts = { lastSuccessAt: string | null; bytes: number | null; method: string | null; lastAttemptFailed: boolean; errorShort: string | null };
 
 /**
  * The single list of live-mode checks. The /admin/go-live page renders all of it; the live-mode guard blocks on exactly its
@@ -44,6 +48,8 @@ export function buildGoLiveRows(s: PlatformSettings, env: Env, facts: Facts): Go
     row({ key: 'storage', kind: 'ops', label: 'File storage reachable (Replit Object Storage or S3)', status: facts.storageReachable ? 'ok' : 'missing', blocking: false, fix: { kind: 'info', text: 'Set STORAGE_ADAPTER=replit and create the Object Storage bucket; check /api/health.' } }),
     row({ key: 'cron', kind: 'ops', label: 'Scheduled jobs are running (heartbeat fresh)', status: facts.cronFresh ? 'ok' : 'missing', blocking: false, fix: { kind: 'info', text: 'Schedule POST /api/cron/run every 5 minutes with the cron secret.' } }),
     paymentsRow(facts),
+    ...(facts.email ? [emailRow(facts.email)] : []),
+    ...(facts.backup ? [backupRow(facts.backup, facts.now ?? new Date())] : []),
     row({ key: 'vapid', kind: 'ops', label: 'Web-push keys (VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)', status: has(env.VAPID_PUBLIC_KEY) && has(env.VAPID_PRIVATE_KEY) ? 'ok' : 'warn', blocking: false, fix: { kind: 'secret', names: ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY'] }, detail: 'Run npm run vapid:generate. Push is simply off without them.' }),
     row({ key: 'legalReviewed', kind: 'ops', label: 'Every legal document marked reviewed by counsel', status: facts.legalAllReviewed ? 'ok' : 'warn', blocking: false, fix: { kind: 'link', href: '/admin/legal', text: 'Open legal documents' } }),
   ];
@@ -60,6 +66,27 @@ function paymentsRow(facts: Facts): GoLiveRow {
   return mockMode
     ? { ...base, status: 'missing', detail: 'Live Razorpay keys need MOCK_MODE=false. Switch it once every configuration item above is done.' }
     : { ...base, status: 'ok', detail: `Live mode (${facts.keyPrefix ?? 'rzp_live_'}): real money.` };
+}
+
+/** E-mail delivery: red when mails only land in the outbox (residents get nothing), amber for a failing or test-domain Resend, green otherwise. */
+function emailRow(e: EmailFacts): GoLiveRow {
+  const base = { key: 'emailDelivery', kind: 'ops' as const, label: 'Email delivery', blocking: false, fix: { kind: 'secret' as const, names: ['EMAIL_ADAPTER', 'RESEND_API_KEY', 'EMAIL_FROM'] } };
+  if (e.mode === 'mock') return { ...base, status: 'missing', detail: 'Emails go to /admin/outbox only, residents will not receive them. Set EMAIL_ADAPTER=resend with RESEND_API_KEY and EMAIL_FROM (a verified domain); this works even while MOCK_MODE=true.' };
+  const cls = e.lastSend?.errorClass;
+  if (cls === 'domain_not_verified') return { ...base, status: 'warn', detail: 'Resend refused the sender: verify the domain used in EMAIL_FROM in the Resend dashboard (Resend only delivers to arbitrary addresses from a verified domain).' };
+  if (e.lastSend && !e.lastSend.ok) return { ...base, status: 'warn', detail: `The last send failed (${cls ?? 'other'}). Check RESEND_API_KEY and EMAIL_FROM.` };
+  if (e.fromProblem) return { ...base, status: 'warn', detail: 'EMAIL_FROM is missing or uses resend.dev / a placeholder domain: Resend delivers only to your own address until you verify a domain and use it in EMAIL_FROM.' };
+  return { ...base, status: 'ok', detail: e.lastSend ? 'Resend is on and the last send succeeded.' : 'Resend is on. No email has been sent yet.' };
+}
+
+/** Backups: amber when there is none, the last attempt failed, or the newest is older than 26 hours. */
+function backupRow(b: BackupFacts, now: Date): GoLiveRow {
+  const base = { key: 'backups', kind: 'ops' as const, label: 'Database backups', blocking: false, fix: { kind: 'info' as const, text: 'A backup runs daily after 03:00 IST from the cron job. Use “Run backup now” to take one immediately.' } };
+  const ageH = b.lastSuccessAt ? (now.getTime() - new Date(b.lastSuccessAt).getTime()) / 3_600_000 : null;
+  const last = b.lastSuccessAt ? `Last backup ${new Date(b.lastSuccessAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })} IST, ${b.bytes != null ? `${Math.max(1, Math.round(b.bytes / 1024))} KB` : 'size unknown'}, ${b.method ?? 'unknown method'}.` : 'No backup has been taken yet.';
+  if (b.lastAttemptFailed) return { ...base, status: 'warn', detail: `${last} The latest attempt failed${b.errorShort ? `: ${b.errorShort}` : ''}.` };
+  if (ageH == null || ageH > BACKUP_STALE_HOURS) return { ...base, status: 'warn', detail: `${last}${ageH != null ? ` That is over ${BACKUP_STALE_HOURS} hours ago.` : ''}` };
+  return { ...base, status: 'ok', detail: last };
 }
 
 export function liveBlockers(rows: GoLiveRow[]): GoLiveRow[] {
@@ -86,6 +113,7 @@ export async function collectGoLive(settings?: PlatformSettings, env: Env = proc
   const cron = await getCronStatus(new Date(), Number(s.cronStaleMinutes) * 60_000).catch(() => ({ stale: true }));
   const docs = await listLegalDocuments().catch(() => []);
   const pm = paymentsModeInfo(env);
-  const rows = buildGoLiveRows(s, env, { paymentsMode: pm.mode ?? 'invalid_key', keyPrefix: pm.prefix, mockMode: isMockMode(), storageReachable, cronFresh: !cron.stale, legalCount: docs.length, legalAllReviewed: docs.length > 0 && docs.every((d) => d.reviewStatus === 'reviewed') });
+  const bk = await readBackupState().catch(() => null);
+  const rows = buildGoLiveRows(s, env, { email: await emailDeliveryFacts(env).catch(() => undefined), backup: bk ? { lastSuccessAt: bk.lastSuccessAt, bytes: bk.bytes, method: bk.method, lastAttemptFailed: !bk.ok, errorShort: bk.error } : undefined, now: new Date(), paymentsMode: pm.mode ?? 'invalid_key', keyPrefix: pm.prefix, mockMode: isMockMode(), storageReachable, cronFresh: !cron.stale, legalCount: docs.length, legalAllReviewed: docs.length > 0 && docs.every((d) => d.reviewStatus === 'reviewed') });
   return { rows, blockers: liveBlockers(rows), mockMode: isMockMode() };
 }

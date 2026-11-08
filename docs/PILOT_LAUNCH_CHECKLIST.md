@@ -52,7 +52,7 @@ Open `/admin/go-live`: it lists every blocker and links each to the screen that 
 6. **Push (optional)**: `npm run vapid:generate`, then set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.
 7. **Cron**: schedule `POST /api/cron/run` every 5 minutes with `CRON_SECRET`.
 8. **Admins**: both `ADMIN_EMAILS` accounts log in, change the one-time password and enrol two-factor; keep the recovery codes.
-9. **Backups**: schedule `npm run db:backup` and test one restore.
+9. **Backups**: automatic and daily after 03:00 IST to Object Storage (nothing to schedule beyond the 5-minute cron). Press **Run backup now** on `/admin/go-live` once, confirm "Database backups" is green, then run the **Restore drill** in `docs/ADMIN_RUNBOOK.md` into a new empty database.
 10. **GST by a CA** (see below) and a **breach drill** from `docs/BREACH_RUNBOOK.md`.
 
 ## Payments: two paths with your existing Razorpay account
@@ -71,3 +71,7 @@ Open `/admin/go-live`: it lists every blocker and links each to the screen that 
 4. `npm run razorpay:check` (live): expect "razorpay_live".
 5. Take a live ₹1 UPI check for a kitchen and a live platform fee on a real order between the two admins; refund it from `/admin/refunds` and confirm the refund webhook.
 6. Your other apps on the same account must ignore events whose order notes say `app: padosiplate`.
+
+## Email must really send before residents sign up
+
+With `MOCK_MODE=true` mails land in `/admin/outbox` and are **not delivered** unless `EMAIL_ADAPTER=resend` is set. For a family trial with real residents: set `EMAIL_ADAPTER=resend`, `RESEND_API_KEY` and `EMAIL_FROM` (an address on a **domain verified in Resend**; `onboarding@resend.dev` only delivers to your own address). `/admin/go-live` → "Email delivery" must be green (red = outbox only, amber = last send failed or a test domain).
