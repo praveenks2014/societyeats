@@ -164,3 +164,22 @@ describe('T2: backups', () => {
     setStorageForTests(new MemoryStorage());
   });
 });
+
+describe('storage keys for backups', () => {
+  test('the local adapter stores nested keys such as backups/…, and still refuses anything that could escape its folder', async () => {
+    const os = await import('node:os');
+    const fs = await import('node:fs');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-local-'));
+    process.env.LOCAL_UPLOAD_DIR = dir;
+    const { LocalStorage } = await import('@/lib/storage/local');
+    const st = new LocalStorage();
+    await st.put('backups/padosiplate-2026-11-08T03-00-00-000Z.jsonl.gz', Buffer.from('x'));
+    expect((await st.get('backups/padosiplate-2026-11-08T03-00-00-000Z.jsonl.gz'))?.toString()).toBe('x');
+    await st.put('abcdef0123456789abcdef01.png', Buffer.from('y')); // flat upload keys still work
+    expect((await st.get('abcdef0123456789abcdef01.png'))?.toString()).toBe('y');
+    await st.delete('backups/padosiplate-2026-11-08T03-00-00-000Z.jsonl.gz');
+    expect(await st.get('backups/padosiplate-2026-11-08T03-00-00-000Z.jsonl.gz')).toBeNull();
+    for (const bad of ['../x', 'backups/../../x', '/etc/passwd', 'a//b', 'backups/.', 'a b']) await expect(st.put(bad, Buffer.from('z'))).rejects.toThrow(/bad storage key/);
+    delete process.env.LOCAL_UPLOAD_DIR;
+  });
+});
