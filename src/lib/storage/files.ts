@@ -4,6 +4,7 @@ import { ApiError } from '@/lib/api';
 import { getDb } from '@/lib/db';
 import { files } from '@/lib/db/schema';
 import { getStorage } from './index';
+import { BRAND } from '@/config/brand';
 
 export type UploadPurpose =
   | 'dish'
@@ -50,7 +51,7 @@ export async function sanitizeImage(buf: Buffer, mime: string): Promise<Buffer> 
 function docKey(): Buffer {
   const raw = process.env.DOC_ENCRYPTION_KEY || process.env.JWT_SECRET;
   if (!raw) throw new Error('DOC_ENCRYPTION_KEY (or JWT_SECRET) is required to encrypt documents');
-  return crypto.createHash('sha256').update(`padosi-doc-key:${raw}`).digest();
+  return crypto.createHash('sha256').update(`${BRAND.cryptoContext.docKey}:${raw}`).digest();
 }
 export function encryptBytes(plain: Buffer): Buffer {
   const iv = crypto.randomBytes(12);

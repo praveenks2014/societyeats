@@ -115,7 +115,7 @@ export async function createHomeOrder(input: HomeOrderInput): Promise<{ orderId:
 
   const deliveryFee = input.fulfillmentType === 'seller_delivery' && settings.sellerDeliveryFeeEnabled ? profile.sellerDeliveryFeeInPaise : 0;
   const baseCfg = feeConfigFromSettings(settings);
-  // PadosiPlate Plus (flag off by default): a percentage off the platform fee, within a monthly cap. Scaling the percentage, floor and
+  // Kootu Plus (flag off by default): a percentage off the platform fee, within a monthly cap. Scaling the percentage, floor and
   // cap together scales every fee by the same factor, so GST and the fee clamps stay consistent.
   const baseFee = platformFeeBase(subtotal, baseCfg);
   const plus = await plusDiscountFor(input.buyerId, baseFee);

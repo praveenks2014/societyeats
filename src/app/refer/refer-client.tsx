@@ -5,6 +5,7 @@ import { Badge, Card, EmptyState, SectionTitle, Skeleton } from '@/components/ui
 import { ShareButton } from '@/components/share-button';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
+import { BRAND } from '@/config/brand';
 
 type Data = {
   referralCode: string;
@@ -63,7 +64,7 @@ export function ReferClient() {
         </div>
         <div className="mt-3">
           <ShareButton
-            text="Come join PadosiPlate — home-cooked food from our own society, delivered by our neighbours 🍲"
+            text={`Come join ${BRAND.name} — home-cooked food from our own society, delivered by our neighbours 🍲`}
             url={link}
             className="w-full"
           />

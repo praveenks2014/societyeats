@@ -6,6 +6,7 @@ import { FoodImage } from '@/components/food-image';
 import { useToast } from '@/components/providers';
 import { MenuPublisher } from '@/components/menu-publisher';
 import { formatINR } from '@/lib/money';
+import { BRAND } from '@/config/brand';
 
 type Listing = {
   id: number;
@@ -100,7 +101,7 @@ export default function SellerListings() {
                   {!row.isActive && <Badge tone="neutral">Paused</Badge>}
                   {row.moderationStatus === 'pending' && <Badge tone="amber">In review</Badge>}
                   {row.moderationStatus === 'rejected' && <Badge tone="red">Needs changes</Badge>}
-                  {row.moderationStatus === 'hidden' && <Badge tone="red">Hidden by PadosiPlate</Badge>}
+                  {row.moderationStatus === 'hidden' && <Badge tone="red">Hidden by {BRAND.name}</Badge>}
                 </div>
                 {row.moderationNote && ['rejected', 'hidden'].includes(row.moderationStatus) && (
                   <p className="mt-1 text-xs text-chili-dark">{row.moderationNote}</p>

@@ -9,6 +9,7 @@ import { SETTING_DEFS } from '@/lib/settings/defs';
 import { classifyEmailError, emailDeliveryFacts, fromDomainProblem } from '@/lib/email/status';
 import { MemoryStorage } from '@/lib/storage/memory';
 import { setStorageForTests } from '@/lib/storage';
+import { BRAND } from '@/config/brand';
 
 vi.mock('next/headers', () => import('../helpers/next-headers'));
 
@@ -52,10 +53,10 @@ describe('T3: email delivery status', () => {
     expect(classifyEmailError('resend 429')).toBe('rate_limited');
     expect(classifyEmailError('fetch failed')).toBe('network');
     expect(classifyEmailError('boom')).toBe('other');
-    expect(fromDomainProblem('PadosiPlate <onboarding@resend.dev>')).toBe('test_domain');
+    expect(fromDomainProblem(`${BRAND.name} <onboarding@resend.dev>`)).toBe('test_domain');
     expect(fromDomainProblem(undefined)).toBe('test_domain');
-    expect(fromDomainProblem('PadosiPlate <no-reply@padosiplate.example>')).toBe('test_domain');
-    expect(fromDomainProblem('PadosiPlate <hello@padosiplate.in>')).toBeNull();
+    expect(fromDomainProblem(`${BRAND.name} <no-reply@${BRAND.slug}.example>`)).toBe('test_domain');
+    expect(fromDomainProblem(`${BRAND.name} <hello@${BRAND.slug}.in>`)).toBeNull();
   });
 
   test('EMAIL_ADAPTER=resend wins over MOCK_MODE=true, and the facts come from the last real send', async () => {
@@ -63,12 +64,12 @@ describe('T3: email delivery status', () => {
     delete process.env.EMAIL_ADAPTER;
     expect((await emailDeliveryFacts({})).mode).toBe('mock');
     process.env.EMAIL_ADAPTER = 'resend';
-    expect(await emailDeliveryFacts({ EMAIL_FROM: 'A <hello@padosiplate.in>' })).toEqual({ mode: 'resend', lastSend: null, fromProblem: null });
+    expect(await emailDeliveryFacts({ EMAIL_FROM: `A <hello@${BRAND.slug}.in>` })).toEqual({ mode: 'resend', lastSend: null, fromProblem: null });
     await db.insert(s.emailOutbox).values({ toEmail: 'a@x.in', subject: 's', bodyText: 'b', kind: 'k', status: 'sent' });
     await db.insert(s.emailOutbox).values({ toEmail: 'b@x.in', subject: 's', bodyText: 'b', kind: 'k', status: 'failed', error: 'You can only send testing emails to your own email address' });
-    expect(await emailDeliveryFacts({ EMAIL_FROM: 'A <hello@padosiplate.in>' })).toMatchObject({ lastSend: { ok: false, errorClass: 'domain_not_verified' } });
+    expect(await emailDeliveryFacts({ EMAIL_FROM: `A <hello@${BRAND.slug}.in>` })).toMatchObject({ lastSend: { ok: false, errorClass: 'domain_not_verified' } });
     await db.insert(s.emailOutbox).values({ toEmail: 'c@x.in', subject: 's', bodyText: 'b', kind: 'k', status: 'sent' });
-    expect(await emailDeliveryFacts({ EMAIL_FROM: 'A <hello@padosiplate.in>' })).toMatchObject({ lastSend: { ok: true, errorClass: null } });
+    expect(await emailDeliveryFacts({ EMAIL_FROM: `A <hello@${BRAND.slug}.in>` })).toMatchObject({ lastSend: { ok: true, errorClass: null } });
   });
 
   test('/api/health reports emailMode', async () => {

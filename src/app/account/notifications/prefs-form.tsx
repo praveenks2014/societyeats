@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { Card, Skeleton } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { BRAND } from '@/config/brand';
 
 type Prefs = { pushEnabled: boolean; whatsappEnabled: boolean; smsEnabled: boolean; marketingEnabled: boolean };
 const ROWS: { key: keyof Prefs; label: string; hint: string }[] = [
   { key: 'pushEnabled', label: 'Phone alerts (push)', hint: 'Order updates on this device, even when the app is closed. Quiet between 10 pm and 7 am except for urgent ones like “at your door”.' },
   { key: 'whatsappEnabled', label: 'WhatsApp messages', hint: 'Order updates on WhatsApp. (Not live yet in the pilot.)' },
   { key: 'smsEnabled', label: 'SMS', hint: 'Order updates by text. (Not live yet in the pilot.)' },
-  { key: 'marketingEnabled', label: 'Offers and news', hint: 'Occasional offers from PadosiPlate. Off unless you turn it on.' },
+  { key: 'marketingEnabled', label: 'Offers and news', hint: `Occasional offers from ${BRAND.name}. Off unless you turn it on.` },
 ];
 
 export function NotificationPrefsForm() {

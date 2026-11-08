@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, EmptyState, Skeleton } from '@/components/ui';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
+import { BRAND } from '@/config/brand';
 
 type Due = { id: number; orderId: number; sellerId: number; kitchenName: string; amountInPaise: number; reason: string; status: string; refundUtr: string | null; createdAt: string; lastChasedAt: string | null };
 type Ref = { id: number; kind: string; orderId: number | null; subscriptionId: number | null; amountInPaise: number; status: string; reason: string | null; initiatedBy: string; createdAt: string; error: string | null };
@@ -28,7 +29,7 @@ export default function AdminRefunds() {
       <section>
         <h1 className="text-2xl font-bold">Refunds</h1>
         <h2 className="mt-4 text-lg font-bold">Kitchen refunds due ({due.length})</h2>
-        <p className="text-sm text-ink-soft">Food money the kitchen owes buyers. PadosiPlate never held it — chase the kitchen until they record a UPI reference.</p>
+        <p className="text-sm text-ink-soft">Food money the kitchen owes buyers. {BRAND.name} never held it — chase the kitchen until they record a UPI reference.</p>
         {due.length === 0 ? <div className="mt-3"><EmptyState emoji="✅" title="Nothing outstanding" /></div> : (
           <div className="mt-3 space-y-2">
             {due.map((d) => (

@@ -3,6 +3,7 @@ import { ApiError } from '@/lib/api';
 import { getDb } from '@/lib/db';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { societies, societyMemberships, users } from '@/lib/db/schema';
+import { BRAND } from '@/config/brand';
 
 /**
  * Who may browse, order and sell. Pilot v2: invite-only — a user needs an APPROVED membership of an
@@ -43,7 +44,7 @@ export async function assertBuyerCanOrder(userId: number, now: Date = new Date()
     throw new ApiError(403, `Ordering is paused on your account until ${u.ordersBlockedUntil.toDateString()} after repeated cancelled orders. You can appeal from Help.`);
   }
   if (u.approvalStatus !== 'approved') throw new ApiError(403, 'Your account is waiting for approval from your society admin');
-  if (!(await isPilotMember(userId))) throw new ApiError(403, 'PadosiPlate is invite-only during the pilot. Join through your society’s invite link.');
+  if (!(await isPilotMember(userId))) throw new ApiError(403, `${BRAND.name} is invite-only during the pilot. Join through your society’s invite link.`);
   return u;
 }
 
@@ -54,6 +55,6 @@ export async function assertSellerAccess(userId: number): Promise<AccessUser> {
   if (!u || u.anonymizedAt) throw new ApiError(404, 'Account not found');
   if (u.blockedAt) throw new ApiError(403, 'Your account is blocked');
   requireVerifiedEmail(u, 'set up your kitchen');
-  if (!(await isPilotMember(userId))) throw new ApiError(403, 'PadosiPlate is invite-only during the pilot. Join through your society’s invite link.');
+  if (!(await isPilotMember(userId))) throw new ApiError(403, `${BRAND.name} is invite-only during the pilot. Join through your society’s invite link.`);
   return u;
 }

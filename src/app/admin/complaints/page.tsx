@@ -6,6 +6,7 @@ import { Badge, Button, Card, EmptyState, Input, Skeleton } from '@/components/u
 import { FoodImage } from '@/components/food-image';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
+import { BRAND } from '@/config/brand';
 
 type ComplaintRow = {
   id: number;
@@ -88,7 +89,7 @@ export default function AdminComplaints() {
       <h1 className="text-2xl font-bold">Complaints</h1>
       <p className="mt-1 text-sm text-ink-soft">
         Buyers can report an issue within 24h of delivery/pickup. The <strong>platform fee</strong> is refunded by
-        PadosiPlate through Razorpay. The <strong>food amount</strong> was paid straight to the kitchen, so the kitchen
+        {BRAND.name} through Razorpay. The <strong>food amount</strong> was paid straight to the kitchen, so the kitchen
         owes it — it becomes a “kitchen refund due” (see Refunds). Three upheld hygiene complaints auto-delist the kitchen.
       </p>
 

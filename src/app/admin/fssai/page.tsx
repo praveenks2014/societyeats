@@ -6,6 +6,7 @@ import { Badge, Button, Card, EmptyState, Input, Skeleton } from '@/components/u
 import { useToast } from '@/components/providers';
 import { FssaiFunnel } from '@/components/fssai-funnel';
 import { formatINR } from '@/lib/money';
+import { BRAND } from '@/config/brand';
 
 type AppRow = {
   id: number;
@@ -126,7 +127,7 @@ function ApplicationsQueue() {
     <div>
       <p className="mt-4 text-sm text-ink-soft">
         New applications are always self-filed by the seller — this queue is for tracking each to
-        grant once filed on FoSCoS, plus any legacy application PadosiPlate's back office filed by hand.
+        grant once filed on FoSCoS, plus any legacy application {BRAND.name}'s back office filed by hand.
         Applications land here once filed (there's no public FoSCoS submission API to poll instead).
       </p>
 
@@ -147,7 +148,7 @@ function ApplicationsQueue() {
                     <div className="text-xs text-ink-faint">
                       {a.applicantName} · {a.sellerPhone} ·{' '}
                       {a.licenseType === 'state' ? 'State License' : 'Basic Registration'} ·{' '}
-                      {a.filingMode === 'self' ? 'self-filed' : "PadosiPlate's back office files"}
+                      {a.filingMode === 'self' ? 'self-filed' : `${BRAND.name}'s back office files`}
                     </div>
                   </div>
                   <Badge tone={badge.tone}>{badge.label}</Badge>
@@ -196,7 +197,7 @@ function ApplicationsQueue() {
                   <div className="mt-2 flex items-center gap-2 text-xs">
                     <span className={a.sponsoredByPlatform ? 'text-leaf' : 'text-ink-faint'}>
                       {a.sponsoredByPlatform
-                        ? `✅ Sponsored (${formatINR(a.facilitationCostInPaise)}) — PadosiPlate acquisition cost, not a seller debt`
+                        ? `✅ Sponsored (${formatINR(a.facilitationCostInPaise)}) — ${BRAND.name} acquisition cost, not a seller debt`
                         : '⛔ Not sponsored (outside cohort cap)'}
                     </span>
                     <button
@@ -311,7 +312,7 @@ function VerifyLicensesQueue() {
   return (
     <div>
       <p className="mt-4 text-sm text-ink-soft">
-        Sellers who entered a license number PadosiPlate couldn't auto-confirm — compare their identity
+        Sellers who entered a license number {BRAND.name} couldn't auto-confirm — compare their identity
         against the number they entered, then mark it verified or reject it with a reason.
       </p>
       {rows.length === 0 ? (

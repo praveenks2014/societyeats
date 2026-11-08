@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { authorizationUrl, googleEnabled, newState } from '@/lib/auth/google';
 import { siteOrigin } from '@/lib/site-url';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,6 @@ export async function GET(req: NextRequest) {
   const session = req.nextUrl.searchParams.get('link') ? await getSession() : null;
   const redirectUri = `${await siteOrigin()}/api/auth/google/callback`;
   const res = NextResponse.redirect(authorizationUrl(redirectUri, state, nonce));
-  res.cookies.set('pp_google', JSON.stringify({ state, nonce, link: session?.uid ?? null }), { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 600, path: '/' });
+  res.cookies.set(`${BRAND.cookiePrefix}_google`, JSON.stringify({ state, nonce, link: session?.uid ?? null }), { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 600, path: '/' });
   return res;
 }

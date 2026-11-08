@@ -1,4 +1,4 @@
-/* PadosiPlate service worker — hand-rolled, no build-step framework dependency.
+/* __BRAND_NAME__ service worker — hand-rolled, no build-step framework dependency.
  *
  * Cache name is stamped at build time from package.json's version plus a
  * fresh build id (see scripts/gen-sw.mjs, run by the "prebuild" npm
@@ -87,7 +87,7 @@ async function cacheFirst(request) {
 
 // ---- web push (Pilot v2 step 13) ----
 self.addEventListener('push', (event) => {
-  let data = { title: 'PadosiPlate', body: '', href: '/' };
+  let data = { title: '__BRAND_NAME__', body: '', href: '/' };
   try {
     data = { ...data, ...(event.data ? event.data.json() : {}) };
   } catch {

@@ -11,6 +11,7 @@ import { currentConsentLabel } from '@/lib/legal/docs';
 import { joinSociety } from '@/lib/membership';
 import { clientIp, rateLimit } from '@/lib/rate-limit';
 import { referralCodeFor } from '@/lib/referrals';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +49,7 @@ export const POST = api(async (req) => {
   if (!body.name?.trim()) throw new ApiError(400, 'Name is required');
   const pwError = validatePassword(body.password, { phone, email });
   if (pwError) throw new ApiError(400, pwError);
-  if (body.age18 !== true) throw new ApiError(400, 'You must be 18 or older to use PadosiPlate');
+  if (body.age18 !== true) throw new ApiError(400, `You must be 18 or older to use ${BRAND.name}`);
   if (body.acceptTerms !== true) throw new ApiError(400, 'Please accept the Terms and the Privacy Notice to continue');
   const role = body.role === 'seller' ? 'seller' : 'buyer';
   if (role === 'seller' && !body.kitchenName?.trim()) throw new ApiError(400, 'Kitchen name is required');
@@ -70,7 +71,7 @@ export const POST = api(async (req) => {
     [society] = await db.select().from(societies).where(eq(societies.id, body.societyId));
     if (!society?.isLive || society.isActive === false) throw new ApiError(400, 'Select a valid society');
   } else {
-    throw new ApiError(400, 'PadosiPlate is invite-only during the pilot — use the invite link from your society’s WhatsApp group');
+    throw new ApiError(400, `${BRAND.name} is invite-only during the pilot — use the invite link from your society’s WhatsApp group`);
   }
 
   let referredByUserId: number | null = null;

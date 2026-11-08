@@ -62,7 +62,7 @@ export function Hero() {
 
       <div className="relative z-10 mx-auto flex max-w-5xl flex-col items-start gap-8 sm:flex-row sm:items-center">
         <div className="max-w-md">
-          <div className="eyebrow mb-3 !text-turmeric">HOME FOOD · FROM YOUR PADOSI</div>
+          <div className="eyebrow mb-3 !text-turmeric">HOME FOOD · FROM YOUR NEIGHBOURS</div>
           <h1 className="text-4xl font-bold leading-[1.05] sm:text-5xl">
             Home food
             <br />

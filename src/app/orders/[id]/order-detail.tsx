@@ -13,6 +13,7 @@ import { formatINR } from '@/lib/money';
 import { COMPLAINT_CATEGORIES, COMPLAINT_OUTCOME_LABELS, type ComplaintCategory, type ComplaintOutcome } from '@/lib/complaints';
 import { PushOptIn } from '@/components/push-optin';
 import { DisclaimerClient } from '@/components/disclaimer-client';
+import { BRAND } from '@/config/brand';
 
 type FulfillmentType = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
 
@@ -106,7 +107,7 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
     const d = await res.json().catch(() => ({}));
     if (!res.ok) return toast(d.error || 'Could not repeat that order', 'err');
     try {
-      localStorage.setItem('padosi_cart', JSON.stringify({ vendor: d.vendor, items: d.items }));
+      localStorage.setItem(BRAND.storageKey('cart'), JSON.stringify({ vendor: d.vendor, items: d.items }));
     } catch {
       /* storage unavailable */
     }
@@ -144,7 +145,7 @@ export function OrderDetail({ orderId, mockMode }: { orderId: number; mockMode: 
         <p className="mt-3 rounded-xl bg-chili-tint px-4 py-3 text-sm text-chili-dark" role="status" data-testid="cancel-banner">
           {order.cancelReason}.
           {order.feeRefundedInPaise > 0 ? ` Your platform fee of ${formatINR(order.feeRefundedInPaise)} has been refunded.` : ''}
-          {order.creditIssuedInPaise > 0 ? ` We added ${formatINR(order.creditIssuedInPaise)} PadosiPlate credit for your next order.` : ''}
+          {order.creditIssuedInPaise > 0 ? ` We added ${formatINR(order.creditIssuedInPaise)} ${BRAND.name} credit for your next order.` : ''}
         </p>
       )}
 

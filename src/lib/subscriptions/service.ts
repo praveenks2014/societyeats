@@ -14,6 +14,7 @@ import { addDays, DAY_MS } from '@/lib/time';
 import { parseReminderDays } from '@/lib/settings/defs';
 import { effectiveStatus, nextPeriod } from './status';
 import { sellerSubscriptions } from './queries';
+import { BRAND } from '@/config/brand';
 
 /**
  * Kitchen subscription lifecycle — the platform's second revenue line.
@@ -140,7 +141,7 @@ export async function grantFoundingKitchen(sellerId: number, adminId: number | n
   const [claimed] = await db.update(sellerProfiles).set({ foundingGrantedAt: now }).where(and(eq(sellerProfiles.userId, sellerId), isNull(sellerProfiles.foundingGrantedAt))).returning({ id: sellerProfiles.userId });
   if (!claimed) return false;
   await db.insert(kitchenSubscriptions).values({ sellerId, planNameSnapshot: 'Founding kitchen', durationMonthsSnapshot: 3, status: 'waived', startsAt, endsAt, grantedByAdminId: adminId, notes: 'Founding kitchen — free for the first 90 days', paidAt: null });
-  await notifyUser(sellerId, 'Founding kitchen: 90 days free 🎁', 'Your first 90 days on PadosiPlate are free. After that the Monthly plan is ₹199.', '/seller/subscription', { email: true, emailKind: 'subscription_granted' });
+  await notifyUser(sellerId, 'Founding kitchen: 90 days free 🎁', `Your first 90 days on ${BRAND.name} are free. After that the Monthly plan is ₹199.`, '/seller/subscription', { email: true, emailKind: 'subscription_granted' });
   return true;
 }
 

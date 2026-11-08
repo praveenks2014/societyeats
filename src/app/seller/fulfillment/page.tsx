@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, Field, Input, Skeleton, Textarea } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { BRAND } from '@/config/brand';
 
 type Fulfillment = {
   offersSelfPickup: boolean;
@@ -72,7 +73,7 @@ export default function SellerFulfillment() {
     <div className="mx-auto max-w-lg">
       <h1 className="text-2xl font-bold">Fulfillment</h1>
       <p className="mt-1 text-sm text-ink-soft">
-        PadosiPlate never subsidizes delivery — pick how buyers can get your food. Self-pickup is
+        {BRAND.name} never subsidizes delivery — pick how buyers can get your food. Self-pickup is
         always free for you and the buyer.
       </p>
 
@@ -111,7 +112,7 @@ export default function SellerFulfillment() {
           Offer your own delivery
         </label>
         <p className="text-xs text-ink-faint">
-          You deliver, you set the fee, you keep every rupee of it — PadosiPlate only takes its
+          You deliver, you set the fee, you keep every rupee of it — {BRAND.name} only takes its
           commission on the food itself.
         </p>
         {sellerDelivery && (

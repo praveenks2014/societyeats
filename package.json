@@ -1,5 +1,5 @@
 {
-  "name": "padosiplate",
+  "name": "kootu",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
     "verify": "npm run typecheck && npm run lint && npm test && npm run test:e2e",
-    "icons": "node scripts/gen-icons.mjs",
+    "icons:generate": "node scripts/gen-icons.mjs",
     "db:bootstrap": "tsx scripts/bootstrap.ts",
     "db:seed:demo": "tsx scripts/seed-demo.ts",
     "db:backup": "bash scripts/backup.sh",

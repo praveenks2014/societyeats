@@ -5,6 +5,7 @@ import { Button, Card, Select, Skeleton } from '@/components/ui';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
 import type { Overview, OverviewResult } from '@/lib/metrics-overview';
+import { BRAND } from '@/config/brand';
 
 const EXPORTS: { kind: string; label: string }[] = [
   { kind: 'fee_invoices', label: 'Fee invoice register' },
@@ -89,7 +90,7 @@ export default function Insights() {
     const url = URL.createObjectURL(await res.blob());
     const a = document.createElement('a');
     a.href = url;
-    a.download = `padosiplate-${kind}.csv`;
+    a.download = `${BRAND.slug}-${kind}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast('Downloaded');

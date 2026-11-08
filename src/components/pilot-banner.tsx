@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { DisclaimerClient } from '@/components/disclaimer-client';
+import { BRAND } from '@/config/brand';
 
 /** The thin “pilot” banner. Dismissible per disclaimer version, so an edited text shows again. */
 export function PilotBanner({ version }: { version: number }) {
-  const key = `padosi_pilot_banner_v${version}`;
+  const key = BRAND.storageKey(`pilot_banner_v${version}`);
   const [hidden, setHidden] = useState(true);
   useEffect(() => {
     try {

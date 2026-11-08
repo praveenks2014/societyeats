@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db';
 import { notify } from '@/lib/db/notify';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { societies, societyMemberships, users } from '@/lib/db/schema';
+import { BRAND } from '@/config/brand';
 
 export type MembershipStatus = 'pending' | 'approved' | 'rejected';
 
@@ -42,7 +43,7 @@ export async function decideMembership(membershipId: number, adminId: number, de
   await db.update(societyMemberships).set({ status, decidedBy: adminId, decidedAt: new Date() }).where(eq(societyMemberships.id, membershipId));
   await db.update(users).set({ approvalStatus: status }).where(eq(users.id, m.userId));
   await recordAudit({ actorId: adminId, action: `membership.${decision}`, targetType: 'membership', targetId: membershipId, meta: { userId: m.userId, societyId: m.societyId } });
-  await notify(m.userId, decision === 'approve' ? 'Welcome to your society on PadosiPlate 🎉' : 'Your membership was not approved', decision === 'approve' ? 'You can now browse, order and sell.' : 'Contact your society admin if you think this is a mistake.', '/');
+  await notify(m.userId, decision === 'approve' ? `Welcome to your society on ${BRAND.name} 🎉` : 'Your membership was not approved', decision === 'approve' ? 'You can now browse, order and sell.' : 'Contact your society admin if you think this is a mistake.', '/');
   return status;
 }
 

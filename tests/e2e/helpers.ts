@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { totpAt } from '../../src/lib/auth/totp';
+import { BRAND } from '@/config/brand';
 
 export const ADMIN_EMAIL = 'e2e-admin@example.com';
 export const ADMIN_FIRST_PASSWORD = 'E2e-first-pass-1';
@@ -119,7 +120,7 @@ export async function payMockSheet(page: Page) {
 }
 
 // ---------- admin two-factor ----------
-const SECRET_FILE = path.join(os.tmpdir(), 'padosiplate-e2e-admin-totp.json');
+const SECRET_FILE = path.join(os.tmpdir(), `${BRAND.slug}-e2e-admin-totp.json`);
 export function saveAdminTotp(secret: string) {
   fs.writeFileSync(SECRET_FILE, JSON.stringify({ secret }));
 }

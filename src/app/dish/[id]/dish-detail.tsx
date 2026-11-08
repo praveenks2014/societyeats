@@ -14,6 +14,7 @@ import { PriceLines } from '@/components/price-lines';
 import { formatDistance, haversineKm, type GeoPoint } from '@/lib/geo';
 import { BADGE_TIER_LABEL } from '@/lib/reputation-labels';
 import { fssaiBadge } from '@/lib/fssai/badge';
+import { BRAND } from '@/config/brand';
 
 type Props = {
   listing: {
@@ -157,7 +158,7 @@ export function DishDetail({ listing, seller, sellerPoint, radiusKm, reviews, ot
             View kitchen profile →
           </Link>
           <ShareButton
-            text={`${listing.title} from ${seller.kitchenName} on PadosiPlate 🍲`}
+            text={`${listing.title} from ${seller.kitchenName} on ${BRAND.name} 🍲`}
             className="ml-auto"
           />
         </div>

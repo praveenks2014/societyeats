@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db';
 import { societies } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getWeeklyMetrics, toWeeklyMetricsCsv } from '@/lib/metrics';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +37,7 @@ export async function GET(req: Request) {
     status: 200,
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="padosiplate-pilot-metrics-${society.name.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv"`,
+      'Content-Disposition': `attachment; filename="${BRAND.slug}-pilot-metrics-${society.name.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv"`,
     },
   });
 }

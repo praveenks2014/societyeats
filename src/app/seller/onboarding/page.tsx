@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Skeleton, Textarea } from '@/components/ui';
 import { FoodImage } from '@/components/food-image';
 import { useToast } from '@/components/providers';
+import { BRAND } from '@/config/brand';
 
 const CUISINES = ['Biryani', 'Tiffins', 'North Indian', 'South Indian', 'Jain Thali', 'Bengali Sweets', 'Desserts', 'Snacks', 'Healthy bowls', 'Other'];
 const DAYS = [
@@ -76,7 +77,7 @@ export default function SellerOnboarding() {
       <HygieneStep p={p} done={done('hygiene')} save={save} />
       <Card className="mt-5 p-4" id="fssai">
         <div className="flex items-center justify-between"><div className="eyebrow">FSSAI</div>{done('fssai') ? <Badge tone="green">Started</Badge> : <Badge tone="amber">To do</Badge>}</div>
-        <p className="mt-2 text-sm text-ink-soft">Already registered? Enter your 14-digit number and certificate. New to FSSAI? Our guide helps you fill Form A yourself on the official FoSCoS site. PadosiPlate never files for you and never charges for it.</p>
+        <p className="mt-2 text-sm text-ink-soft">Already registered? Enter your 14-digit number and certificate. New to FSSAI? Our guide helps you fill Form A yourself on the official FoSCoS site. {BRAND.name} never files for you and never charges for it.</p>
         <Link href="/seller/compliance"><Button variant="secondary" className="mt-3">Open the FSSAI guide</Button></Link>
       </Card>
       <TaxStep p={p} done={done('tax')} save={save} />
@@ -221,7 +222,7 @@ function HygieneStep({ p, done, save }: { p: Profile; done: boolean; save: SaveF
   return (
     <Card className="mt-5 p-4">
       <StepHead id="hygiene" title="FOOD-SAFETY DECLARATION" done={done} />
-      <p className="mt-2 text-xs text-ink-soft">You are declaring these for yourself. PadosiPlate does not inspect kitchens. <Link href="/legal/food-safety" className="underline">Read the basic hygiene guide</Link>.</p>
+      <p className="mt-2 text-xs text-ink-soft">You are declaring these for yourself. {BRAND.name} does not inspect kitchens. <Link href="/legal/food-safety" className="underline">Read the basic hygiene guide</Link>.</p>
       <div className="mt-3 space-y-1" data-testid="hygiene-list">
         {p.hygieneItems.map((i) => (
           <label key={i.key} className="flex min-h-[44px] items-start gap-3 rounded-xl px-2 py-2 text-sm hover:bg-rice">
@@ -262,7 +263,7 @@ function AgreementStep({ p, done, save }: { p: Profile; done: boolean; save: Sav
       <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-soft">
         <li>My dish descriptions and photos are accurate, and food is freshly prepared in my own kitchen.</li>
         <li>I hold, or am applying for, FSSAI registration.</li>
-        <li>I will honour cancellations and refunds under PadosiPlate&apos;s rules.</li>
+        <li>I will honour cancellations and refunds under {BRAND.name}&apos;s rules.</li>
         <li>I am responsible for my own taxes. I accept strikes and suspension rules.</li>
       </ul>
       <p className="mt-2 text-xs text-ink-faint">Draft, pending lawyer review. <Link href="/legal/kitchen-terms" className="underline">Read the full Kitchen Terms</Link>.</p>

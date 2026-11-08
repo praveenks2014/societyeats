@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { Button, Card, Field, Input } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { BRAND } from '@/config/brand';
 
 const roleHome: Record<string, string> = {
   buyer: '/',
@@ -18,7 +19,7 @@ const ERRORS: Record<string, string> = {
   google_failed: 'Google sign-in did not work. Please try again.',
   google_unverified: 'Your Google email is not verified.',
   google_link_first: 'An account with this email already exists. Log in with your password (or an emailed code) first, then link Google from your Account page.',
-  google_no_account: 'No PadosiPlate account is linked to that Google account. Sign up with your invite link first.',
+  google_no_account: `No ${BRAND.name} account is linked to that Google account. Sign up with your invite link first.`,
 };
 
 export function LoginForm({ showDemo, google }: { showDemo: boolean; google: boolean }) {
@@ -148,7 +149,7 @@ export function LoginForm({ showDemo, google }: { showDemo: boolean; google: boo
             <span>🛒 Buyer</span><span className="font-mono">9999999901</span>
             <span>👩‍🍳 Seller</span><span className="font-mono">9999999902</span>
             <span>🍽️ Restaurant</span><span className="font-mono">9999999903</span>
-            <span>🛠️ Admin</span><span className="break-all font-mono">admin@demo.padosiplate.example</span>
+            <span>🛠️ Admin</span><span className="break-all font-mono">admin@demo.{BRAND.slug}.example</span>
           </div>
         </Card>
       )}

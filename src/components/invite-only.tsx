@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Button, Card, Field, Input, Textarea } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { BRAND } from '@/config/brand';
 
 /** Shown to visitors and non-members while `pilotSocietiesOnly` is on. */
 export function InviteOnly({ signedIn }: { signedIn: boolean }) {
@@ -26,7 +27,7 @@ export function InviteOnly({ signedIn }: { signedIn: boolean }) {
   return (
     <div className="mx-auto max-w-md pt-10 text-center" data-testid="invite-only">
       <div className="text-5xl" aria-hidden>🍛</div>
-      <h1 className="mt-3 text-2xl font-bold">PadosiPlate is invite-only during the pilot</h1>
+      <h1 className="mt-3 text-2xl font-bold">{BRAND.name} is invite-only during the pilot</h1>
       <p className="mt-2 text-sm text-ink-soft">We are starting with a few gated communities. If you live in one, use the invite link shared in your society&apos;s WhatsApp group.</p>
       <div className="mt-5 flex justify-center gap-3">
         {!signedIn && <Link href="/login" className="inline-flex min-h-[44px] items-center rounded-xl border border-rice-line px-5 text-sm font-semibold">Log in</Link>}

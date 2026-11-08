@@ -4,6 +4,7 @@
  * keyword list is passed in from settings.
  */
 import { z } from 'zod';
+import { BRAND } from '@/config/brand';
 
 export const ALLERGENS = ['gluten', 'milk', 'nuts', 'peanuts', 'soy', 'egg', 'fish', 'shellfish', 'sesame', 'mustard'] as const;
 export const FOOD_MARKS = ['veg', 'egg', 'non_veg'] as const;
@@ -35,7 +36,7 @@ export type DishTextCheck = { blockedReason: string | null; healthClaim: string 
 export function checkDishText(parts: { title: string; description?: string | null; ingredients?: string | null; cuisine?: string | null }, prohibitedCsv: string = DEFAULT_PROHIBITED_KEYWORDS): DishTextCheck {
   const text = [parts.title, parts.description, parts.ingredients, parts.cuisine].filter(Boolean).join(' \n ').toLowerCase();
   for (const kw of parseKeywordList(prohibitedCsv)) {
-    if (hasWord(text, kw)) return { blockedReason: `“${kw}” cannot be sold on PadosiPlate (see Prohibited items).`, healthClaim: null };
+    if (hasWord(text, kw)) return { blockedReason: `“${kw}” cannot be sold on ${BRAND.name} (see Prohibited items).`, healthClaim: null };
   }
   const claim = HEALTH_CLAIM_KEYWORDS.find((kw) => hasWord(text, kw)) ?? null;
   return { blockedReason: null, healthClaim: claim };

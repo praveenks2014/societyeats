@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Modal, Skeleton } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { BRAND } from '@/config/brand';
 
 type Society = { id: number; name: string; city: string; addressText: string; pincode: string | null; lat: number; lng: number; inviteCode: string | null; isLive: boolean; isActive: boolean; requireApproval: boolean; residents: number; kitchens: number; pending: number; targetHouseholds: number };
 type Pending = { id: number; name: string; phone: string; email: string | null; role: string; society: string | null };
@@ -143,7 +144,7 @@ export default function AdminSocieties() {
 function ShareBody({ society, origin }: { society: Society; origin: string }) {
   const toast = useToast();
   const link = `${origin}/join/${society.inviteCode}`;
-  const text = [`🍛 *PadosiPlate* is now live in *${society.name}*!`, '', 'Home food from your neighbours — order fresh home-cooked meals from people in your society, or list your own kitchen.', '', `👉 Join here: ${link}`, `Invite code: *${society.inviteCode}*`, '', 'You pay the kitchen directly (UPI or at pickup). Only a small platform fee goes to us.'].join('\n');
+  const text = [`🍛 *${BRAND.name}* is now live in *${society.name}*!`, '', 'Home food from your neighbours — order fresh home-cooked meals from people in your society, or list your own kitchen.', '', `👉 Join here: ${link}`, `Invite code: *${society.inviteCode}*`, '', 'You pay the kitchen directly (UPI or at pickup). Only a small platform fee goes to us.'].join('\n');
   return (
     <div className="space-y-3">
       <h2 className="font-display text-lg font-bold">Share {society.name}</h2>

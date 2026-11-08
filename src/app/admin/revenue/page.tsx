@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, Skeleton } from '@/components/ui';
 import { formatINR } from '@/lib/money';
+import { BRAND } from '@/config/brand';
 
 type Report = {
   range: string;
@@ -46,7 +47,7 @@ export default function RevenuePage() {
           <a href={`/api/admin/revenue?range=${range}&format=csv`}><Button variant="secondary" size="sm">⬇ CSV</Button></a>
         </div>
       </div>
-      <p className="mt-1 text-sm text-ink-soft">PadosiPlate’s own revenue only: buyer platform fees and kitchen subscriptions. Food money goes straight to kitchens and is not shown here.</p>
+      <p className="mt-1 text-sm text-ink-soft">{BRAND.name}’s own revenue only: buyer platform fees and kitchen subscriptions. Food money goes straight to kitchens and is not shown here.</p>
 
       {!r ? (
         <Skeleton className="mt-5 h-64 w-full" />

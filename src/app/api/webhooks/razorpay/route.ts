@@ -9,8 +9,9 @@ import { ensureCaptured } from '@/lib/payments/capture';
 import { markOrderPaid, verifyWebhookSignature } from '@/lib/payments';
 import { markSubscriptionPaid } from '@/lib/subscriptions/service';
 import { completeRpdValidation, finalizeVerification, VERIFY_AMOUNT_PAISE } from '@/lib/upi-verify';
-import { fetchRazorpayPayment } from '@/lib/payments/razorpay';
+import { fetchRazorpayPayment, isOurAppTag } from '@/lib/payments/razorpay';
 import { parseValidation } from '@/lib/upi-verify/razorpayx';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,11 +73,11 @@ async function handle(event: string, payload: Payload): Promise<string> {
     if (!entity?.order_id) return 'ignored_foreign'; // a payment with no order cannot be ours: we always create an order first
     // The Razorpay account may be shared: an order tagged for another app is none of our business.
     const tag = (entity.notes && !Array.isArray(entity.notes) ? entity.notes.app : undefined) ?? (payload.payload?.order?.entity?.notes && !Array.isArray(payload.payload.order.entity.notes) ? payload.payload.order.entity.notes.app : undefined);
-    if (tag !== undefined && tag !== 'padosiplate') return 'ignored_foreign';
+    if (tag !== undefined && !isOurAppTag(tag)) return 'ignored_foreign';
     const [pay] = await db.select().from(payments).where(eq(payments.razorpayOrderId, entity.order_id));
     const [sub] = pay ? [] : await db.select().from(kitchenSubscriptions).where(eq(kitchenSubscriptions.razorpayOrderId, entity.order_id));
     if (!pay && !sub) {
-      // A PadosiPlate Plus month (flag-off feature): same rules, so a buyer who pays and closes the tab still gets the membership.
+      // A Kootu Plus month (flag-off feature): same rules, so a buyer who pays and closes the tab still gets the membership.
       const [plus] = await db.select().from(plusMemberships).where(eq(plusMemberships.razorpayOrderId, entity.order_id));
       if (plus) {
         if (event === 'payment.failed') return 'plus_failed_recorded';

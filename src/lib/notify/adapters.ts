@@ -2,6 +2,7 @@ import * as webpush from 'web-push';
 import { getDb } from '@/lib/db';
 import { messageOutbox } from '@/lib/db/schema';
 import { log } from '@/lib/log';
+import { BRAND } from '@/config/brand';
 
 // ---------------------------------------------------------------- web push (VAPID)
 export type PushSub = { endpoint: string; p256dh: string; auth: string };
@@ -21,7 +22,7 @@ export function setPushSenderForTests(s: PushSender | null) {
 }
 
 const liveSender: PushSender = async (sub, payload) => {
-  webpush.setVapidDetails(process.env.VAPID_SUBJECT || `mailto:${process.env.SUPPORT_EMAIL || 'support@padosiplate.in'}`, process.env.VAPID_PUBLIC_KEY!, process.env.VAPID_PRIVATE_KEY!);
+  webpush.setVapidDetails(process.env.VAPID_SUBJECT || `mailto:${process.env.SUPPORT_EMAIL || `support@${BRAND.slug}.in`}`, process.env.VAPID_PUBLIC_KEY!, process.env.VAPID_PRIVATE_KEY!);
   try {
     await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, JSON.stringify(payload), { TTL: 60 * 60 });
     return { ok: true };

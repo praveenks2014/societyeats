@@ -9,9 +9,10 @@ import { emit } from '@/lib/notify';
 import { addMonthsIST, istParts } from '@/lib/time';
 import { paymentsMode } from '@/lib/payments/mode';
 import { assertLiveModeReady } from '@/lib/live-guard';
+import { BRAND } from '@/config/brand';
 
 async function assertOn() {
-  if (!(await getPlatformSettings()).plusEnabled) throw new ApiError(404, 'PadosiPlate Plus is not available');
+  if (!(await getPlatformSettings()).plusEnabled) throw new ApiError(404, `${BRAND.name} Plus is not available`);
 }
 
 export async function activePlus(userId: number, now: Date = new Date()) {

@@ -9,6 +9,7 @@ import { makeLiveKitchen, makeSociety, makeUser } from '../helpers/fixtures';
 import { useTestDb } from '../helpers/db';
 import * as s from '@/lib/db/schema';
 import { _resetPaymentsModeWarning, paymentsMode, paymentsModeInfo } from '@/lib/payments/mode';
+import { BRAND } from '@/config/brand';
 
 vi.mock('next/headers', () => import('../helpers/next-headers'));
 // The Razorpay SDK wrapper is stubbed: these tests are about WHICH path runs, never about the network.
@@ -170,7 +171,7 @@ describe('R2/R3: rules per mode and the mock-only routes', () => {
       expect(r.payment.mode).toBe('razorpay');
     }
     expect(created.at(-1)).toMatchObject({ kind: 'order_fee' });
-    expect(created.at(-1)?.receipt).toMatch(/^pp-/);
+    expect(created.at(-1)?.receipt).toMatch(/^kt-/);
   });
 
   test('live keys with MOCK_MODE=true refuse every money-taking action with the instruction', async () => {
@@ -213,15 +214,15 @@ describe('R4: a shared Razorpay account', () => {
     subs: (await db.select().from(s.kitchenSubscriptions)).length,
   });
 
-  test('orders are tagged app/env/kind/ref and receipts start with pp-', async () => {
+  test('orders are tagged app/env/kind/ref and receipts start with kt-', async () => {
     env({ PAYMENTS_ADAPTER: undefined, ...TEST_KEYS });
     const create = vi.fn(async () => ({ id: 'order_tagged' }));
     vi.doMock('razorpay', () => ({ default: class { orders = { create }; } }));
-    process.env.SITE_URL = 'https://padosiplate.example.in';
+    process.env.SITE_URL = `https://${BRAND.slug}.example.in`;
     const real = await vi.importActual<typeof import('@/lib/payments/razorpay')>('@/lib/payments/razorpay');
     await real.createRazorpayOrder({ amountInPaise: 2000, receipt: real.receiptFor('o', 7), kind: 'meal_plan', ref: 7, notes: { orderId: '7' } });
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ receipt: 'pp-o7', notes: expect.objectContaining({ app: 'padosiplate', env: 'padosiplate.example.in', kind: 'meal_plan', ref: '7', orderId: '7' }) }));
-    await expect(real.createRazorpayOrder({ amountInPaise: 2000, receipt: 'plain-1', kind: 'plus', ref: 1 })).rejects.toThrow(/pp-/);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ receipt: 'kt-o7', notes: expect.objectContaining({ app: BRAND.slug, env: `${BRAND.slug}.example.in`, kind: 'meal_plan', ref: '7', orderId: '7' }) }));
+    await expect(real.createRazorpayOrder({ amountInPaise: 2000, receipt: 'plain-1', kind: 'plus', ref: 1 })).rejects.toThrow(/kt-/);
     vi.doUnmock('razorpay');
   });
 
@@ -269,7 +270,7 @@ describe('R4: a shared Razorpay account', () => {
     const [pay] = await db.select().from(s.payments).where(eq(s.payments.orderId, o.orderId));
     const razorpay = await import('@/lib/payments/razorpay');
     vi.spyOn(razorpay, 'fetchRazorpayPayment').mockImplementation(async (id: string) => ({ id, order_id: pay.razorpayOrderId!, status: 'captured', amount: pay.amountInPaise }));
-    const ours = await post({ event: 'payment.captured', payload: { payment: { entity: { id: 'pay_ours_1', order_id: pay.razorpayOrderId, amount: pay.amountInPaise, method: 'upi', notes: { app: 'padosiplate' } } } } }, { eventId: 'evt_ours_1' });
+    const ours = await post({ event: 'payment.captured', payload: { payment: { entity: { id: 'pay_ours_1', order_id: pay.razorpayOrderId, amount: pay.amountInPaise, method: 'upi', notes: { app: BRAND.slug } } } } }, { eventId: 'evt_ours_1' });
     expect(ours.status).toBe(200);
     expect(ours.json).toMatchObject({ outcome: 'order_paid' });
     expect((await db.select().from(s.orders).where(eq(s.orders.id, o.orderId)))[0].status).toBe('booked');
@@ -352,7 +353,38 @@ describe('R5/R6: health, go-live row and the key check script', () => {
     expect(out).toContain('status created');
     expect(out).not.toContain('abc123');
     expect(out).not.toContain('secret_value');
-    expect(calls[0]).toMatchObject({ amount: 100, currency: 'INR', notes: expect.objectContaining({ app: 'padosiplate', kind: 'smoke' }) });
-    expect(String(calls[0].receipt)).toMatch(/^pp-smoke-\d+$/);
+    expect(calls[0]).toMatchObject({ amount: 100, currency: 'INR', notes: expect.objectContaining({ app: BRAND.slug, kind: 'smoke' }) });
+    expect(String(calls[0].receipt)).toMatch(/^kt-smoke-\d+$/);
+  });
+});
+
+describe('Rebrand: identifiers that leave the system', () => {
+  test('receipts are kt- for new orders; the webhook helpers still recognise pp- receipts and the old notes.app slug', async () => {
+    const { BRAND } = await import('@/config/brand');
+    const { receiptFor, isOurReceipt, isOurAppTag } = await vi.importActual<typeof import('@/lib/payments/razorpay')>('@/lib/payments/razorpay');
+    expect(receiptFor('o', 12)).toBe('kt-o12');
+    expect(isOurReceipt('kt-o12')).toBe(true);
+    expect(isOurReceipt('pp-o12')).toBe(true); // orders already created on the shared account
+    expect(isOurReceipt('other-o12')).toBe(false);
+    expect(isOurReceipt(undefined)).toBe(false);
+    expect(isOurAppTag('kootu')).toBe(true);
+    expect(isOurAppTag(BRAND.legacySlugs[0])).toBe(true);
+    expect(isOurAppTag('someone-else')).toBe(false);
+    expect(isOurAppTag(undefined)).toBe(false);
+  });
+
+  test('the webhook treats both the new and the old notes.app as ours, and everything else on the account as foreign', async () => {
+    env({ PAYMENTS_ADAPTER: undefined, ...TEST_KEYS });
+    const { BRAND } = await import('@/config/brand');
+    const { POST } = await import('@/app/api/webhooks/razorpay/route');
+    const post = (body: unknown, eventId: string) => call(POST as never, webhookReq(body, { eventId }) as never);
+    const evt = (app: string) => ({ event: 'payment.captured', payload: { payment: { entity: { id: 'pay_x', order_id: 'order_NOROW', amount: 100, notes: { app } } } } });
+    // ours under either name: it passes the tag check and then is "unknown order" (no matching row), which is also acknowledged without side effects
+    for (const [i, app] of [BRAND.slug, ...BRAND.legacySlugs].entries()) {
+      const r = await post(evt(app), `evt_rebrand_${i}`);
+      expect(r.status).toBe(200);
+    }
+    const foreign = await post(evt('someone-else'), 'evt_rebrand_foreign');
+    expect(foreign.json).toMatchObject({ outcome: 'ignored_foreign' });
   });
 });

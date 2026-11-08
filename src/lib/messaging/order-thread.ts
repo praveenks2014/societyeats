@@ -9,6 +9,7 @@ import type { Session } from '@/lib/auth';
 import { createGrievance } from '@/lib/grievances';
 import { checkOutgoing, hasAbuse, isPaymentRequest, type ChatWarning } from '@/lib/chat/filter';
 import { fileUrl } from '@/lib/storage/files';
+import { BRAND } from '@/config/brand';
 
 /**
  * Per-order buyer ↔ kitchen chat (Pilot v2 step 8).
@@ -82,7 +83,7 @@ function toMessage(m: typeof orderMessages.$inferSelect, party: Party, l: Labels
   return {
     id: m.id,
     from: m.senderRole,
-    label: m.senderRole === 'buyer' ? l.buyer : m.senderRole === 'seller' ? l.seller : 'PadosiPlate',
+    label: m.senderRole === 'buyer' ? l.buyer : m.senderRole === 'seller' ? l.seller : BRAND.name,
     mine: m.senderRole === party,
     body: m.body,
     imageUrl: m.imageKey ? fileUrl(m.imageKey) : null,

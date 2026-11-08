@@ -5,6 +5,7 @@ import { Badge, Button, Card, Field, Input, Skeleton } from '@/components/ui';
 import { MockCheckoutSheet } from '@/components/mock-checkout';
 import { useToast } from '@/components/providers';
 import { launchRazorpay } from '@/components/razorpay';
+import { BRAND } from '@/config/brand';
 
 type Details = { upiVpa: string | null; acceptsCash: boolean; verifyStatus: string; verifiedVpa: string | null; registeredName: string | null; complete: boolean };
 type Start =
@@ -114,7 +115,7 @@ export default function PaymentDetailsPage() {
       <div>
         <h1 className="text-2xl font-bold">How buyers pay you</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Buyers pay you <strong>at their door</strong>, after the food arrives, by UPI to the ID below. PadosiPlate never touches your food money. Tip: a UPI <strong>business</strong> ID (PhonePe, Paytm or Google Pay for Business) avoids extra warnings in some apps — a personal ID works too.
+          Buyers pay you <strong>at their door</strong>, after the food arrives, by UPI to the ID below. {BRAND.name} never touches your food money. Tip: a UPI <strong>business</strong> ID (PhonePe, Paytm or Google Pay for Business) avoids extra warnings in some apps — a personal ID works too.
         </p>
       </div>
 
@@ -142,7 +143,7 @@ export default function PaymentDetailsPage() {
         ) : (
           <>
             <p className="mt-2 text-sm text-ink-soft">
-              Pay <strong>₹1</strong> to PadosiPlate <strong>from the UPI ID above</strong>. This proves it is yours. We refund the ₹1 automatically. Your kitchen cannot go live until this is done.
+              Pay <strong>₹1</strong> to {BRAND.name} <strong>from the UPI ID above</strong>. This proves it is yours. We refund the ₹1 automatically. Your kitchen cannot go live until this is done.
             </p>
             {d.upiVpa && (
               <Button className="mt-3" size="lg" loading={busy} disabled={!unchanged} onClick={begin} data-testid="start-verify">

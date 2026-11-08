@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Card } from '@/components/ui';
 import { launchRazorpay } from '@/components/razorpay';
+import { BRAND } from '@/config/brand';
 
 type Info = { active: boolean; endsAt: string | null; pricePaise: number; discountBps: number; capPaise: number };
 
@@ -30,7 +31,7 @@ export default function PlusPage() {
       keyId: j.keyId,
       razorpayOrderId: j.razorpayOrderId,
       amountInPaise: j.amountInPaise,
-      description: 'PadosiPlate Plus: one month',
+      description: `${BRAND.name} Plus: one month`,
       onSuccess: async (resp) => {
         const c = await fetch('/api/plus/complete', { method: 'POST', body: JSON.stringify({ membershipId: j.membershipId, ...resp }) });
         setMsg(c.ok ? 'Plus is active.' : 'We could not confirm that payment. If money left your account it will be refunded.');
@@ -40,11 +41,11 @@ export default function PlusPage() {
       onLoadError: () => setMsg('Could not open the payment sheet.'),
     });
   }
-  if (off) return <div className="mx-auto max-w-lg pt-6"><h1 className="text-2xl font-bold">PadosiPlate Plus</h1><p className="mt-2 text-sm text-ink-soft">Not available yet.</p></div>;
+  if (off) return <div className="mx-auto max-w-lg pt-6"><h1 className="text-2xl font-bold">{BRAND.name} Plus</h1><p className="mt-2 text-sm text-ink-soft">Not available yet.</p></div>;
   if (!info) return <div className="pt-6 text-sm text-ink-faint">Loading…</div>;
   return (
     <div className="mx-auto max-w-lg pt-6" data-testid="plus-page">
-      <h1 className="text-2xl font-bold">PadosiPlate Plus</h1>
+      <h1 className="text-2xl font-bold">{BRAND.name} Plus</h1>
       <Card className="mt-4 p-4 text-sm">
         <p>₹{(info.pricePaise / 100).toFixed(0)} for one month. Takes {(info.discountBps / 100).toFixed(0)}% off the platform fee (up to ₹{(info.capPaise / 100).toFixed(0)} a month). It does not renew by itself.</p>
         {info.active ? <p className="mt-2 font-semibold" data-testid="plus-active">Active until {info.endsAt?.slice(0, 10)}</p> : null}

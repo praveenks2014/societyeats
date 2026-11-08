@@ -17,14 +17,14 @@ export interface StorageAdapter {
   ping(): Promise<void>;
 }
 
-const g = globalThis as unknown as { __padosiStorage?: StorageAdapter };
+const g = globalThis as unknown as { __appStorage?: StorageAdapter };
 
 export function storageAdapterName(): string {
   return (process.env.STORAGE_ADAPTER || (process.env.NODE_ENV === 'production' ? 'replit' : 'local')).toLowerCase();
 }
 
 export async function getStorage(): Promise<StorageAdapter> {
-  if (g.__padosiStorage) return g.__padosiStorage;
+  if (g.__appStorage) return g.__appStorage;
   const name = storageAdapterName();
   let adapter: StorageAdapter;
   if (name === 'replit') adapter = new (await import('./replit')).ReplitStorage();
@@ -32,11 +32,11 @@ export async function getStorage(): Promise<StorageAdapter> {
   else if (name === 'memory') adapter = new (await import('./memory')).MemoryStorage();
   else adapter = new (await import('./local')).LocalStorage();
   log.info('storage.init', { adapter: adapter.name });
-  g.__padosiStorage = adapter;
+  g.__appStorage = adapter;
   return adapter;
 }
 
 /** Test hook. */
 export function setStorageForTests(a: StorageAdapter | undefined) {
-  g.__padosiStorage = a;
+  g.__appStorage = a;
 }

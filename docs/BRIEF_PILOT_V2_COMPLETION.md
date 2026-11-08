@@ -1,4 +1,4 @@
-# PadosiPlate Pilot v2: completion brief (condensed copy; founder: Praveen Kumar S, 7 Nov 2026)
+# Kootu Pilot v2: completion brief (condensed copy; founder: Praveen Kumar S, 7 Nov 2026)
 
 Finish every open Pilot v2 item on branch `pilot-v2` (PR #3 → main). Do not stop to ask questions: choose the option safest for buyers and the law and record it in DECISIONS.md under `## Pilot v2: completion run`. Timebox a stuck item to 45 min, note it in PROGRESS.md, move on. Commit and push per item group; run typecheck, lint and unit tests before each push; Playwright at the end of each phase. Ground rules: mock-first adapters, integer paise, idempotent money, platform never touches food money, every number an admin setting, UTC stored/IST shown, mobile-first 390px, regression test per bug, never weaken tests.
 

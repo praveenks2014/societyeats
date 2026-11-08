@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Modal } from '@/components/ui';
 import { useToast } from '@/components/providers';
 import { StrikeAppeals } from '@/app/account/strike-appeals';
+import { BRAND } from '@/config/brand';
 
 type Sess = { key: string; createdAt: string; lastSeenAt: string; userAgent: string | null; ip: string | null; current: boolean };
 
@@ -83,7 +84,7 @@ export function AccountClient({ name, email, role }: { name: string; email: stri
       {role !== 'admin' && <StrikeAppeals />}
       <Card className="space-y-3 p-4">
         <div className="eyebrow">YOUR DATA</div>
-        <p className="text-sm text-ink-soft">You can download everything PadosiPlate holds about you, or delete your account. Order and tax records we must keep by law stay, with your personal details removed.</p>
+        <p className="text-sm text-ink-soft">You can download everything {BRAND.name} holds about you, or delete your account. Order and tax records we must keep by law stay, with your personal details removed.</p>
         <a href="/api/account/export" className="flex min-h-[44px] items-center justify-center rounded-xl border border-rice-line text-sm font-semibold" data-testid="export-data">Download my data</a>
         {role !== 'admin' && <Button variant="danger" className="w-full" onClick={() => setDel(true)} data-testid="delete-account">Delete my account</Button>}
         <p className="text-xs text-ink-faint">Questions or complaints? <Link href="/legal/grievance" className="underline">Contact the grievance officer</Link>.</p>

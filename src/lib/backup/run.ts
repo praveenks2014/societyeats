@@ -8,6 +8,7 @@ import { log } from '@/lib/log';
 import { getStorage } from '@/lib/storage';
 import { istDateString, istParts } from '@/lib/time';
 import { exportLogical, migrationState } from './format';
+import { BRAND } from '@/config/brand';
 
 /**
  * Daily database backups to Object Storage (`backups/…`). Driven by the existing cron job: it is called every 5 minutes and does the work
@@ -100,7 +101,7 @@ export async function runBackup(opts: RunOptions = {}): Promise<{ ok: true; entr
       rows = out.rows;
     }
     const stamp = now.toISOString().replace(/[:.]/g, '-');
-    const key = `backups/padosiplate-${stamp}.${method === 'pg_dump' ? 'sql.gz' : 'jsonl.gz'}`;
+    const key = `backups/${BRAND.slug}-${stamp}.${method === 'pg_dump' ? 'sql.gz' : 'jsonl.gz'}`;
     const storage = await getStorage();
     await storage.put(key, gz, 'application/gzip');
 

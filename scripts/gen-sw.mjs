@@ -23,12 +23,13 @@ const buildId =
   process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ||
   Date.now().toString(36);
 
-const cacheVersion = `padosiplate-v${pkg.version}-${buildId}`;
+const brand = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'src', 'config', 'brand.json'), 'utf8'));
+const cacheVersion = `${brand.slug}-v${pkg.version}-${buildId}`;
 
 const templatePath = path.join(process.cwd(), 'public', 'sw.template.js');
 const outPath = path.join(process.cwd(), 'public', 'sw.js');
 const template = fs.readFileSync(templatePath, 'utf8');
-const output = template.replaceAll('__SW_CACHE_VERSION__', cacheVersion);
+const output = template.replaceAll('__SW_CACHE_VERSION__', cacheVersion).replaceAll('__BRAND_NAME__', brand.name);
 fs.writeFileSync(outPath, output);
 
 console.log(`[gen-sw] public/sw.js generated — cache version "${cacheVersion}"`);

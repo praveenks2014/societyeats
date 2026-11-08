@@ -24,6 +24,7 @@ import {
 import { ensureInvoiceNumber } from '@/lib/invoices/order-invoice';
 import { recordStrike, notifyAdmins, maybeNudgeDeclines } from './strikes';
 import { checkTdsThresholds } from './tds';
+import { BRAND } from '@/config/brand';
 
 export type ActionInput = {
   action: OrderAction;
@@ -209,7 +210,7 @@ function defaultCancelReason(k: CancelKind): string {
     case 'buyer_no_show': return 'Buyer was not at the door';
     case 'buyer_before_accept':
     case 'buyer_after_accept': return 'Cancelled by the buyer';
-    case 'admin': return 'Cancelled by PadosiPlate';
+    case 'admin': return `Cancelled by ${BRAND.name}`;
     default: return 'Cancelled by the kitchen';
   }
 }
@@ -221,14 +222,14 @@ function eventNote(action: OrderAction, reason: string, input: ActionInput, food
     case 'auto_complete': return 'Completed automatically — the kitchen did not dispute the payment in time';
     case 'not_received': return `Kitchen says the payment was not received${reason ? `: ${reason}` : ''}`;
     case 'raise_dispute': return `Kitchen raised a payment dispute${reason ? `: ${reason}` : ''}`;
-    case 'resolve_paid': return 'PadosiPlate marked the food as paid';
-    case 'resolve_unpaid': return `PadosiPlate closed the order as unpaid${reason ? `: ${reason}` : ''}`;
+    case 'resolve_paid': return `${BRAND.name} marked the food as paid`;
+    case 'resolve_unpaid': return `${BRAND.name} closed the order as unpaid${reason ? `: ${reason}` : ''}`;
     case 'seller_cancel': return `Cancelled by the kitchen${reason ? `: ${reason}` : ''} — platform fee refunded`;
     case 'buyer_cancel': return 'Cancelled by the buyer';
     case 'auto_cancel': return 'Kitchen did not respond — order cancelled, platform fee refunded';
     case 'buyer_couldnt_pay': return "Kitchen recorded: buyer couldn't pay at the door";
     case 'no_show': return 'Kitchen recorded: buyer did not come to the door';
-    case 'admin_cancel': return `Cancelled by PadosiPlate${reason ? `: ${reason}` : ''}`;
+    case 'admin_cancel': return `Cancelled by ${BRAND.name}${reason ? `: ${reason}` : ''}`;
     default: return EVENT_NOTE[action] ?? action.replaceAll('_', ' ');
   }
 }
@@ -268,8 +269,8 @@ async function afterTransition(order: typeof orders.$inferSelect, action: OrderA
       break;
     }
     case 'resolve_unpaid':
-      await toBuyer('order_cancelled', { cause: 'resolve_unpaid', reason: 'PadosiPlate could not confirm payment for this order. Contact Help if you think this is wrong.' });
-      await toSeller('order_cancelled', { cause: 'resolve_unpaid', reason: 'PadosiPlate reviewed the dispute and recorded the order as unpaid.' });
+      await toBuyer('order_cancelled', { cause: 'resolve_unpaid', reason: `${BRAND.name} could not confirm payment for this order. Contact Help if you think this is wrong.` });
+      await toSeller('order_cancelled', { cause: 'resolve_unpaid', reason: `${BRAND.name} reviewed the dispute and recorded the order as unpaid.` });
       await recordStrike({ userId: order.buyerId, role: 'buyer', kind: 'buyer_unpaid', orderId: id, reason: 'Order closed as unpaid after a dispute' });
       await db.update(grievances).set({ status: 'resolved', resolution: 'unpaid', resolvedAt: new Date() }).where(and(eq(grievances.orderId, id), inArray(grievances.status, ['open', 'acknowledged'])));
       break;
@@ -291,7 +292,7 @@ async function afterTransition(order: typeof orders.$inferSelect, action: OrderA
       break;
     case 'admin_cancel':
       await toBuyer('order_cancelled', { cause: 'admin', ...cancelCtx });
-      await toSeller('order_cancelled', { cause: 'admin', reason: input.reason ?? 'Cancelled by PadosiPlate.' });
+      await toSeller('order_cancelled', { cause: 'admin', reason: input.reason ?? `Cancelled by ${BRAND.name}.` });
       break;
     default: break;
   }

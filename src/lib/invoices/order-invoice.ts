@@ -2,11 +2,12 @@ import { eq, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { invoiceCounters, orders } from '@/lib/db/schema';
 import { fyLabel } from '@/lib/orders/caps';
+import { BRAND } from '@/config/brand';
 
 type Db = Awaited<ReturnType<typeof getDb>>;
 
 export function formatInvoiceNumber(fy: string, serial: number): string {
-  return `PP/${fy}/${String(serial).padStart(6, '0')}`;
+  return `${BRAND.invoicePrefix}/${fy}/${String(serial).padStart(6, '0')}`;
 }
 
 /**

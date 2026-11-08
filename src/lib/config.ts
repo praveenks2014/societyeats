@@ -19,7 +19,7 @@ export const DEFAULTS = {
   platformDeliveryEnabled: false, // feature flag: platform-facilitated (3rd-party) delivery overflow
   platformDeliveryFeeInPaise: 4900, // fallback fee when no live/mock provider quote is available (matches orchestrator's own ₹49 fallback)
   platformDeliveryMinOrderPaise: 25000, // ₹250 — founder-specified minimum order for platform delivery eligibility
-  gstPct: 5, // GST on home-food orders; PadosiPlate is the deemed supplier under Sec 9(5) CGST — not admin-tunable, so not in platform_config
+  gstPct: 5, // GST on home-food orders; Kootu is the deemed supplier under Sec 9(5) CGST — not admin-tunable, so not in platform_config
   // Pilot Hardening v2 — Phase 3 (Money: invoices, payouts, tax; DECISIONS.md #51+).
   gatewayFeeEstimatePct: 2, // estimated Razorpay processing cost, shown on payouts for margin visibility — not admin-tunable (an accounting estimate, not a pricing lever)
   tds194OPct: 0.1, // Sec 194-O TDS rate on gross sales facilitated, once the threshold below is crossed in a financial year

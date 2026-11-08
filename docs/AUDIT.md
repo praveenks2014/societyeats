@@ -1,4 +1,4 @@
-# PadosiPlate (formerly "GharSe") — Phase 1 audit
+# Kootu (formerly "GharSe") — Phase 1 audit
 
 Scope: the `societyeats` repo at commit `eddaa4b` (before branch `phase-1-pilot`).
 Every item in the prior-audit checklist was verified against the code; the
@@ -77,7 +77,7 @@ step of the Phase 1 plan that fixes it.
 
 ## 3. What this phase changes
 
-1. **Brand** → PadosiPlate everywhere, single `BRAND` source, scan test.
+1. **Brand** → Kootu everywhere, single `BRAND` source, scan test.
 2. **Foundations** → production DB required, bootstrap script, StorageAdapter (local / Replit Object Storage), Postgres rate limiter, IST time helpers, `/api/health`, Replit config.
 3. **Auth** → email on users, email-or-phone login, allowlisted admins, DB-backed sessions, email verification + password reset, CSRF.
 4. **Admin** → societies CRUD, resident approvals, kitchen listing requests, dish moderation, delist/relist, admin↔kitchen inbox, users page.

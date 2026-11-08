@@ -5,6 +5,7 @@ import { useTestDb } from '../helpers/db';
 import * as s from '@/lib/db/schema';
 import { buildGoLiveRows, configBlockers } from '@/lib/go-live';
 import { opsTransition } from '@/lib/ops-alerts';
+import { BRAND } from '@/config/brand';
 
 vi.mock('next/headers', () => import('../helpers/next-headers'));
 // Live mode must not call the real gateway: stub the adapter.
@@ -24,7 +25,7 @@ afterAll(() => {
   process.env = prevEnv;
 });
 
-const CONFIG = { platformFssaiCentralLicenseNo: '12345678901234', gstPositionConfirmedAt: '2026-11-10', gstPositionNote: 'ok', grievanceOfficer: 'A, Officer', legalEntityName: 'PadosiPlate Pvt Ltd', registeredAddress: 'Hyderabad', supportEmail: 'help@x.in', supportPhone: '9999999999', upiVerifyProvider: 'razorpay_checkout_vpa' };
+const CONFIG = { platformFssaiCentralLicenseNo: '12345678901234', gstPositionConfirmedAt: '2026-11-10', gstPositionNote: 'ok', grievanceOfficer: 'A, Officer', legalEntityName: `${BRAND.name} Pvt Ltd`, registeredAddress: 'Hyderabad', supportEmail: 'help@x.in', supportPhone: '9999999999', upiVerifyProvider: 'razorpay_checkout_vpa' };
 async function goLive(over: Record<string, string> = {}) {
   const { setPlatformSetting } = await import('@/lib/db/platform');
   for (const [k, v] of Object.entries({ ...CONFIG, ...over })) await setPlatformSetting(k, v);

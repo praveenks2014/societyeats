@@ -37,16 +37,36 @@ describe('invoice numbering', () => {
     expect(new Set(nums).size).toBe(6);
     const serials = nums.map((n) => Number(n.split('/')[2])).sort((a, b) => a - b);
     expect(serials).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(nums.every((n) => n.startsWith('PP/2026-27/'))).toBe(true);
+    expect(nums.every((n) => n.startsWith('KT/2026-27/'))).toBe(true);
     // idempotent: asking again returns the same number and does not consume another
     expect(await ensureInvoiceNumber(ids[0], now)).toBe(nums[0]);
     const next = (await placed()).orderId;
-    expect(await ensureInvoiceNumber(next, now)).toBe('PP/2026-27/000007');
+    expect(await ensureInvoiceNumber(next, now)).toBe('KT/2026-27/000007');
     // 1 April 2027 IST starts FY 2027-28 at 1
     const apr = (await placed()).orderId;
-    expect(await ensureInvoiceNumber(apr, new Date('2027-03-31T19:00:00Z'))).toBe('PP/2027-28/000001');
-    expect(formatInvoiceNumber('2026-27', 42)).toBe('PP/2026-27/000042');
+    expect(await ensureInvoiceNumber(apr, new Date('2027-03-31T19:00:00Z'))).toBe('KT/2027-28/000001');
+    expect(formatInvoiceNumber('2026-27', 42)).toBe('KT/2026-27/000042');
     await expect(ensureInvoiceNumber(99999999, now)).rejects.toThrow();
+  });
+
+  test('the prefix change keeps the serial gap-free: invoices numbered under the old prefix stay as they are and the next one carries on after them', async () => {
+    const { ensureInvoiceNumber } = await import('@/lib/invoices/order-invoice');
+    const a = (await placed()).orderId;
+    const b = (await placed()).orderId;
+    // two invoices issued before the rename, in a financial year of their own
+    await db.update(s.orders).set({ invoiceNumber: 'PP/2028-29/000001', invoiceIssuedAt: new Date('2028-04-10T05:00:00Z') }).where(eq(s.orders.id, a));
+    await db.update(s.orders).set({ invoiceNumber: 'PP/2028-29/000002', invoiceIssuedAt: new Date('2028-04-11T05:00:00Z') }).where(eq(s.orders.id, b));
+    await db.insert(s.invoiceCounters).values({ fy: '2028-29', last: 2 });
+    const now = new Date('2028-06-01T10:00:00Z');
+    const c = (await placed()).orderId;
+    const d = (await placed()).orderId;
+    expect(await ensureInvoiceNumber(c, now)).toBe('KT/2028-29/000003');
+    expect(await ensureInvoiceNumber(d, now)).toBe('KT/2028-29/000004');
+    // the old numbers were never touched, and asking again does not renumber them
+    expect(await ensureInvoiceNumber(a, now)).toBe('PP/2028-29/000001');
+    expect(await ensureInvoiceNumber(b, now)).toBe('PP/2028-29/000002');
+    const serials = [a, b, c, d].map(async (id) => Number(((await db.select().from(s.orders).where(eq(s.orders.id, id)))[0].invoiceNumber ?? '').split('/')[2]));
+    expect(await Promise.all(serials)).toEqual([1, 2, 3, 4]);
   });
 
   test('the number is issued when the order completes through the real action path', async () => {
@@ -61,7 +81,7 @@ describe('invoice numbering', () => {
     await run('buyer', 'claim_paid', { method: 'upi', utr: '123456789012' });
     expect((await db.select().from(s.orders).where(eq(s.orders.id, o.orderId)))[0].invoiceNumber).toBeNull();
     await run('seller', 'confirm_paid');
-    expect((await db.select().from(s.orders).where(eq(s.orders.id, o.orderId)))[0].invoiceNumber).toMatch(/^PP\/\d{4}-\d{2}\/\d{6}$/);
+    expect((await db.select().from(s.orders).where(eq(s.orders.id, o.orderId)))[0].invoiceNumber).toMatch(/^KT\/\d{4}-\d{2}\/\d{6}$/);
   });
 
   test('a fully refunded fee earns nothing, so no invoice is due', async () => {
@@ -93,7 +113,7 @@ describe('two-part invoice for every GST mode', () => {
     const r = await invoice(o.orderId, o.buyer.id);
     expect(r.status).toBe(200);
     const j = r.json as { invoiceNumber: string; isTaxInvoice: boolean; order: { platformFeeInPaise: number; feeGstInPaise: number; ecoGstInPaise: number; onlineChargeInPaise: number; foodTotalInPaise: number }; foodBill: { issuedBy: string; paidDirectly: boolean; method: string; utr: string; fssaiLabel: string | null } };
-    expect(j.invoiceNumber).toMatch(/^PP\/\d{4}-\d{2}\/\d{6}$/);
+    expect(j.invoiceNumber).toMatch(/^KT\/\d{4}-\d{2}\/\d{6}$/);
     expect(j.order.platformFeeInPaise).toBe(2000);
     expect(j.order.feeGstInPaise).toBe(feeGst);
     expect(j.order.ecoGstInPaise).toBe(ecoGst);

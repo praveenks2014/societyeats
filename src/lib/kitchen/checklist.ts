@@ -6,6 +6,7 @@ import { fssaiApplications, listings, sellerProfiles } from '@/lib/db/schema';
 import { sellerIsSubscribed } from '@/lib/subscriptions/queries';
 import { kitchenGate } from './gate';
 import { evaluateSteps, type Step } from './onboarding';
+import { BRAND } from '@/config/brand';
 
 export type ChecklistItem = Step;
 
@@ -30,7 +31,7 @@ export async function kitchenChecklist(sellerId: number) {
   const steps = evaluateSteps(profile, { isMember: !!membership || !settings.pilotSocietiesOnly, hasDish: dishes.length > 0, planOk: subscribed, fssaiStarted, foundingOffer: settings.foundingKitchenOffer });
   const items: ChecklistItem[] = [
     ...steps,
-    { key: 'submit', label: 'Submit for PadosiPlate approval', done: ['submitted', 'approved', 'delisted'].includes(state), href: '/seller', hint: state === 'changes_requested' ? 'Changes requested — see inbox' : state === 'rejected' ? 'Not approved' : state === 'delisted' ? 'Delisted' : undefined },
+    { key: 'submit', label: `Submit for ${BRAND.name} approval`, done: ['submitted', 'approved', 'delisted'].includes(state), href: '/seller', hint: state === 'changes_requested' ? 'Changes requested — see inbox' : state === 'rejected' ? 'Not approved' : state === 'delisted' ? 'Delisted' : undefined },
     { key: 'live', label: 'Live to your neighbours', done: gate.ok, href: '/seller' },
   ];
   const requestReady = steps.every((i) => i.done);

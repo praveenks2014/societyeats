@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge, Button, Card, EmptyState, Skeleton, Textarea } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { BRAND } from '@/config/brand';
 
 type Thread = { id: number; subject: string; lastMessage: string; lastMessageAt: string; unread: number };
 type Msg = { id: number; senderRole: string; body: string; attachmentsJson: { url: string; name: string }[] | null; createdAt: string };
@@ -61,7 +62,7 @@ export default function SellerInbox() {
           {view.messages.map((m) => (
             <div key={m.id} className={`flex ${m.senderRole === 'seller' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[88%] rounded-2xl px-4 py-2.5 text-sm ${m.senderRole === 'seller' ? 'bg-leaf text-white' : 'bg-white shadow-card'}`}>
-                <div className={`text-[10px] font-semibold ${m.senderRole === 'seller' ? 'text-white/70' : 'text-ink-faint'}`}>{m.senderRole === 'seller' ? 'You' : 'PadosiPlate'} · {when(m.createdAt)}</div>
+                <div className={`text-[10px] font-semibold ${m.senderRole === 'seller' ? 'text-white/70' : 'text-ink-faint'}`}>{m.senderRole === 'seller' ? 'You' : BRAND.name} · {when(m.createdAt)}</div>
                 <p className="mt-0.5 whitespace-pre-wrap">{m.body}</p>
                 {m.attachmentsJson?.map((a) => (
                   <a key={a.url} href={a.url} target="_blank" rel="noreferrer" className="mt-1 block text-xs underline">📎 {a.name}</a>
@@ -86,7 +87,7 @@ export default function SellerInbox() {
   return (
     <div className="mx-auto max-w-2xl">
       <h1 className="text-2xl font-bold">Inbox</h1>
-      <p className="mt-1 text-sm text-ink-soft">Messages from the PadosiPlate team about your kitchen. Replies are emailed to us too.</p>
+      <p className="mt-1 text-sm text-ink-soft">Messages from the {BRAND.name} team about your kitchen. Replies are emailed to us too.</p>
       {threads.length === 0 ? (
         <div className="mt-6"><EmptyState emoji="✉️" title="No messages" body="Anything we need from you will show up here." /></div>
       ) : (

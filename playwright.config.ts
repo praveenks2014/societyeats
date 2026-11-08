@@ -2,10 +2,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
+import brand from './src/config/brand.json';
 
 const PORT = 3100;
 // Outside the project: Next 16's Turbopack dev server watches the tree and full-reloads pages when files under it change (PGlite writes constantly).
-const E2E_DIR = path.join(os.tmpdir(), 'padosiplate-e2e');
+const E2E_DIR = path.join(os.tmpdir(), `${brand.slug}-e2e`);
 const chromium = process.env.PW_CHROMIUM_PATH || (fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
 
 /**
@@ -18,7 +19,7 @@ export default defineConfig({
   testDir: './tests/e2e',
   globalSetup: './tests/e2e/global-setup.ts',
   // Artifacts live outside the project: Turbopack's dev server full-reloads pages when files in the tree change, and Playwright clears this folder at start.
-  outputDir: path.join(os.tmpdir(), 'padosiplate-pw-results'),
+  outputDir: path.join(os.tmpdir(), `${brand.slug}-pw-results`),
   fullyParallel: false,
   workers: 1,
   timeout: 90_000,

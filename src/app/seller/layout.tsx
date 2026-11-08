@@ -10,6 +10,7 @@ import { PaymentsBanner } from '@/components/payments-banner';
 import { sellerUnreadCount } from '@/lib/messaging/admin-threads';
 import { sellerSubscriptions } from '@/lib/subscriptions/queries';
 import { overallStatus } from '@/lib/subscriptions/status';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,7 +64,7 @@ export default async function SellerLayout({ children }: { children: React.React
       )}
       {session.role === 'seller' && state === 'delisted' && (
         <Link href="/seller/inbox" className="mt-4 block rounded-2xl bg-chili-tint px-4 py-3 text-sm font-medium text-chili-dark" role="alert">
-          Your kitchen has been delisted by PadosiPlate. You can finish orders you already accepted. See your inbox for details.
+          Your kitchen has been delisted by {BRAND.name}. You can finish orders you already accepted. See your inbox for details.
         </Link>
       )}
       <div className="pt-5"><PaymentsBanner />

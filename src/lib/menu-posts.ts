@@ -5,6 +5,7 @@ import { getPlatformSettings } from '@/lib/db/platform';
 import { favourites, listings, menuPosts, notifications, sellerProfiles } from '@/lib/db/schema';
 import { emit } from '@/lib/notify';
 import { istDateString } from '@/lib/time';
+import { BRAND } from '@/config/brand';
 
 export type MenuPostInput = { listingIds: number[]; note?: string };
 
@@ -60,6 +61,6 @@ export async function getMenuPost(sellerId: number, forDate: string = istDateStr
 /** The WhatsApp share text and a one-tap wa.me link. */
 export function shareLink(input: { kitchen: string; dishes: string[]; note?: string | null; url: string }): { text: string; waUrl: string } {
   const dishLine = input.dishes.slice(0, 5).join(', ') + (input.dishes.length > 5 ? ` +${input.dishes.length - 5} more` : '');
-  const text = `🍲 ${input.kitchen} is cooking today: ${dishLine}.${input.note ? ` ${input.note}` : ''} Order from your neighbour on PadosiPlate: ${input.url}`;
+  const text = `🍲 ${input.kitchen} is cooking today: ${dishLine}.${input.note ? ` ${input.note}` : ''} Order from your neighbour on ${BRAND.name}: ${input.url}`;
   return { text, waUrl: `https://wa.me/?text=${encodeURIComponent(text)}` };
 }

@@ -196,7 +196,7 @@ describe('Razorpay order creation', () => {
     process.env.MOCK_MODE = 'false'; process.env.RAZORPAY_KEY_ID = 'rzp_test_key'; delete process.env.PAYMENTS_ADAPTER; // test keys: real Razorpay path, no go-live guard
     process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
     const { createRazorpayOrder } = await import('@/lib/payments/razorpay');
-    await createRazorpayOrder({ amountInPaise: 2000, receipt: 'pp-r1', kind: 'order_fee', ref: 1 });
+    await createRazorpayOrder({ amountInPaise: 2000, receipt: 'kt-r1', kind: 'order_fee', ref: 1 });
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ amount: 2000, currency: 'INR', payment_capture: 1 }));
     vi.doUnmock('razorpay');
   });

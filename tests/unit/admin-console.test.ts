@@ -4,6 +4,7 @@ import { call, jsonReq, loginAs } from '../helpers/http';
 import { makeLiveKitchen, makeSociety, makeUser } from '../helpers/fixtures';
 import { useTestDb } from '../helpers/db';
 import * as s from '@/lib/db/schema';
+import { BRAND } from '@/config/brand';
 
 vi.mock('next/headers', () => import('../helpers/next-headers'));
 
@@ -234,7 +235,7 @@ describe('E2: disputes board and outcomes', () => {
     expect((await decide(d.ticket.id, { kind: 'issue_credit', amountPaise: -5 })).status).toBe(400);
     expect((await decide(d.ticket.id, { kind: 'warn', target: 'seller', message: 'Please check your UPI app before raising disputes' })).json).toMatchObject({ resolved: false });
     expect((await db.select().from(s.grievances).where(eq(s.grievances.id, d.ticket.id)))[0].status).toBe('acknowledged');
-    expect((await db.select().from(s.notifications).where(eq(s.notifications.userId, d.seller.id))).some((n) => n.title === 'A warning from PadosiPlate')).toBe(true);
+    expect((await db.select().from(s.notifications).where(eq(s.notifications.userId, d.seller.id))).some((n) => n.title === `A warning from ${BRAND.name}`)).toBe(true);
 
     expect((await decide(d.ticket.id, { kind: 'issue_credit', amountPaise: 1500 })).status).toBe(200);
     // the ticket is resolved by the credit; use fresh disputes for the rest
@@ -475,7 +476,7 @@ describe('E5: broadcast', () => {
     expect(m).toMatchObject({ recipients: 1, skippedNoOptIn: 1 });
     expect((await db.select().from(s.notifications).where(eq(s.notifications.userId, a1.id))).some((n) => n.eventKey === 'broadcast' && n.title === 'Diwali specials')).toBe(true);
     expect((await db.select().from(s.notifications).where(eq(s.notifications.userId, a2.id))).some((n) => n.eventKey === 'broadcast')).toBe(false);
-    const sv = await sendBroadcast({ audience: aud, kind: 'service', title: 'Planned maintenance', body: 'PadosiPlate will be down for ten minutes at midnight.', adminId: admin.id, expectedRecipients: 2 });
+    const sv = await sendBroadcast({ audience: aud, kind: 'service', title: 'Planned maintenance', body: `${BRAND.name} will be down for ten minutes at midnight.`, adminId: admin.id, expectedRecipients: 2 });
     expect(sv.recipients).toBe(2);
     expect((await db.select().from(s.notifications).where(eq(s.notifications.userId, a2.id))).find((n) => n.eventKey === 'broadcast')!.title).toBe('Service message: Planned maintenance');
     expect((await db.select().from(s.emailOutbox).where(eq(s.emailOutbox.userId, a2.id))).some((e) => /Service message: Planned maintenance/.test(e.subject))).toBe(true);
@@ -620,7 +621,7 @@ describe('E6: metrics overview and exports', () => {
 
     const fees = await get('fee_invoices');
     expect(fees.text.split('\n')[0]).toBe('Invoice number,Invoice date (IST),Order,Recipient,Supplier GSTIN,GST mode at booking,Taxable value (INR),CGST (INR),SGST (INR),Total (INR),Fee refunded (INR)');
-    expect(fees.text).toMatch(/PP\/\d{4}-\d{2}\/\d{6}/);
+    expect(fees.text).toMatch(/KT\/\d{4}-\d{2}\/\d{6}/);
     expect(fees.text).toContain('36ABCDE1234F1Z5');
     expect(fees.text).toContain('registered_eco_9_5');
     // invoice numbers come out in sequence

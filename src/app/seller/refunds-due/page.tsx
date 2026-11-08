@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, EmptyState, Input, Skeleton } from '@/components/ui';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
+import { BRAND } from '@/config/brand';
 
 type Item = { id: number; orderId: number; amountInPaise: number; reason: string; status: string; refundUtr: string | null };
 
@@ -28,7 +29,7 @@ export default function RefundsDue() {
   return (
     <div className="mx-auto max-w-2xl">
       <h1 className="text-2xl font-bold">Food refunds you owe</h1>
-      <p className="mt-1 text-sm text-ink-soft">When an order is cancelled after a buyer paid you, or a complaint is upheld, the food amount goes back from <strong>you</strong> (PadosiPlate never held it). Return it by UPI and record the reference.</p>
+      <p className="mt-1 text-sm text-ink-soft">When an order is cancelled after a buyer paid you, or a complaint is upheld, the food amount goes back from <strong>you</strong> ({BRAND.name} never held it). Return it by UPI and record the reference.</p>
       {items.length === 0 ? (
         <div className="mt-6"><EmptyState emoji="✅" title="Nothing owed" /></div>
       ) : (

@@ -7,6 +7,7 @@ import {
 import { totpAt } from '../../src/lib/auth/totp';
 import { flagUiJourney } from './flag-ui';
 import { mobileEnv } from './helpers';
+import { BRAND } from '@/config/brand';
 
 /**
  * Serial journey through the whole pilot, against MOCK_MODE + PGlite.
@@ -100,8 +101,8 @@ async function openCheckout(page: Page, k: { sellerId: number; dishId: number; k
     try {
       if (sessionStorage.getItem('e2e_cart_stamp') === st) return;
       sessionStorage.setItem('e2e_cart_stamp', st);
-      localStorage.setItem('padosi_cart', JSON.stringify({ vendor: v, items: [it] }));
-      localStorage.setItem('padosi_loc', JSON.stringify({ lat: 17.465, lng: 78.31, label: 'E2E Heights' }));
+      localStorage.setItem('kootu_cart', JSON.stringify({ vendor: v, items: [it] }));
+      localStorage.setItem('kootu_loc', JSON.stringify({ lat: 17.465, lng: 78.31, label: 'E2E Heights' }));
     } catch {
       /* storage unavailable */
     }
@@ -478,7 +479,7 @@ test('6. the kitchen cancels after accepting: fee refunded in full + equal credi
   await page.goto(`/orders/${orderId}`);
   await expect(page.getByTestId('cancel-banner')).toContainText('Gas cylinder ran out');
   await expect(page.getByTestId('cancel-banner')).toContainText('platform fee of ₹20 has been refunded');
-  await expect(page.getByTestId('cancel-banner')).toContainText('₹20 PadosiPlate credit');
+  await expect(page.getByTestId('cancel-banner')).toContainText(`₹20 ${BRAND.name} credit`);
   const o = await orderJson(page, orderId);
   expect(o.order.status).toBe('cancelled_by_seller');
   expect(o.payment.refundedInPaise).toBe(2000);

@@ -14,7 +14,7 @@
 - **Settings** need a reason on every save and keep a history you can restore from.
 - **Chat**: you can read an order's thread only from the order page with a reason and a fresh 2FA check; each read is audited. Reports open a grievance.
 - **Grievances** (`/admin/grievances`): acknowledged automatically; tickets older than 48 hours raise a banner and alert admins.
-- **Optional features** (Settings → Feature flags, all off): meal plans, Sponsored placement and campaigns (`/admin/growth`), PadosiPlate Plus, bulk orders. Sponsored kitchens are always labelled and never mixed into ranking.
+- **Optional features** (Settings → Feature flags, all off): meal plans, Sponsored placement and campaigns (`/admin/growth`), Kootu Plus, bulk orders. Sponsored kitchens are always labelled and never mixed into ranking.
 - **Security checks you can trust**: CSP violations are logged as `csp.violation`; every 500 shows a reference code the user can quote.
 
 ## Restore drill (do it once before launch, and after any big change)
@@ -24,7 +24,7 @@ A backup you have never restored is a hope, not a backup. The drill restores the
 1. In Replit open the **PostgreSQL** tool and create a **new** database (do not touch the live one). Note its connection string.
 2. In the Replit shell run, with that connection string and the live Object Storage bucket (the same Secrets as the app):
    `DATABASE_URL=<new database url> npm run db:restore`
-   With no argument it uses the newest backup in `backups/index.json`; to choose one: `npm run db:restore -- backups/padosiplate-<time>.jsonl.gz` (keys are listed by `GET /api/admin/backup` and in the Object Storage bucket).
+   With no argument it uses the newest backup in `backups/index.json`; to choose one: `npm run db:restore -- backups/kootu-<time>.jsonl.gz` (keys are listed by `GET /api/admin/backup` and in the Object Storage bucket).
 3. The script applies the migrations to the empty database, restores every table in one transaction, checks each table's row count against the backup's manifest and prints the counts per table. It **refuses** if any app table already has rows, or if the backup was taken at a different migration level (restore with the same app version).
 4. Verify: start the app against the new database (set `DATABASE_URL` to it in a test deployment or locally), open `/api/health` (200, `db: ok`), log in as an admin (password and two-factor are in the backup), open `/admin` and check the order, kitchen and user counts and the newest order against what you expect.
 5. To go back to production on the restored database: put its URL in the live Secrets as `DATABASE_URL` and redeploy. Uploaded files (kitchen photos, certificates) live in Object Storage and are not part of the database backup, so they are still there.

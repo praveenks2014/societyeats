@@ -10,6 +10,7 @@ import * as s from '@/lib/db/schema';
 import { MemoryStorage } from '@/lib/storage/memory';
 import { setStorageForTests } from '@/lib/storage';
 import type { Db } from '@/lib/db';
+import { BRAND } from '@/config/brand';
 
 vi.mock('next/headers', () => import('../helpers/next-headers'));
 
@@ -44,7 +45,7 @@ describe('T2: backups', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.entry).toMatchObject({ method: 'logical', rows: expect.any(Number) });
-    expect(r.entry.key).toMatch(/^backups\/padosiplate-.*\.jsonl\.gz$/);
+    expect(r.entry.key).toMatch(/^backups\/kootu-.*\.jsonl\.gz$/);
     expect((await readIndex()).map((e) => e.key)).toContain(r.entry.key);
     expect(await readBackupState()).toMatchObject({ ok: true, key: r.entry.key, method: 'logical', lastSuccessDate: '2026-11-11' });
 
@@ -173,12 +174,12 @@ describe('storage keys for backups', () => {
     process.env.LOCAL_UPLOAD_DIR = dir;
     const { LocalStorage } = await import('@/lib/storage/local');
     const st = new LocalStorage();
-    await st.put('backups/padosiplate-2026-11-08T03-00-00-000Z.jsonl.gz', Buffer.from('x'));
-    expect((await st.get('backups/padosiplate-2026-11-08T03-00-00-000Z.jsonl.gz'))?.toString()).toBe('x');
+    await st.put(`backups/${BRAND.slug}-2026-11-08T03-00-00-000Z.jsonl.gz`, Buffer.from('x'));
+    expect((await st.get(`backups/${BRAND.slug}-2026-11-08T03-00-00-000Z.jsonl.gz`))?.toString()).toBe('x');
     await st.put('abcdef0123456789abcdef01.png', Buffer.from('y')); // flat upload keys still work
     expect((await st.get('abcdef0123456789abcdef01.png'))?.toString()).toBe('y');
-    await st.delete('backups/padosiplate-2026-11-08T03-00-00-000Z.jsonl.gz');
-    expect(await st.get('backups/padosiplate-2026-11-08T03-00-00-000Z.jsonl.gz')).toBeNull();
+    await st.delete(`backups/${BRAND.slug}-2026-11-08T03-00-00-000Z.jsonl.gz`);
+    expect(await st.get(`backups/${BRAND.slug}-2026-11-08T03-00-00-000Z.jsonl.gz`)).toBeNull();
     for (const bad of ['../x', 'backups/../../x', '/etc/passwd', 'a//b', 'backups/.', 'a b']) await expect(st.put(bad, Buffer.from('z'))).rejects.toThrow(/bad storage key/);
     delete process.env.LOCAL_UPLOAD_DIR;
   });

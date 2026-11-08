@@ -6,6 +6,7 @@ import { notify } from '@/lib/db/notify';
 import { adminKitchenMessages, adminKitchenThreads, sellerProfiles, users } from '@/lib/db/schema';
 import { sendEmail } from '@/lib/email';
 import { siteOriginSafe } from '@/lib/site-url';
+import { BRAND } from '@/config/brand';
 
 export type Attachment = { url: string; name: string };
 
@@ -13,7 +14,7 @@ async function emailSeller(sellerId: number, subject: string, body: string) {
   const db = await getDb();
   const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, sellerId));
   if (u?.email) {
-    await sendEmail({ userId: sellerId, to: u.email, kind: 'admin_message', subject: `[PadosiPlate] ${subject}`, text: `${body}\n\nReply in your inbox: ${await siteOriginSafe()}/seller/inbox` });
+    await sendEmail({ userId: sellerId, to: u.email, kind: 'admin_message', subject: `[${BRAND.name}] ${subject}`, text: `${body}\n\nReply in your inbox: ${await siteOriginSafe()}/seller/inbox` });
   }
 }
 
@@ -24,7 +25,7 @@ export async function adminSend(opts: { adminId: number; sellerId: number; subje
   const [seller] = await db.select({ id: sellerProfiles.userId }).from(sellerProfiles).where(eq(sellerProfiles.userId, opts.sellerId));
   if (!seller) throw new ApiError(404, 'Kitchen not found');
   let threadId = opts.threadId;
-  let subject = opts.subject?.trim() || 'Message from PadosiPlate';
+  let subject = opts.subject?.trim() || `Message from ${BRAND.name}`;
   if (threadId) {
     const [t] = await db.select().from(adminKitchenThreads).where(eq(adminKitchenThreads.id, threadId));
     if (!t || t.sellerId !== opts.sellerId) throw new ApiError(404, 'Thread not found');
@@ -116,6 +117,6 @@ export async function getThread(threadId: number) {
 export const DEFAULT_TEMPLATES = [
   { title: 'Photos need improvement', body: 'Hi! Thanks for applying. Your kitchen photos need to be clearer before we can approve your listing — please upload bright, well-lit photos of your cooking area and 2–3 of your dishes, then resubmit.' },
   { title: 'FSSAI document unclear', body: 'Hi! The FSSAI document you uploaded is hard to read. Please upload a clear, full-page photo or PDF of your registration/licence certificate so we can verify it.' },
-  { title: 'Subscription expiring', body: 'Hi! Your PadosiPlate kitchen subscription is about to end. Renew from Seller → Subscription to keep your dishes visible to your neighbours without a break.' },
+  { title: 'Subscription expiring', body: `Hi! Your ${BRAND.name} kitchen subscription is about to end. Renew from Seller → Subscription to keep your dishes visible to your neighbours without a break.` },
   { title: 'Customer complaint follow-up', body: 'Hi! A neighbour raised a concern about a recent order. Please check your orders and reply here with your side so we can resolve it fairly.' },
 ];

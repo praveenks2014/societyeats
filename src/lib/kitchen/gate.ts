@@ -4,6 +4,7 @@ import { getPlatformSettings } from '@/lib/db/platform';
 import { fssaiApplications, sellerProfiles, users } from '@/lib/db/schema';
 import { isFssaiEligibleToPublish } from '@/lib/fssai/gate';
 import { sellerIsSubscribed } from '@/lib/subscriptions/queries';
+import { BRAND } from '@/config/brand';
 
 /** True while the kitchen has switched on “Not taking orders today”. */
 export function isClosedToday(closedUntil: Date | null | undefined, now: Date = new Date()): boolean {
@@ -56,7 +57,7 @@ export function evaluateGate(input: {
     openToday: !isClosedToday(input.profile.closedUntil, input.now),
   };
   const reasons: string[] = [];
-  if (!checks.approved) reasons.push('Kitchen is not approved by PadosiPlate');
+  if (!checks.approved) reasons.push(`Kitchen is not approved by ${BRAND.name}`);
   if (!checks.subscribed) reasons.push('Kitchen subscription is not active');
   if (!checks.fssai) reasons.push('FSSAI requirement not met');
   if (!checks.paymentDetails) reasons.push('UPI ID not verified — complete the ₹1 ownership check');

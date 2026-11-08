@@ -7,6 +7,7 @@ import { FINISHED_STATUSES, StatusPill } from '@/components/order-status';
 import { OrderThread } from '@/components/order-extras';
 import { useToast } from '@/components/providers';
 import { formatINR } from '@/lib/money';
+import { BRAND } from '@/config/brand';
 
 type FulfillmentType = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
 
@@ -198,7 +199,7 @@ function OrderCard({ order, onReload, toast, unread = 0 }: { order: SellerOrder;
           Buyer says they paid {order.foodPaymentMethod === 'cash' ? 'in cash' : 'by UPI'}{order.foodPaymentUtr ? <> (UTR <strong>{order.foodPaymentUtr}</strong>)</> : ''}. Check your UPI app.
         </div>
       )}
-      {order.status === 'payment_disputed' && <div className="mt-2 rounded-xl bg-chili-tint px-3 py-2 text-sm text-chili-dark">Payment dispute open — PadosiPlate is reviewing.</div>}
+      {order.status === 'payment_disputed' && <div className="mt-2 rounded-xl bg-chili-tint px-3 py-2 text-sm text-chili-dark">Payment dispute open — {BRAND.name} is reviewing.</div>}
 
       {!finished && order.actions.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2">

@@ -5,6 +5,7 @@ import { emit } from '@/lib/notify';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { orders, sellerProfiles, strikes, users } from '@/lib/db/schema';
 import { DAY_MS } from '@/lib/time';
+import { BRAND } from '@/config/brand';
 
 export type StrikeKind = 'seller_cancel' | 'seller_missed' | 'buyer_late_cancel' | 'buyer_unpaid' | 'buyer_no_show' | 'admin';
 
@@ -39,7 +40,7 @@ export async function recordStrike(input: { userId: number; role: 'buyer' | 'sel
     if (count >= settings.sellerStrikeLimit) {
       const [p] = await db.update(sellerProfiles).set({ listingsPausedReason: 'strikes', listingsPausedAt: now }).where(and(eq(sellerProfiles.userId, input.userId), isNull(sellerProfiles.listingsPausedReason))).returning({ id: sellerProfiles.userId });
       if (p) {
-        await emit('listing_paused', input.userId, { reason: `You reached ${count} strikes in ${settings.strikeWindowDays} days. PadosiPlate will review your kitchen.` });
+        await emit('listing_paused', input.userId, { reason: `You reached ${count} strikes in ${settings.strikeWindowDays} days. ${BRAND.name} will review your kitchen.` });
         await notifyAdmins('Kitchen auto-paused after strikes', `Kitchen #${input.userId} reached ${count} strikes.`, `/admin/kitchens/${input.userId}`);
       }
     }

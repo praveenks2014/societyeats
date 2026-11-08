@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { BRAND } from '@/config/brand';
 
 export const MIN_PASSWORD_LENGTH = 8;
 
@@ -9,7 +10,7 @@ const COMMON = new Set([
   'abcd1234', '11111111', '00000000', '88888888', '987654321', '12341234', '1q2w3e4r', '1qaz2wsx', 'monkey123',
   'dragon123', 'football1', 'cricket123', 'india123', 'india@123', 'hyderabad', 'hyderabad1', 'hyderabad123', 'sachin10',
   'krishna123', 'ganesh123', 'ramesh123', 'sunshine1', 'princess1', 'master123', 'shadow123', 'superman1', 'baseball1',
-  'trustno1', 'changeme', 'changeme1', 'padosiplate', 'padosi123', 'padosiplate1', 'demo1234', 'test1234', 'test@123',
+  'trustno1', 'changeme', 'changeme1', ...[BRAND.slug, ...BRAND.legacySlugs, 'padosi'].flatMap((n) => [n, `${n}1`, `${n}123`]), 'demo1234', 'test1234', 'test@123',
   'pass@123', 'pass1234', 'user1234', 'login123', 'secret123', 'google123', 'whatsapp1', 'mobile123', 'phone1234',
 ]);
 

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Button } from '@/components/ui';
 import { useToast } from '@/components/providers';
+import { BRAND } from '@/config/brand';
 
 type Pending = { slug: string; title: string; version: number; changeSummary: string | null };
 
@@ -26,7 +27,7 @@ export function ReconsentGate({ pending }: { pending: Pending[] }) {
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-ink/60 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="reconsent-title" data-testid="reconsent-modal">
       <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 sm:rounded-3xl">
         <h2 id="reconsent-title" className="text-lg font-bold">We updated our terms</h2>
-        <p className="mt-1 text-sm text-ink-soft">Please read what changed and accept to keep using PadosiPlate.</p>
+        <p className="mt-1 text-sm text-ink-soft">Please read what changed and accept to keep using {BRAND.name}.</p>
         <ul className="mt-4 space-y-3">
           {left.map((p) => (
             <li key={p.slug} className="rounded-xl bg-rice-deep p-3 text-sm">

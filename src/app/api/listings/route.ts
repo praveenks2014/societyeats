@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth';
 import { browseListings, comingSoonKitchens } from '@/lib/browse';
 import { getPlatformSettings } from '@/lib/db/platform';
 import { sponsoredFor } from '@/lib/featured';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +16,7 @@ export const GET = api(async (req) => {
   const session = await getSession();
   const settings = await getPlatformSettings();
   if (settings.pilotSocietiesOnly && (!session || !(await isPilotMember(session.uid)))) {
-    throw new ApiError(403, 'PadosiPlate is invite-only during the pilot', 'invite_only');
+    throw new ApiError(403, `${BRAND.name} is invite-only during the pilot`, 'invite_only');
   }
   const result = await browseListings({
     societyId: sp.get('scope') === 'society' ? (session?.societyId ?? undefined) : undefined,

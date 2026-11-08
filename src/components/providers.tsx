@@ -10,6 +10,8 @@ import {
   useState,
 } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { BRAND } from '@/config/brand';
+import { migrateLegacyStorage } from '@/lib/browser-storage';
 
 // ============================== Toast ==============================
 
@@ -105,12 +107,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [loc, setLocState] = useState<BuyerLoc | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   useEffect(() => {
-    setLocState(readLS<BuyerLoc>('padosi_loc'));
+    migrateLegacyStorage();
+    setLocState(readLS<BuyerLoc>(BRAND.storageKey('loc')));
   }, []);
   const setLoc = useCallback((next: BuyerLoc) => {
     setLocState(next);
     try {
-      localStorage.setItem('padosi_loc', JSON.stringify(next));
+      localStorage.setItem(BRAND.storageKey('loc'), JSON.stringify(next));
     } catch {}
   }, []);
 
@@ -119,7 +122,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    const saved = readLS<{ vendor: CartVendor | null; items: CartItem[] }>('padosi_cart');
+    const saved = readLS<{ vendor: CartVendor | null; items: CartItem[] }>(BRAND.storageKey('cart'));
     if (saved) {
       setVendor(saved.vendor);
       setItems(saved.items);
@@ -129,7 +132,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hydrated) return;
     try {
-      localStorage.setItem('padosi_cart', JSON.stringify({ vendor, items }));
+      localStorage.setItem(BRAND.storageKey('cart'), JSON.stringify({ vendor, items }));
     } catch {}
   }, [vendor, items, hydrated]);
 

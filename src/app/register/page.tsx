@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { Button, Field, Input, Select, Textarea } from '@/components/ui';
 import { useToast } from '@/components/providers';
 import { DisclaimerClient } from '@/components/disclaimer-client';
+import { BRAND } from '@/config/brand';
 
 function RegisterForm() {
   const router = useRouter();
@@ -69,7 +70,7 @@ function RegisterForm() {
       toast(data.error || 'Could not register', 'err');
       return;
     }
-    toast('Welcome to PadosiPlate! Check your email to verify your address.');
+    toast(`Welcome to ${BRAND.name}! Check your email to verify your address.`);
     // Sellers land on the kitchen-profile onboarding step (photos etc.)
     // before the dashboard — see DECISIONS.md #73+.
     router.push(role === 'seller' ? '/seller/onboarding' : '/');
@@ -80,7 +81,7 @@ function RegisterForm() {
 
   return (
     <div className="mx-auto mt-10 max-w-sm">
-      <h1 className="text-2xl font-bold">Join PadosiPlate</h1>
+      <h1 className="text-2xl font-bold">Join {BRAND.name}</h1>
       <DisclaimerClient id="marketplace" className="mt-3" />
       <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-rice-deep p-1.5">
         {(['buyer', 'seller'] as const).map((r) => (
@@ -128,7 +129,7 @@ function RegisterForm() {
         </Field>
         {referredByCode && (
           <p className="rounded-xl bg-leaf-tint px-3 py-2 text-xs font-medium text-leaf">
-            👋 You were invited by a neighbour — welcome to PadosiPlate!
+            👋 You were invited by a neighbour — welcome to {BRAND.name}!
           </p>
         )}
 
@@ -137,7 +138,7 @@ function RegisterForm() {
           hint={
             societyMode === 'select'
               ? 'Choose your society.'
-              : 'PadosiPlate is invite-only during the pilot. Use the invite code from your society’s WhatsApp group.'
+              : `${BRAND.name} is invite-only during the pilot. Use the invite code from your society’s WhatsApp group.`
           }
         >
           {societyMode === 'select' ? (

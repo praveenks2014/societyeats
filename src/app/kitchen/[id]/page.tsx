@@ -4,6 +4,7 @@ import { getKitchenProfile } from '@/lib/browse';
 import { KitchenProfile } from './kitchen-client';
 import { Disclaimer } from '@/components/disclaimer';
 import { qualityScore } from '@/lib/quality';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const title = kitchen.profile.kitchenName;
   const description =
     kitchen.profile.bio ||
-    `Home-cooked food from ${kitchen.profile.kitchenName}${kitchen.society ? `, ${kitchen.society.name}` : ''} — order on PadosiPlate.`;
+    `Home-cooked food from ${kitchen.profile.kitchenName}${kitchen.society ? `, ${kitchen.society.name}` : ''} — order on ${BRAND.name}.`;
   return {
     title,
     description,

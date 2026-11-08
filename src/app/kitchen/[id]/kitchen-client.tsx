@@ -10,6 +10,7 @@ import { CartBar } from '@/components/cart-bar';
 import { MealPlans } from '@/components/meal-plans';
 import { BADGE_TIER_LABEL } from '@/lib/reputation-labels';
 import { fssaiBadge } from '@/lib/fssai/badge';
+import { BRAND } from '@/config/brand';
 
 type Props = {
   seller: {
@@ -105,7 +106,7 @@ export function KitchenProfile({ seller, listings, reviews, closedToday = false,
         <div className="mt-4 space-y-3">
           <FavouriteButton sellerId={seller.id} />
           <ShareButton
-            text={`Check out ${seller.kitchenName} on PadosiPlate — home-cooked food from our society 🍲`}
+            text={`Check out ${seller.kitchenName} on ${BRAND.name} — home-cooked food from our society 🍲`}
           />
         </div>
       </Card>
